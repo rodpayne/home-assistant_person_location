@@ -1,0 +1,22 @@
+{
+  "domain": "person_location",
+  "name": "Person Location",
+  "documentation": "https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#table-of-contents",
+  "issue_tracker": "https://github.com/rodpayne/home-assistant_person_location/issues",
+  "dependencies": [
+    "device_tracker",
+    "mobile_app",
+    "sensor",
+    "zone"
+  ],
+  "after_dependencies": [
+    "person",
+    "waze_travel_time"
+  ],
+  "config_flow": true,
+  "codeowners": [
+    "@rodpayne"
+  ],
+  "requirements": [],
+  "version": "2021.03.20"
+}

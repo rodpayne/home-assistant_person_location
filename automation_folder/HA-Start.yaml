@@ -1,0 +1,29 @@
+#----------------------------------------------------------------------------------------------------------
+# These actions are taken when Home Assistant starts up. (Entirely optional.)
+#----------------------------------------------------------------------------------------------------------
+
+- alias: HA Start
+  initial_state: 'on'
+  trigger:
+    platform: homeassistant
+    event: start
+  action:
+# - create person sensors to pretty things up until the update happens
+    - service: python_script.set_state
+      data_template:
+        entity_id: 'sensor.rod_location'
+        state: 'Unknown'
+        friendly_name: 'Rod (HA restarted)'
+        allow_create: True
+    - service: python_script.set_state
+      data_template:
+        entity_id: 'sensor.pam_location'
+        state: 'Unknown'
+        friendly_name: 'Pam (HA restarted)'
+        allow_create: True
+# - Update person sensors after iCloud3 device_tracker has been created
+    - delay:
+        seconds: 30
+    - service: device_tracker.icloud3_update
+      data_template:
+        command: location

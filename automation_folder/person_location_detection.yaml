@@ -1,0 +1,81 @@
+#----------------------------------------------------------------------------------------------------------
+# Determine person location from device tracker indicators
+#----------------------------------------------------------------------------------------------------------
+
+- alias: Person Location Update
+  initial_state: 'on'
+  mode: queued
+  max: 10
+  trigger:
+  - platform: state
+    entity_id: 
+#      - device_tracker.rod_iphone
+#      - device_tracker.rod_iphone_2
+#      - device_tracker.rod_iphone_app
+#      - device_tracker.rod_ipad
+#      - device_tracker.rod_ipad_2
+#      - device_tracker.rod_ipad_app
+      - sensor.ford_focus_location
+#      - device_tracker.rod_wristwatch
+#      - device_tracker.pams_iphone_app
+#      - device_tracker.pams_iphone
+#      - device_tracker.toms_iphone
+  action:
+  - service: person_location.process_trigger
+    data_template:
+      entity_id: '{{trigger.entity_id}}'
+      from_state: '{{trigger.from_state.state}}'
+      to_state: '{{trigger.to_state.state}}'
+
+# New way to do it without listing every entity that mobile app creates:
+- alias: Person Location Device Tracker Updated
+  initial_state: 'on'
+  mode: queued
+  max: 10
+  trigger:
+    - platform: event
+      event_type: state_changed
+  condition:
+    - condition: template
+      value_template: >
+        {{ trigger.event.data.entity_id.startswith('device_tracker.')
+          and (not trigger.event.data.entity_id.endswith('_location'))
+           and trigger.event.data.new_state.state != 'NotSet' }}      
+  action:
+    - service: person_location.process_trigger
+      data_template:
+        entity_id: '{{trigger.event.data.entity_id}}'
+        from_state: '{{trigger.event.data.old_state.state}}'
+        to_state: '{{trigger.event.data.new_state.state}}'
+        
+#- alias: Person Sensor Update for router home
+#  initial_state: 'on'
+#  mode: queued
+#  max: 10
+#  trigger:
+#  - platform: state
+#    entity_id: device_tracker.iphoneyallphone
+#    to: 'home'
+#  action:
+#  - service: person_location.process_trigger
+#    data_template:
+#      entity_id: '{{trigger.entity_id}}'
+#      from_state: '{{trigger.from_state.state}}'
+#      to_state: '{{trigger.to_state.state}}'
+
+#- alias: Person Sensor Update for router not_home
+#  initial_state: 'on'
+#  mode: queued
+#  max: 10
+#  trigger:
+#  - platform: state
+#    entity_id: device_tracker.iphoneyallphone
+#    to: 'not_home'
+#    for:
+#      seconds: 300
+#  action:
+#  - service: person_location.process_trigger
+#    data_template:
+#      entity_id: '{{trigger.entity_id}}'
+#      from_state: '{{trigger.from_state.state}}'
+#      to_state: '{{trigger.to_state.state}}'
