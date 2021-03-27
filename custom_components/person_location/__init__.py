@@ -18,6 +18,7 @@ from requests import get
 
 from .const import (
     API_STATE_OBJECT,
+    CONF_DEVICES,
     CONF_FOLLOW_PERSON_INTEGRATION,
     DATA_ASYNC_SETUP_ENTRY,
     DATA_CONFIG_ENTRY,
@@ -139,9 +140,8 @@ def setup(hass, config):
             for entity_id in pli.hass.states.entity_ids("person"):
                 _listen_for_device_tracker_state_changes(entity_id)
 
-        _listen_for_device_tracker_state_changes(
-            "person.pam"
-        )  # TODO: Base it on configuration.
+        for device in pli.configuration[CONF_DEVICES].keys():
+            _listen_for_device_tracker_state_changes(device)
 
         _LOGGER.debug("[_listen_for_configured_entities] === Return ===")
 

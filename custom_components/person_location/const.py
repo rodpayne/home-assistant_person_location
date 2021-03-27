@@ -25,7 +25,7 @@ DOMAIN = "person_location"
 API_STATE_OBJECT = DOMAIN + "." + DOMAIN + "_integration"
 INTEGRATION_NAME = "Person Location"
 ISSUE_URL = "https://github.com/rodpayne/home-assistant/issues"
-VERSION = "2021.03.20"
+VERSION = "2021.03.27"
 
 # Fixed parameters:
 MIN_DISTANCE_TRAVELLED_TO_GEOCODE = 5
@@ -91,6 +91,10 @@ VALID_CREATE_SENSORS = [
 ]
 
 CONF_FOLLOW_PERSON_INTEGRATION = "follow_person_integration"
+CONF_PERSON_NAMES = "person_names"
+CONF_NAME = "name"
+CONF_DEVICES = "devices"
+VALID_ENTITY_DOMAINS = ("binary_sensor", "device_tracker", "person", "sensor")
 
 CONF_FROM_YAML = "configuration_from_yaml"
 
@@ -103,6 +107,15 @@ If you have any issues with this you need to open an issue here:
 {issue_link}
 -------------------------------------------------------------------
 """
+
+PERSON_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_NAME): cv.string,
+        vol.Optional(CONF_DEVICES, default=[]): vol.All(
+            cv.ensure_list, cv.entities_domain(VALID_ENTITY_DOMAINS)
+        ),
+    }
+)
 
 CONFIG_SCHEMA = vol.Schema(
     {
@@ -135,6 +148,9 @@ CONFIG_SCHEMA = vol.Schema(
                     CONF_GOOGLE_API_KEY, default=DEFAULT_API_KEY_NOT_SET
                 ): cv.string,
                 vol.Optional(CONF_FOLLOW_PERSON_INTEGRATION, default=False): cv.boolean,
+                vol.Optional(CONF_PERSON_NAMES, default=[]): vol.All(
+                    cv.ensure_list, [PERSON_SCHEMA]
+                ),
             }
         ),
     },
@@ -259,6 +275,17 @@ class PERSON_LOCATION_INTEGRATION:
                 DOMAIN
             ].get(CONF_FOLLOW_PERSON_INTEGRATION, False)
 
+            self.configuration[CONF_DEVICES] = {}
+            for person_name_config in self.config[DOMAIN].get(CONF_PERSON_NAMES, []):
+                person_name = person_name_config[CONF_NAME]
+                _LOGGER.debug("person_name_config name = %s", person_name)
+                devices = person_name_config[CONF_DEVICES]
+                if type(devices) == str:
+                    devices = [devices]
+                for device in devices:
+                    _LOGGER.debug("person_name_config device = %s", device)
+                    self.configuration[CONF_DEVICES][device] = person_name
+
         else:
 
             self.configuration[CONF_FROM_YAML] = False
@@ -278,6 +305,7 @@ class PERSON_LOCATION_INTEGRATION:
             self.configuration[CONF_USE_WAZE] = True
             self.configuration[CONF_CREATE_SENSORS] = []
             self.configuration[CONF_FOLLOW_PERSON_INTEGRATION] = False
+            self.configuration[CONF_DEVICES] = {}
 
         self.set_state()
 
@@ -367,7 +395,11 @@ class PERSON_LOCATION_ENTITY:
             if self.state == "not_home":
                 self.state = "Away"
 
-        if "person_name" in self.attributes:
+        if self.entity_id in self.pli.configuration[CONF_DEVICES]:
+            self.personName = self.pli.configuration[CONF_DEVICES][
+                self.entity_id
+            ].lower()
+        elif "person_name" in self.attributes:
             self.personName = self.attributes["person_name"]
         elif "account_name" in self.attributes:
             self.personName = self.attributes["account_name"]
