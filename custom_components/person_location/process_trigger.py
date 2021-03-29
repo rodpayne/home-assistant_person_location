@@ -7,6 +7,7 @@ import time
 import traceback
 from datetime import datetime, timedelta, timezone
 from functools import partial
+
 from homeassistant.components.device_tracker.const import ATTR_SOURCE_TYPE
 from homeassistant.components.device_tracker.const import (
     DOMAIN as DEVICE_TRACKER_DOMAIN,
@@ -19,9 +20,9 @@ from homeassistant.const import (
     ATTR_LONGITUDE,
     CONF_ENTITY_ID,
     CONF_FRIENDLY_NAME_TEMPLATE,
-    STATE_ON,
     STATE_HOME,
     STATE_NOT_HOME,
+    STATE_ON,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
 )

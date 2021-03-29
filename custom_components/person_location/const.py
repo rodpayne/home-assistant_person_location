@@ -2,7 +2,6 @@
 
 import logging
 import threading
-
 from datetime import datetime, timedelta
 
 import homeassistant.helpers.config_validation as cv
