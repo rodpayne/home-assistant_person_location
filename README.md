@@ -88,9 +88,10 @@ By default, the custom integration will set the following attribute names in the
 
 | Attribute Name            | Example | Description |
 | :------------------------ | :------ | :---------- |
+| compass_bearing: | 90.0 | most recent direction of travel (degrees) |
 | meters_from_home: | 71862.3 | calculated distance from Home (meters) |
 | miles_from_home: | 44.7     | calculated distance from Home (miles) |
-| direction: | stationary     | direction from Home |
+| direction: | stationary     | most recent direction from Home |
 | driving_miles: | 50.6       | distance from Home based on Waze route |
 | driving_minutes: | 46.8     | distance from Home based on Waze traffic conditions |
 
