@@ -40,6 +40,7 @@ METERS_PER_MILE = 1609.34
 # Attribute names:
 ATTR_ALTITUDE = "altitude"
 ATTR_BREAD_CRUMBS = "bread_crumbs"
+ATTR_COMPASS_BEARING = "compass_bearing"
 ATTR_DIRECTION = "direction"
 ATTR_DRIVING_MILES = "driving_miles"
 ATTR_DRIVING_MINUTES = "driving_minutes"
@@ -71,6 +72,7 @@ CONF_USE_WAZE = "use_waze"
 CONF_WAZE_REGION = "waze_region"
 
 CONF_GOOGLE_API_KEY = "google_api_key"
+CONF_MAPBOX_API_KEY = "mapbox_api_key"
 CONF_MAPQUEST_API_KEY = "mapquest_api_key"
 CONF_OSM_API_KEY = "osm_api_key"
 DEFAULT_API_KEY_NOT_SET = "not used"
@@ -137,6 +139,9 @@ CONFIG_SCHEMA = vol.Schema(
                     CONF_OUTPUT_PLATFORM, default=DEFAULT_OUTPUT_PLATFORM
                 ): cv.string,
                 vol.Optional(CONF_REGION, default=DEFAULT_REGION): cv.string,
+                vol.Optional(
+                    CONF_MAPBOX_API_KEY, default=DEFAULT_API_KEY_NOT_SET
+                ): cv.string,
                 vol.Optional(
                     CONF_MAPQUEST_API_KEY, default=DEFAULT_API_KEY_NOT_SET
                 ): cv.string,
@@ -235,6 +240,9 @@ class PERSON_LOCATION_INTEGRATION:
             )
             self.configuration[CONF_OUTPUT_PLATFORM] = self.config[DOMAIN].get(
                 CONF_OUTPUT_PLATFORM, DEFAULT_OUTPUT_PLATFORM
+            )
+            self.configuration[CONF_MAPBOX_API_KEY] = self.config[DOMAIN].get(
+                CONF_MAPBOX_API_KEY, DEFAULT_API_KEY_NOT_SET
             )
             self.configuration[CONF_MAPQUEST_API_KEY] = self.config[DOMAIN].get(
                 CONF_MAPQUEST_API_KEY, DEFAULT_API_KEY_NOT_SET

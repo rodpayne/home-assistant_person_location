@@ -8,13 +8,11 @@ WazeRouteCalculator.
 """
 
 import logging
-import traceback
 from datetime import datetime, timedelta
 from functools import partial
 
 from homeassistant.const import STATE_OFF, STATE_ON
 from homeassistant.helpers.event import track_point_in_time, track_state_change
-from requests import get
 
 from .const import (
     API_STATE_OBJECT,

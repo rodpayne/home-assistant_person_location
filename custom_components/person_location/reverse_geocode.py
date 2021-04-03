@@ -2,6 +2,7 @@
 
 import json
 import logging
+import math
 import time
 import traceback
 from datetime import datetime
@@ -22,6 +23,7 @@ from WazeRouteCalculator import WazeRouteCalculator
 
 from .const import (
     ATTR_BREAD_CRUMBS,
+    ATTR_COMPASS_BEARING,
     ATTR_DRIVING_MILES,
     ATTR_DRIVING_MINUTES,
     ATTR_GEOCODED,
@@ -49,6 +51,49 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def setup_reverse_geocode(pli):
+    """Initialize reverse_geocode service."""
+
+    def calculate_initial_compass_bearing(pointA, pointB):
+        """
+        Calculate the bearing between two points.
+
+        The formulae used is the following:
+            θ = atan2(sin(Δlong).cos(lat2),
+                    cos(lat1).sin(lat2) − sin(lat1).cos(lat2).cos(Δlong))
+        :Parameters:
+        - `pointA: The tuple representing the latitude/longitude for the
+            first point. Latitude and longitude must be in decimal degrees
+        - `pointB: The tuple representing the latitude/longitude for the
+            second point. Latitude and longitude must be in decimal degrees
+        :Returns:
+        The bearing in degrees
+        :Returns Type:
+        float
+
+        From https://gist.github.com/jeromer/2005586.
+        """
+        if (type(pointA) != tuple) or (type(pointB) != tuple):
+            raise TypeError("Only tuples are supported as arguments")
+
+        lat1 = math.radians(pointA[0])
+        lat2 = math.radians(pointB[0])
+
+        diffLong = math.radians(pointB[1] - pointA[1])
+
+        x = math.sin(diffLong) * math.cos(lat2)
+        y = math.cos(lat1) * math.sin(lat2) - (
+            math.sin(lat1) * math.cos(lat2) * math.cos(diffLong)
+        )
+
+        initial_bearing = math.atan2(x, y)
+
+        # Now we have the initial bearing but math.atan2 return values
+        # from -180° to + 180° which is not what we want for a compass bearing.
+        initial_bearing = math.degrees(initial_bearing)
+        compass_bearing = (initial_bearing + 360) % 360
+
+        return compass_bearing
+
     def handle_reverse_geocode(call):
         """
         Handle the reverse_geocode service.
@@ -209,15 +254,28 @@ def setup_reverse_geocode(pli):
                             else:
                                 old_distance_from_home = 0
 
+                            compass_bearing = round(
+                                calculate_initial_compass_bearing(
+                                    (float(old_latitude), float(old_longitude)),
+                                    (float(new_latitude), float(new_longitude)),
+                                ),
+                                1,
+                            )
+
                             _LOGGER.debug(
                                 "("
                                 + entity_id
                                 + ") distance_traveled = "
                                 + str(distance_traveled)
+                                + "; compass_bearing = "
+                                + str(compass_bearing)
                             )
                         else:
                             distance_traveled = 0
                             old_distance_from_home = 0
+                            compass_bearing = 0
+
+                        target.attributes[ATTR_COMPASS_BEARING] = compass_bearing
 
                         if new_latitude == "None" or new_longitude == "None":
                             _LOGGER.debug(
@@ -422,6 +480,7 @@ def setup_reverse_geocode(pli):
                                     target.make_template_sensor(
                                         "Open_Street_Map",
                                         [
+                                            {ATTR_COMPASS_BEARING: compass_bearing},
                                             ATTR_LATITUDE,
                                             ATTR_LONGITUDE,
                                             ATTR_SOURCE_TYPE,
@@ -497,6 +556,17 @@ def setup_reverse_geocode(pli):
                                                     + ") Google locality = "
                                                     + locality
                                                 )
+                                            elif (locality == "?") and (
+                                                "administrative_area_level_2"
+                                                in component["types"]
+                                            ):  # fall back to county
+                                                locality = component["long_name"]
+                                            elif (locality == "?") and (
+                                                "administrative_area_level_1"
+                                                in component["types"]
+                                            ):  # fall back to state
+                                                locality = component["long_name"]
+
                                         google_attribution = '"powered by Google"'
                                         attribution += google_attribution + "; "
 
@@ -507,6 +577,9 @@ def setup_reverse_geocode(pli):
                                             target.make_template_sensor(
                                                 "Google_Maps",
                                                 [
+                                                    {
+                                                        ATTR_COMPASS_BEARING: compass_bearing
+                                                    },
                                                     ATTR_LATITUDE,
                                                     ATTR_LONGITUDE,
                                                     ATTR_SOURCE_TYPE,
@@ -640,6 +713,9 @@ def setup_reverse_geocode(pli):
                                             target.make_template_sensor(
                                                 "MapQuest",
                                                 [
+                                                    {
+                                                        ATTR_COMPASS_BEARING: compass_bearing
+                                                    },
                                                     ATTR_LATITUDE,
                                                     ATTR_LONGITUDE,
                                                     ATTR_SOURCE_TYPE,
@@ -694,7 +770,9 @@ def setup_reverse_geocode(pli):
                                 target.attributes[ATTR_METERS_FROM_HOME]
                                 < WAZE_MIN_METERS_FROM_HOME
                             ):
-                                target.attributes[ATTR_DRIVING_MILES] = "0"
+                                target.attributes[
+                                    ATTR_DRIVING_MILES
+                                ] = target.attributes[ATTR_MILES_FROM_HOME]
                                 target.attributes[ATTR_DRIVING_MINUTES] = "0"
                             else:
                                 try:
@@ -766,8 +844,10 @@ def setup_reverse_geocode(pli):
                                     )
                                     _LOGGER.debug(traceback.format_exc())
                                     pli.attributes["waze_error_count"] += 1
-                                    target.attributes.pop(ATTR_DRIVING_MILES)
-                                    target.attributes.pop(ATTR_DRIVING_MINUTES)
+
+                                    target.attributes[
+                                        ATTR_DRIVING_MILES
+                                    ] = target.attributes[ATTR_MILES_FROM_HOME]
 
                         target.attributes[ATTR_ATTRIBUTION] = attribution
 

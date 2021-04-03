@@ -2,16 +2,10 @@
 
 import logging
 import string
-import threading
-import time
-import traceback
 from datetime import datetime, timedelta, timezone
 from functools import partial
 
 from homeassistant.components.device_tracker.const import ATTR_SOURCE_TYPE
-from homeassistant.components.device_tracker.const import (
-    DOMAIN as DEVICE_TRACKER_DOMAIN,
-)
 from homeassistant.components.device_tracker.const import SOURCE_TYPE_GPS
 from homeassistant.components.mobile_app.const import ATTR_VERTICAL_ACCURACY
 from homeassistant.const import (
@@ -28,12 +22,12 @@ from homeassistant.const import (
 )
 from homeassistant.exceptions import ServiceNotFound
 from homeassistant.helpers.event import track_point_in_time
-from requests import get
 
 from .const import (
-    API_STATE_OBJECT,
     ATTR_ALTITUDE,
     ATTR_BREAD_CRUMBS,
+    ATTR_COMPASS_BEARING,
+    ATTR_DIRECTION,
     CONF_HOURS_EXTENDED_AWAY,
     CONF_MINUTES_JUST_ARRIVED,
     CONF_MINUTES_JUST_LEFT,
@@ -47,6 +41,8 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def setup_process_trigger(pli):
+    """Initialize process_trigger service."""
+
     def call_rest_command_service(personName, newState):
         """(Optionally) notify HomeSeer of the state change."""
 
@@ -103,6 +99,8 @@ def setup_process_trigger(pli):
                     target.attributes[
                         ATTR_BREAD_CRUMBS
                     ] = to_state  # Reset bread_crumbs
+                    target.attributes[ATTR_COMPASS_BEARING] = 0
+                    target.attributes[ATTR_DIRECTION] = "home"
                 elif to_state == "Away":
                     change_state_later(
                         target.entity_id,
