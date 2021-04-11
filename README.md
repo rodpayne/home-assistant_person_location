@@ -15,6 +15,7 @@
   * [HACS](#hacs) 
   * [Manual installation hints](#manual-installation-hints) 
   * [Configuration parameters](#configuration-parameters) 
+  * [Map Configuration Examples (Optional)](#map-configuration-examples-optional)
   * [Lovelace Examples](#lovelace-examples)
   * [Troubleshooting](#troubleshooting)
 ## Objectives
@@ -340,11 +341,309 @@ switch:
         icon_template: "{{ state_attr('person_location.person_location_integration','icon') }}"
 ```
 
+### **Map Configuration Examples (Optional)**
+
+The integration provides a camera platform that can be used to provide a map image. Some knowledge of the 3rd-party mapping API's is necessary to adjust these maps, so get into it only if you enjoy coding and figuring things out. The map providers each require an API key, but do not put the key into the camera configuration. Instead, pull the key from the integration using something like `&key={{google_api_key}}` in the camera configuration template.
+
+ Here are a few examples.
+
+#### **Google**
+
+See https://developers.google.com/maps/documentation/maps-static/start for help.
+
+![camera.combined_location_google](docs/images/camera.combined_location_google.png)
+<details>
+  <summary>Click for Configuration Details</summary>
+
+This one zooms the map to show the location of everyone.
+
+```yaml
+# Example configuration.yaml entry
+
+camera:
+  - name: combined_location_google
+    platform: person_location
+    still_image_url: >-
+      {%- set markers = '' -%}
+      {%- set pri_entity = 'sensor.rod_location' -%}
+      {%- set pri_pin = 'R' -%}
+      {%- set pri_longitude = state_attr(pri_entity, 'longitude') |string -%}
+      {%- set pri_latitude = state_attr(pri_entity, 'latitude') |string -%}
+      {%- if (pri_longitude != None) and (pri_latitude != None) -%}
+        {%- set markers = markers + '&markers=color:blue%7Csize:mid%7Clabel:' + pri_pin + '%7C' + pri_latitude + ',' + pri_longitude -%} 
+      {%- endif -%}
+      {%- set sec_entity = 'sensor.pam_location' -%}
+      {%- set sec_pin = 'P' -%}
+      {%- set sec_longitude = state_attr(sec_entity, 'longitude') |string -%}
+      {%- set sec_latitude = state_attr(sec_entity, 'latitude') |string -%}
+      {%- if (sec_longitude != None) and (sec_latitude != None) -%}
+        {%- set markers = markers + '&markers=color:green%7Csize:mid%7Clabel:' + sec_pin + '%7C' + sec_latitude + ',' + sec_longitude -%} 
+      {%- endif -%}
+      {%- set home_longitude = state_attr('zone.home', 'longitude') -%}
+      {%- set home_latitude = state_attr('zone.home', 'latitude') -%}
+      {%- set zoom = 16 -%}
+      https://maps.googleapis.com/maps/api/staticmap?size=400x400&maptype=roadmap&visible={{home_latitude}},{{home_longitude}}{{markers}}&key={{google_api_key}}
+```
+```yaml
+# Example ui-lovelace.yaml
+
+    cards:
+      - type: picture-entity
+        entity: camera.combined_location_google
+        name: Google
+        show_state: false
+        show_name: true
+```
+
+</details>
+
+![camera.rod_location_google](docs/images/camera.rod_location_google.png)
+<details>
+  <summary>Click for Configuration Details</summary>
+
+```yaml
+# Example configuration.yaml entry
+
+camera:
+  - name: rod_location_google
+    platform: person_location
+    still_image_url: >-
+      {%- set pri_entity = 'sensor.rod_location' -%}
+      {%- set pri_pin = 'R' -%}
+      {%- set pri_longitude = state_attr(pri_entity, 'longitude') -%}
+      {%- set pri_latitude = state_attr(pri_entity, 'latitude') -%}
+      {%- set zoom = 16 -%}
+      {%- if (pri_longitude == None) or (pri_latitude == None) -%}
+        None
+      {%- else -%}
+        https://maps.googleapis.com/maps/api/staticmap?&zoom={{zoom}}&size=400x400&maptype=roadmap&markers=color:blue%7Csize:mid%7Clabel:{{pri_pin}}%7C{{pri_latitude}},{{pri_longitude}}&key={{google_api_key}}
+      {%- endif -%}
+    state: >-
+      {%- set pri_entity = 'sensor.rod_location' -%}
+      {{ states(pri_entity) }}
+#      {{ state_attr(pri_entity, 'Google_Maps') }}
+```
+```yaml
+# Example ui-lovelace.yaml
+
+    cards:
+      - type: picture-entity
+        entity: camera.rod_location_google
+        name: Google - Rod's Location
+        show_state: true
+ ```
+
+</details>
+
+#### **Mapbox**
+
+See https://docs.mapbox.com/api/maps/static-images/ for help.
+
+![camera.combined_location_mapbox](docs/images/camera.combined_location_mapbox.png)
+<details>
+  <summary>Click for Configuration Details</summary>
+
+This one zooms the map to show the location of everyone.
+
+```yaml
+# Example configuration.yaml entry
+
+camera:
+  - name: combined_location_mapbox
+    platform: person_location
+    still_image_url: >-
+      {%- set sec_entity = 'sensor.rod_location' -%}
+      {%- set sec_pin = 'r' -%}
+      {%- set sec_longitude = state_attr(sec_entity, 'longitude') |float -%}
+      {%- set sec_latitude = state_attr(sec_entity, 'latitude') |float -%}
+      {%- set pri_entity = 'sensor.pam_location' -%}
+      {%- set pri_pin = 'p' -%}
+      {%- set pri_longitude = state_attr(pri_entity, 'longitude') |float -%}
+      {%- set pri_latitude = state_attr(pri_entity, 'latitude') |float -%}
+      {%- set home_longitude = state_attr('zone.home', 'longitude') -%}
+      {%- set home_latitude = state_attr('zone.home', 'latitude') -%}
+      {%- set min_longitude = [pri_longitude,sec_longitude,home_longitude]|min -%}
+      {%- set max_longitude = [pri_longitude,sec_longitude,home_longitude]|max -%}
+      {%- set min_latitude = [pri_latitude,sec_latitude,home_latitude]|min -%}
+      {%- set max_latitude = [pri_latitude,sec_latitude,home_latitude]|max -%}
+      {%- set style = 'mapbox/outdoors-v10' -%}
+      {%- if (min_longitude == max_longitude) -%}
+      {%- set min_longitude = min_longitude - 0.001 -%}
+      {%- set max_longitude = max_longitude + 0.001 -%}
+      {%- endif -%}
+      {%- if (min_latitude == max_latitude) -%}
+      {%- set min_latitude = min_latitude - 0.001 -%}
+      {%- set max_latitude = max_latitude + 0.001 -%}
+      {%- endif -%}
+      https://api.mapbox.com/styles/v1/{{style}}/static/pin-s-{{sec_pin}}+2ecc71({{sec_longitude}},{{sec_latitude}}),pin-s-{{pri_pin}}+3498db({{pri_longitude}},{{pri_latitude}})/[{{min_longitude}},{{min_latitude}},{{max_longitude}},{{max_latitude}}]/400x400?logo=false&padding=60,21,14,21&access_token={{mapbox_api_key}}
+```
+```yaml
+# Example ui-lovelace.yaml
+
+    cards:
+      - type: picture-entity
+        entity: camera.combined_location_mapbox
+        name: Mapbox
+        show_state: false
+        show_name: true
+```
+
+</details>
+ 
+![camera.rod_location_mapbox](docs/images/camera.rod_location_mapbox.png)
+<details>
+  <summary>Click for Configuration Details</summary>
+
+```yaml
+# Example configuration.yaml entry
+
+camera:
+  - name: rod_location_mapbox
+    platform: person_location
+    still_image_url: >-
+      {%- set pri_entity = 'sensor.rod_location' -%}
+      {%- set pri_pin = 'r' -%}
+      {%- set pri_longitude = state_attr(pri_entity, 'longitude') -%}
+      {%- set pri_latitude = state_attr(pri_entity, 'latitude') -%}
+      {%- set zoom = 15 -%}
+      {%- if (pri_longitude == None) or (pri_latitude == None) -%}
+        None
+      {%- else -%}
+          https://api.mapbox.com/styles/v1/mapbox/streets-v11/static/pin-s-{{pri_pin}}+3498db({{pri_longitude}},{{pri_latitude}})/{{pri_longitude}},{{pri_latitude}},{{zoom}}/400x400?logo=false&access_token={{mapbox_api_key}}
+      {%- endif -%}
+    state: >-
+      {%- set pri_entity = 'sensor.rod_location' -%}
+      {{ states(pri_entity) }}
+```
+```yaml
+# Example ui-lovelace.yaml
+
+    cards:
+      - type: picture-entity
+        entity: camera.rod_location_mapbox
+        name: Mapbox - Rod's Location
+        show_state: true
+```
+
+</details>
+ 
+![camera.rod_location_mapbox_pitched](docs/images/camera.rod_location_mapbox_pitched.png)
+<details>
+  <summary>Click for Configuration Details</summary>
+
+This map is oriented to the individual's direction of travel.
+
+```yaml
+# Example configuration.yaml entry
+
+camera:
+  - name: rod_location_mapbox_pitched
+    platform: person_location
+    still_image_url: >-
+      {%- set pri_entity = 'sensor.rod_location' -%}
+      {%- set pri_pin = 'r' -%}
+      {%- set pri_longitude = state_attr(pri_entity, 'longitude') -%}
+      {%- set pri_latitude = state_attr(pri_entity, 'latitude') -%}
+      {%- set zoom = 14 -%}
+      {%- set pitch = 60 -%}
+      {%- set bearing = state_attr(pri_entity, 'compass_bearing') -%}
+      {%- if (pri_longitude == None) or (pri_latitude == None) -%}
+        None
+      {%- else -%}
+        {%- if (zoom == 'auto') or (bearing == None) -%}
+          https://api.mapbox.com/styles/v1/mapbox/streets-v11/static/pin-s-{{pri_pin}}+3498db({{pri_longitude}},{{pri_latitude}})/auto/400x300?logo=false&access_token={{mapbox_api_key}}
+        {%- else -%}
+          https://api.mapbox.com/styles/v1/mapbox/streets-v11/static/pin-s-{{pri_pin}}+3498db({{pri_longitude}},{{pri_latitude}})/{{pri_longitude}},{{pri_latitude}},{{zoom}},{{bearing}},{{pitch}}/400x300?logo=false&access_token={{mapbox_api_key}}
+        {%- endif -%}
+      {%- endif -%}
+    state: >-
+      {%- set pri_entity = 'sensor.rod_location' -%}
+      {{ states(pri_entity) }}
+```
+```yaml
+# Example ui-lovelace.yaml
+
+    cards:
+      - type: picture-entity
+        entity: camera.rod_location_mapbox_pitched
+        name: Mapbox pitch=60 - Rod's Location
+        show_state: true
+```
+
+</details>
+ 
+#### **MapQuest**
+
+See https://developer.mapquest.com/documentation/static-map-api/v5/ for help.
+
+![camera.rod_location_mapquest](docs/images/camera.rod_location_mapquest.png)
+<details>
+  <summary>Click for Configuration Details</summary>
+
+```yaml
+# Example configuration.yaml entry
+
+camera:
+  - name: rod_location_mapquest
+    platform: person_location
+    still_image_url: >-
+      {%- set pri_entity = 'sensor.rod_location' -%}
+      {%- set pri_pin = 'r' -%}
+      {%- set pri_longitude = state_attr(pri_entity, 'longitude') -%}
+      {%- set pri_latitude = state_attr(pri_entity, 'latitude') -%}
+      {%- set zoom = 16 -%}
+      {%- if (pri_longitude == None) or (pri_latitude == None) -%}
+        None
+      {%- else -%}
+        https://www.mapquestapi.com/staticmap/v5/staticmap/map?zoom={{zoom}}&size=400,400&center={{pri_latitude}},{{pri_longitude}}&locations={{pri_latitude}},{{pri_longitude}}|marker-{{pri_pin}}&key={{mapquest_api_key}}
+      {%- endif -%}
+    state: >-
+      {%- set pri_entity = 'sensor.rod_location' -%}
+      {{ states(pri_entity) }}
+```
+```yaml
+# Example ui-lovelace.yaml
+
+    cards:
+      - type: picture-entity
+        entity: camera.rod_location_mapquest
+        name: MapQuest - Rod's Location
+        show_state: true
+```
+</details>
+ 
+#### **Map Card**
+
+The map card requires no knowledge of the mapping API's but is limited in how much it can be customized.
+
+See https://www.home-assistant.io/lovelace/map/ for help.
+
+![home_assistant_map_card](docs/images/home_assistant_map_card.png)
+<details>
+  <summary>Click for Configuration Details</summary>
+
+```yaml
+# Example ui-lovelace.yaml
+
+    cards:
+      - type: map
+        entities:
+          - sensor.rod_location
+          - zone.home
+        aspect_ratio: 4x4
+        default_zoom: 17
+        title: Home Assistant Map Card
+```
+
+</details>
+ 
 ### **Lovelace Examples**
 
 Show status of the Person Location Integration and allow control of API calls.
 
 ```yaml
+# Example ui-lovelace.yaml
+
     cards:
 # ------------------------------------------------------
       - title: Home Assistant
@@ -357,6 +656,8 @@ Show status of the Person Location Integration and allow control of API calls.
 Show all related device trackers and person location information (especially during testing).
 
 ```yaml
+# Example ui-lovelace.yaml
+
     cards:
 # ------------------------------------------------------
       - type: 'custom:vertical-stack-in-card'
