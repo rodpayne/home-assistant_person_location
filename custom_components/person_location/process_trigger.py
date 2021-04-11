@@ -223,15 +223,7 @@ def setup_process_trigger(pli):
 
             if "last_located" in trigger.attributes:
                 last_located = trigger.attributes["last_located"]
-                reference_time = datetime.now()
-                new_location_time = datetime.strptime(
-                    reference_time.strftime("%Y-%m-%d ")
-                    + last_located
-                    + reference_time.strftime(" %p"),
-                    "%Y-%m-%d %I:%M:%S %p",
-                )  # last_located from iCloud3 is time only, without AM/PM
-                if new_location_time > reference_time:
-                    new_location_time = new_location_time - timedelta(hours=12)
+                new_location_time = datetime.strptime(last_located, "%Y-%m-%d %H:%M:%S")
             else:
                 new_location_time = utc2local_naive(
                     trigger.last_updated
