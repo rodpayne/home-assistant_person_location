@@ -5,23 +5,27 @@ import string
 from datetime import datetime, timedelta, timezone
 from functools import partial
 
-from homeassistant.components.device_tracker.const import ATTR_SOURCE_TYPE
-from homeassistant.components.device_tracker.const import SOURCE_TYPE_GPS
-from homeassistant.components.mobile_app.const import ATTR_VERTICAL_ACCURACY
+from homeassistant.components.device_tracker.const import (
+    ATTR_SOURCE_TYPE,
+    SOURCE_TYPE_GPS,
+)
+from homeassistant.components.mobile_app.const import (
+    ATTR_VERTICAL_ACCURACY,
+)
 from homeassistant.const import (
     ATTR_GPS_ACCURACY,
     ATTR_LATITUDE,
     ATTR_LONGITUDE,
     CONF_ENTITY_ID,
-    CONF_FRIENDLY_NAME_TEMPLATE,
-    STATE_HOME,
     STATE_NOT_HOME,
     STATE_ON,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
 )
 from homeassistant.exceptions import ServiceNotFound
-from homeassistant.helpers.event import track_point_in_time
+from homeassistant.helpers.event import (
+    track_point_in_time,
+)
 
 from .const import (
     ATTR_ALTITUDE,
@@ -96,9 +100,7 @@ def setup_process_trigger(pli):
                 target.state = to_state
 
                 if to_state == "Home":
-                    target.attributes[
-                        ATTR_BREAD_CRUMBS
-                    ] = to_state  # Reset bread_crumbs
+                    target.attributes[ATTR_BREAD_CRUMBS] = to_state
                     target.attributes[ATTR_COMPASS_BEARING] = 0
                     target.attributes[ATTR_DIRECTION] = "home"
                 elif to_state == "Away":
@@ -447,7 +449,7 @@ def setup_process_trigger(pli):
                     zoneEntityID = "zone." + reportedZone
                     zoneStateObject = pli.hass.states.get(zoneEntityID)
                     icon = "mdi:help-circle"
-                    if zoneStateObject == None or reportedZone.lower().endswith(
+                    if zoneStateObject is None or reportedZone.lower().endswith(
                         "stationary"
                     ):
                         # Eliminate stray zone names:
@@ -511,11 +513,16 @@ def setup_process_trigger(pli):
 
                     if trigger.stateHomeAway == "Home":
                         if (
-                            oldTargetState == "none"
+                            oldTargetState in ["just left", "none"]
                             or ha_just_started
-                            or oldTargetState == "just left"
+                            or (pli.configuration[CONF_MINUTES_JUST_ARRIVED] == 0)
                         ):
                             newTargetState = "Home"
+
+                            target.attributes[ATTR_BREAD_CRUMBS] = newTargetState
+                            target.attributes[ATTR_COMPASS_BEARING] = 0
+                            target.attributes[ATTR_DIRECTION] = "home"
+
                             call_rest_command_service(
                                 trigger.personName, newTargetState
                             )
@@ -535,22 +542,29 @@ def setup_process_trigger(pli):
                                 trigger.personName, newTargetState
                             )
                     else:
-                        if oldTargetState == "none" or ha_just_started:
+                        if oldTargetState != "away" and (
+                            oldTargetState == "none"
+                            or ha_just_started
+                            or (pli.configuration[CONF_MINUTES_JUST_LEFT] == 0)
+                        ):
                             newTargetState = "Away"
-                            change_state_later(
-                                target.entity_id,
-                                "Away",
-                                "Extended Away",
-                                (pli.configuration[CONF_HOURS_EXTENDED_AWAY] * 60),
-                            )
+                            if pli.configuration[CONF_HOURS_EXTENDED_AWAY] != 0:
+                                change_state_later(
+                                    target.entity_id,
+                                    "Away",
+                                    "Extended Away",
+                                    (pli.configuration[CONF_HOURS_EXTENDED_AWAY] * 60),
+                                )
                             call_rest_command_service(
                                 trigger.personName, newTargetState
                             )
                         elif oldTargetState == "just left":
                             newTargetState = "Just Left"
-                        elif (
-                            oldTargetState == "home" or oldTargetState == "just arrived"
-                        ):
+                        elif oldTargetState == "away":
+                            newTargetState = "Away"
+                        elif oldTargetState == "extended away":
+                            newTargetState = "Extended Away"
+                        else:
                             newTargetState = "Just Left"
                             change_state_later(
                                 target.entity_id,
@@ -558,11 +572,6 @@ def setup_process_trigger(pli):
                                 "Away",
                                 pli.configuration[CONF_MINUTES_JUST_LEFT],
                             )
-                            call_rest_command_service(
-                                trigger.personName, newTargetState
-                            )
-                        else:
-                            newTargetState = "Away"
                             call_rest_command_service(
                                 trigger.personName, newTargetState
                             )
@@ -578,8 +587,8 @@ def setup_process_trigger(pli):
                     # Call service to "reverse geocode" the location.
                     # For devices at Home, this will only be done initially or on arrival.
 
-                    if (newTargetState == "Home" and oldTargetState == "just left") or (
-                        newTargetState == "Just Arrived" and oldTargetState == "away"
+                    if (newTargetState in ["Home", "Just Arrived"]) and (
+                        oldTargetState in ["away", "extended away", "just left"]
                     ):
                         force_update = True
                     else:

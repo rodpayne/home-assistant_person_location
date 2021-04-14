@@ -3,8 +3,8 @@ The person_location integration.
 
 This integration supplies a service to reverse geocode the location
 using Open Street Map (Nominatim) or Google Maps or MapQuest and
-calculate the distance from home (miles and minutes) using 
-WazeRouteCalculator.  
+calculate the distance from home (miles and minutes) using
+WazeRouteCalculator.
 """
 
 import logging
@@ -169,7 +169,7 @@ def setup(hass, config):
         """Start a timer for "startup is done"."""
 
         point_in_time = datetime.now() + timedelta(minutes=minutes)
-        remove = track_point_in_time(
+        track_point_in_time(
             hass,
             partial(
                 _handle_startup_is_done,

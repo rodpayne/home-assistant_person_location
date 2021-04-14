@@ -21,7 +21,6 @@ from homeassistant.exceptions import TemplateError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.reload import async_setup_reload_service
-from homeassistant.helpers.template import Template
 
 from .const import (
     CONF_GOOGLE_API_KEY,
@@ -101,7 +100,7 @@ class PersonLocationCamera(Camera):
 
         self._entities = list(self._extract_entities(self._still_image_url))
         for entity in list(self._extract_entities(self._state_template)):
-            if not entity in self._entities:
+            if entity not in self._entities:
                 self._entities.append(entity)
         _LOGGER.debug("(%s) entities = %s", self._name, self._entities)
         # TODO: set up a Track State Change to do update when template entities change?

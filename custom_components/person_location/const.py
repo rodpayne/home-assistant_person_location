@@ -359,7 +359,7 @@ class PERSON_LOCATION_ENTITY:
         self.configuration = self.hass.data[DOMAIN][DATA_CONFIGURATION]
 
         targetStateObject = self.hass.states.get(self.entity_id)
-        if targetStateObject != None:
+        if targetStateObject is not None:
             self.firstTime = False
             if (targetStateObject.state == "stationary") or (
                 targetStateObject.state == "not_home"
@@ -414,7 +414,7 @@ class PERSON_LOCATION_ENTITY:
             self.personName = self.attributes["owner_fullname"].split()[0].lower()
         else:
             self.personName = self.entity_id.split(".")[1].split("_")[0].lower()
-            if self.firstTime == False:
+            if self.firstTime is False:
                 _LOGGER.debug(
                     'The account_name (or person_name) attribute is missing in %s, trying "%s"',
                     self.entity_id,

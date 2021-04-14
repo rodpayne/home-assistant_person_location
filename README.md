@@ -260,10 +260,10 @@ The configuration can be updated in either the `Configuration > Integrations` GU
 | Google API Key | `google_api_key` | Yes | Google API Key obtained from the [Google Maps Platform](https://cloud.google.com/maps-platform#get-started). | Do not do the Google reverse geocoding.
 | Google Language | `language`       | Yes | Language parameter for the Google API. | `en`
 | Google Region | `region`         | Yes | Region parameter for the Google API. | `US`
-| Hours Extended Away | `extended_away`  | Yes | Number of **hours** before changing `Away` into `Extended Away`. | `48`
+| Hours Extended Away | `extended_away`  | Yes | Number of **hours** before changing `Away` into `Extended Away`. Set to `0` to not use `Extended Away` state. | `48`
 | MapQuest API Key | `mapquest_api_key`    | Yes | MapQuest API Key obtained from the [MapQuest Developer site](https://developer.mapquest.com/user/me/apps). | Do not do the MapQuest reverse geocoding.
-| Minutes Just Arrived | `just_arrived`   | Yes | Number of **minutes** before changing `Just Arrived` into `Home`. | `3`
-| Minutes Just Left | `just_left`      | Yes | Number of **minutes** before changing `Just Left` into `Away`. | `3`
+| Minutes Just Arrived | `just_arrived`   | Yes | Number of **minutes** before changing `Just Arrived` into `Home`. Set to `0` to not use `Just Arrived` state. | `3`
+| Minutes Just Left | `just_left`      | Yes | Number of **minutes** before changing `Just Left` into `Away`. Set to `0` to not use `Just Left` state. | `3`
 | OSM API Key (your eMail Address) | `osm_api_key`    | Yes | Contact email address to be used by the Open Street Map API. | Do not do the OSM reverse geocoding.
 | Platform for output sensor | `platform`       | Yes | Platform used for the person location "sensor". (Experimental.) | `sensor` as in `sensor.<name>_location`.
 | Sensors to be created | `creat_sensors`  | Yes | List of attributes for which individual sensors are to be created so that template sensors do not need to be configured.  Choose from this list: `altitude`, `bread_crumbs`, `direction`, `driving_miles`, `driving_minutes`, `geocoded`, `latitude`, `longitude`, `meters_from_home`, `miles_from_home`. | None
