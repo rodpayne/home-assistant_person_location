@@ -361,7 +361,7 @@ class PERSON_LOCATION_ENTITY:
         targetStateObject = self.hass.states.get(self.entity_id)
         if targetStateObject is not None:
             self.firstTime = False
-            if (targetStateObject.state == "stationary") or (
+            if (targetStateObject.state.lower().endswith("stationary")) or (
                 targetStateObject.state == "not_home"
             ):
                 self.state = "Away"
