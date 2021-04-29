@@ -231,17 +231,26 @@ def setup_process_trigger(pli):
                     trigger.last_updated
                 )  # HA last_updated is UTC
 
+            if ATTR_SOURCE_TYPE in trigger.attributes:
+                triggerSourceType = trigger.attributes[ATTR_SOURCE_TYPE]
+            else:
+                triggerSourceType = "other"
+                # person entities do not indicate the source type, dig deeper:
+                if "source" in trigger.attributes:
+                    triggerSource = trigger.attributes["source"]
+                    triggerSourceObject = pli.hass.states.get(triggerSource)
+                    if triggerSourceObject is not None:
+                        if ATTR_SOURCE_TYPE in triggerSourceObject.attributes:
+                            triggerSourceType = triggerSourceObject.attributes[
+                                ATTR_SOURCE_TYPE
+                            ]
+
             # ---------------------------------------------------------
             # Get the current state of the target person location
             # sensor and decide if it should be updated with values
             # from the triggered device tracker:
             saveThisUpdate = False
             # ---------------------------------------------------------
-
-            if ATTR_SOURCE_TYPE in trigger.attributes:
-                triggerSourceType = trigger.attributes[ATTR_SOURCE_TYPE]
-            else:
-                triggerSourceType = "other"
 
             with TARGET_LOCK:
                 """Lock while updating the target(trigger.targetName)."""
