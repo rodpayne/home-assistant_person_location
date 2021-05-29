@@ -521,7 +521,7 @@ def setup_reverse_geocode(pli):
 
                                 google_status = google_decoded["status"]
                                 if google_status != "OK":
-                                    _LOGGER.debug(
+                                    _LOGGER.error(
                                         "("
                                         + entity_id
                                         + ") google_status = "
@@ -628,7 +628,7 @@ def setup_reverse_geocode(pli):
                                     "statuscode"
                                 ]
                                 if mapquest_statuscode != 0:
-                                    _LOGGER.debug(
+                                    _LOGGER.error(
                                         "("
                                         + entity_id
                                         + ") mapquest_statuscode = "
