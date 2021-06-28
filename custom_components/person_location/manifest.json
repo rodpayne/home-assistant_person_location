@@ -17,6 +17,7 @@
   "codeowners": [
     "@rodpayne"
   ],
+  "iot_class": "calculated",
   "requirements": [],
   "version": "2021.04.24"
 }
