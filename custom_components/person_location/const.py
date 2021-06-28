@@ -265,10 +265,20 @@ class PERSON_LOCATION_INTEGRATION:
                     "Configured Waze region (%s) is not valid",
                     self.configuration[CONF_WAZE_REGION],
                 )
-            self.configuration[CONF_CREATE_SENSORS] = [
-                x.strip()
-                for x in self.config[DOMAIN].get(CONF_CREATE_SENSORS, []).split(",")
-            ]
+            raw_conf_create_sensors = self.config[DOMAIN].get(CONF_CREATE_SENSORS, [])
+            if type(raw_conf_create_sensors) == list:
+                self.configuration[CONF_CREATE_SENSORS] = raw_conf_create_sensors
+            elif type(raw_conf_create_sensors) == str:
+                self.configuration[CONF_CREATE_SENSORS] = [
+                    x.strip() for x in raw_conf_create_sensors.split(",")
+                ]
+            else:
+                _LOGGER.error(
+                    "Configured %s: %s is not valid",
+                    CONF_CREATE_SENSORS,
+                    raw_conf_create_sensors,
+                )
+                self.configuration[CONF_CREATE_SENSORS] = []
             for sensor_name in self.configuration[CONF_CREATE_SENSORS]:
                 if sensor_name not in VALID_CREATE_SENSORS:
                     _LOGGER.error(
@@ -276,8 +286,6 @@ class PERSON_LOCATION_INTEGRATION:
                         CONF_CREATE_SENSORS,
                         sensor_name,
                     )
-                # TODO: remove invalid self.configuration[CONF_CREATE_SENSORS].pop(sensor_name)?
-
             self.configuration[CONF_FOLLOW_PERSON_INTEGRATION] = self.config[
                 DOMAIN
             ].get(CONF_FOLLOW_PERSON_INTEGRATION, False)
