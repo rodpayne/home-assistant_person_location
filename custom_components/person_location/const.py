@@ -24,7 +24,7 @@ DOMAIN = "person_location"
 API_STATE_OBJECT = DOMAIN + "." + DOMAIN + "_integration"
 INTEGRATION_NAME = "Person Location"
 ISSUE_URL = "https://github.com/rodpayne/home-assistant/issues"
-VERSION = "2021.04.24"
+VERSION = "2021.09.10"
 
 # Fixed parameters:
 MIN_DISTANCE_TRAVELLED_TO_GEOCODE = 5
