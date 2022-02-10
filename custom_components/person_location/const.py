@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
 from homeassistant.components.mobile_app.const import ATTR_VERTICAL_ACCURACY
-from homeassistant.components.waze_travel_time.sensor import REGIONS as WAZE_REGIONS
+from homeassistant.components.waze_travel_time.const import REGIONS as WAZE_REGIONS
 from homeassistant.const import (
     ATTR_ATTRIBUTION,
     ATTR_FRIENDLY_NAME,
