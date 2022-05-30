@@ -13,6 +13,7 @@ from homeassistant.components.mobile_app.const import (
     ATTR_VERTICAL_ACCURACY,
 )
 from homeassistant.const import (
+    ATTR_ENTITY_PICTURE,
     ATTR_GPS_ACCURACY,
     ATTR_LATITUDE,
     ATTR_LONGITUDE,
@@ -430,6 +431,14 @@ def setup_process_trigger(pli):
                     else:
                         if ATTR_VERTICAL_ACCURACY in target.attributes:
                             target.attributes.pop(ATTR_VERTICAL_ACCURACY)
+
+                    if ATTR_ENTITY_PICTURE in trigger.attributes:
+                        target.attributes[ATTR_ENTITY_PICTURE] = trigger.attributes[
+                            ATTR_ENTITY_PICTURE
+                        ]
+                    else:
+                        if ATTR_ENTITY_PICTURE in target.attributes:
+                            target.attributes.pop(ATTR_ENTITY_PICTURE)
 
                     target.attributes["source"] = trigger.entity_id
                     target.attributes["reported_state"] = trigger.state

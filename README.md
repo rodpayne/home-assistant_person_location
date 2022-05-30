@@ -174,7 +174,8 @@ Input:
       latitude
       longitude
       person_name (if different from what is implied by entity_id = device_tracker.<person_name>_whatever)
-      altitude (optional, passed thru to output sensor)
+      altitude (optional, passed thru to the output sensor)
+      entity_picture (optional, passed thru to the output sensor)
       gps_accuracy (optional)
       source_type (optional)
       vertical_accuracy (optional)
@@ -284,6 +285,7 @@ person_location:
       - name: Pam
         devices: person.pam
 ```
+In this example, `sensor.rod_location` will reflect changes detected in three devices; `sensor.pam_location` will reflect changes in the `person.pam` entity.
 
 * [Open Street Map Geocoding Configuration](#open-street-map-geocoding-configuration)
 * [Google Maps Geocoding Configuration](#google-maps-geocoding-configuration)
