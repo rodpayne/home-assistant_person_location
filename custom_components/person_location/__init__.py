@@ -102,9 +102,13 @@ def setup(hass, config):
         _LOGGER.debug("[_handle_device_tracker_state_change]" + " === Start ===")
 
         _LOGGER.debug("[_handle_device_tracker_state_change]" + " (%s) " % (entity_id))
+        if hasattr('old_state', 'state'):
+            fromState = old_state.state
+        else:
+            fromState = 'unknown'
         service_data = {
             "entity_id": entity_id,
-            "from_state": old_state.state,
+            "from_state": fromState,
             "to_state": new_state.state,
         }
         hass.services.call(DOMAIN, "process_trigger", service_data, False)
