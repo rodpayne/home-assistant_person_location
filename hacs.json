@@ -1,7 +1,4 @@
 {
     "name": "Person Location Reverse Geocode",
-    "country": "US",
-    "iot_class": [
-        "Cloud Polling"
-    ]
+    "country": "US"
 }

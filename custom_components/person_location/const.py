@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
 from homeassistant.components.mobile_app.const import ATTR_VERTICAL_ACCURACY
-from homeassistant.components.waze_travel_time.sensor import REGIONS as WAZE_REGIONS
+from homeassistant.components.waze_travel_time.const import REGIONS as WAZE_REGIONS
 from homeassistant.const import (
     ATTR_ATTRIBUTION,
     ATTR_FRIENDLY_NAME,
@@ -24,7 +24,7 @@ DOMAIN = "person_location"
 API_STATE_OBJECT = DOMAIN + "." + DOMAIN + "_integration"
 INTEGRATION_NAME = "Person Location"
 ISSUE_URL = "https://github.com/rodpayne/home-assistant/issues"
-VERSION = "2021.09.10"
+VERSION = "2022.05.30"
 
 # Fixed parameters:
 MIN_DISTANCE_TRAVELLED_TO_GEOCODE = 5
