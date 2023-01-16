@@ -117,9 +117,12 @@ class PersonLocationCamera(Camera):
             self.async_camera_image(), self.hass.loop
         ).result()
 
-    async def async_camera_image(self):
+    async def async_camera_image(
+        self, width: int | None = None, height: int | None = None
+    ):
         """Wrap _async_camera_image with an asyncio.shield."""
         # Shield the request because of https://github.com/encode/httpx/issues/1461
+        # Include width & height https://github.com/home-assistant/core/pull/68039
         try:
             self._last_url, self._last_image = await asyncio.shield(
                 self._async_camera_image()
