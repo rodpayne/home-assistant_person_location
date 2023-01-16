@@ -48,10 +48,10 @@ jobs:
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --exclude=python_scripts
       - name: Don't mind this
         run: |
-          flake8 . --inline-quotes '"' --count --exit-zero --max-complexity=15 --max-line-length=90 --statistics --select=I,P,WPS305,C812,E203,W503,E800
+          flake8 . --inline-quotes 'double' --count --exit-zero --max-complexity=15 --max-line-length=90 --statistics --select=I,P,WPS305,C812,E203,W503,E800
       - name: Docstrings
         run: |
-          flake8 . --inline-quotes '"' --count --exit-zero --max-complexity=15 --max-line-length=90 --statistics --select=D,DAR
+          flake8 . --inline-quotes 'double' --count --exit-zero --max-complexity=15 --max-line-length=90 --statistics --select=D,DAR
       - name: Unused stuff
         run: |
           echo "Some stuff may not be used, but is used in commented out code."
@@ -61,4 +61,4 @@ jobs:
           echo "Make sure you check with the find command before you remove anything!"
       - name: General stats
         run: |
-          flake8 . --inline-quotes '"' --count --exit-zero --max-complexity=15 --max-line-length=90 --statistics --ignore=I,P,WPS305,C812,E203,W503,E800,D,DAR,F
+          flake8 . --inline-quotes 'double' --count --exit-zero --max-complexity=15 --max-line-length=90 --statistics --ignore=I,P,WPS305,C812,E203,W503,E800,D,DAR,F
