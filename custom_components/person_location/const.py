@@ -24,7 +24,7 @@ DOMAIN = "person_location"
 API_STATE_OBJECT = DOMAIN + "." + DOMAIN + "_integration"
 INTEGRATION_NAME = "Person Location"
 ISSUE_URL = "https://github.com/rodpayne/home-assistant/issues"
-VERSION = "2023.01.17"
+VERSION = "2023.01.23"
 
 # Fixed parameters:
 MIN_DISTANCE_TRAVELLED_TO_GEOCODE = 5
@@ -74,6 +74,7 @@ CONF_WAZE_REGION = "waze_region"
 CONF_GOOGLE_API_KEY = "google_api_key"
 CONF_MAPBOX_API_KEY = "mapbox_api_key"
 CONF_MAPQUEST_API_KEY = "mapquest_api_key"
+CONF_NAME = "name"
 CONF_OSM_API_KEY = "osm_api_key"
 DEFAULT_API_KEY_NOT_SET = "not used"
 
@@ -93,7 +94,6 @@ VALID_CREATE_SENSORS = [
 
 CONF_FOLLOW_PERSON_INTEGRATION = "follow_person_integration"
 CONF_PERSON_NAMES = "person_names"
-CONF_NAME = "name"
 CONF_DEVICES = "devices"
 VALID_ENTITY_DOMAINS = ("binary_sensor", "device_tracker", "person", "sensor")
 
@@ -267,11 +267,11 @@ class PERSON_LOCATION_INTEGRATION:
                 )
             raw_conf_create_sensors = self.config[DOMAIN].get(CONF_CREATE_SENSORS, [])
             if type(raw_conf_create_sensors) == list:
-                self.configuration[CONF_CREATE_SENSORS] = raw_conf_create_sensors
+                self.configuration[CONF_CREATE_SENSORS] = sorted(raw_conf_create_sensors)
             elif type(raw_conf_create_sensors) == str:
-                self.configuration[CONF_CREATE_SENSORS] = [
+                self.configuration[CONF_CREATE_SENSORS] = sorted([
                     x.strip() for x in raw_conf_create_sensors.split(",")
-                ]
+                ])
             else:
                 _LOGGER.error(
                     "Configured %s: %s is not valid",
