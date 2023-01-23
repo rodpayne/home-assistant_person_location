@@ -141,7 +141,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 # return self.async_create_entry(title="", data=None)
                 return self.async_abort(reason="normal exit")
             else:
-                self._errors["base"] = "nothing was changed"
+                self._errors["base"] = "nothing_was_changed"
                 return await self.async_step_user()
         else:
             return self.async_create_entry(title=location_name, data=self._user_input)
@@ -400,6 +400,8 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self, config_entry):
         """Initialize options flow."""
 
+        self._errors = {}       # error messages for the data entry flow
+        
         self._user_input = {}   # validated user_input to be saved
         self.config_entry = config_entry
         self.options = dict(config_entry.options)
@@ -407,8 +409,6 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):  # pylint: disable=unused-argument
         """Handle option flow initiated by the user."""
     
-        self._errors = {}       # error messages for the data entry flow
-        
         if user_input is not None:
             self.options.update(user_input)
             self._user_input.update(user_input)
@@ -439,6 +439,8 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
                     ): int,
                 }
             ),
+            errors=self._errors,
+
         )
 
     async def _update_options(self):
@@ -455,9 +457,18 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
     
         if user_input is not None:
             redisplay = False
-            # TODO: remove from self._all_devices if not in user_input[CONF_DEVICES] 
-            _LOGGER.debug("TODO: remove from %s if not in %s", self._all_devices, user_input[CONF_DEVICES])
+            # remove entity from self._all_devices if not in user_input[CONF_DEVICES]
+            updated_all_devices = {} 
+            for device in self._all_devices.keys():
+                if device in user_input[CONF_DEVICES]:
+                    updated_all_devices[device] = self._all_devices[device]
+                else:
+                    redisplay = True
+            _LOGGER.debug("self._all_devices = %s", updated_all_devices)
+            self._all_devices = updated_all_devices
+
             valid = True
+            # add any new entity to self._all_devices
             new_device = user_input[CONF_NEW_DEVICE]
             if (new_device != '') or (user_input[CONF_NEW_NAME] != ''):
                 if (new_device != ''):
@@ -486,9 +497,33 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
                     redisplay = True   # return to the form to add more
 
             if valid and not redisplay:
-                _LOGGER.debug("TODO: reformat and save user_input[CONF_DEVICES] = %s", user_input[CONF_DEVICES])
+                changed = False
+                # make new dictionary for CONF_DEVICES
+                _LOGGER.debug("self._all_devices = %s", self._all_devices)
+                updated_conf_devices = {}
+                for device in self._all_devices.keys():
+                    person_name = self._all_devices[device].split(' = ')[1]
+                    updated_conf_devices[device] = person_name
+                # save CONF_DEVICES to configuration
+                if updated_conf_devices != self.integration_config_data[CONF_DEVICES]:
+                    _LOGGER.debug("updated_conf_devices = %s", updated_conf_devices)
+                    # location_name = self.hass.config.location_name
+                    # our_currently_configured_entries = self._async_current_entries()
+                    # if our_currently_configured_entries:
+                        # for our_current_entry in our_currently_configured_entries:
+                            # if our_current_entry.title == location_name:
+                    our_current_entry = self.config_entry
+                    changed = self.hass.config_entries.async_update_entry(
+                        our_current_entry, data={CONF_DEVICES: updated_conf_devices}
+                    )
+                    _LOGGER.debug("updated CONF_DEVICES saved (changed=%s)", changed)
+                    # break
 
-                return await self._update_options()
+                if changed == True or self.options != dict(self.config_entry.options):
+                    return await self._update_options()
+                else:
+                    self._errors["base"] = "nothing_was_changed"
+                    return await self.async_step_init()
 
         else:
             self.integration_config_data = self.hass.data[DOMAIN][DATA_CONFIGURATION]
