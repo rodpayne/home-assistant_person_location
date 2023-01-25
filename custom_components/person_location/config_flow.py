@@ -170,6 +170,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=self._errors,
+            last_step=False,
         )
 
     # ------------------------------------------------------------------
@@ -242,6 +243,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=self._errors,
+            last_step=False,
         )
 
     # ------------------------------------------------------------------
@@ -440,7 +442,7 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
                 }
             ),
             errors=self._errors,
-
+            last_step=False,
         )
 
     async def _update_options(self):
