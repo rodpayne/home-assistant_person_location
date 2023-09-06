@@ -18,6 +18,6 @@
     "@rodpayne"
   ],
   "iot_class": "calculated",
-  "requirements": ["WazeRouteCalculator==0.15"],
-  "version": "2023.09.07"
+  "requirements": [],
+  "version": "2023.01.23"
 }
