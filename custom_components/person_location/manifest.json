@@ -1,6 +1,7 @@
 {
   "domain": "person_location",
   "name": "Person Location",
+  "integration_type": "hub",
   "documentation": "https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#table-of-contents",
   "issue_tracker": "https://github.com/rodpayne/home-assistant_person_location/issues",
   "dependencies": [
@@ -19,5 +20,5 @@
   ],
   "iot_class": "calculated",
   "requirements": [],
-  "version": "2023.01.23"
+  "version": "2023.09.07"
 }
