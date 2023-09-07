@@ -19,7 +19,7 @@ from homeassistant.const import (
 )
 from homeassistant.util.location import distance
 from requests import get
-from WazeRouteCalculator import WazeRouteCalculator
+from pywaze.route_calculator import WazeRouteCalculator
 
 from .const import (
     ATTR_BREAD_CRUMBS,
