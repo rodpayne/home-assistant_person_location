@@ -256,7 +256,7 @@ class PERSON_LOCATION_INTEGRATION:
             )
             self.configuration[CONF_WAZE_REGION] = self.config[DOMAIN].get(
                 CONF_REGION, DEFAULT_REGION
-            )
+            ).lower()
             if self.configuration[CONF_WAZE_REGION] in WAZE_REGIONS:
                 self.configuration[CONF_USE_WAZE] = True
             else:
