@@ -68,5 +68,51 @@
             "new_device_wrong_domain": "The new entity is not in an allowed domain.",
             "nothing_was_changed": "No changes were entered for the configuration."
         }
+    },
+    "services": {
+        "reverse_geocode": {
+            "name": "Reverse Geocode",
+            "description": "Service to reverse geocode the location in a person status sensor.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entity ID",
+                    "description": "Name of the entitity to examine and update."
+                },
+                "force_update": {
+                    "name": "Force Update",
+                    "description": "Should geocoding be done even if the distance is less than MIN_DISTANCE_TRAVELLED (5 meters) (optional)?"
+                },
+                "friendly_name_template": {
+                    "name": "Friendly Name Template",
+                    "description": "Template for the entitiy's friendly_name (optional)."
+                }
+            }
+        },
+        "geocode_api_on": {
+            "name": "Geocode API On",
+            "description": "Resume using the Open Street Map API and WazeRouteCalculator."
+        },
+        "geocode_api_off": {
+            "name": "Geocode API Off",
+            "description": "Pause using the Open Street Map API. This may be necessary if a malfunction causes an excessive number of calls or if the external site is unreachable. The Nominatim Usage Policy says, 'Apps must make sure that they can switch off the service at our request at any time (in particular, switching should be possible without requiring a software update).' This also pauses the WazeRouteCalculator calls."
+        },
+        "process_trigger": {
+            "name": "Process Trigger",
+            "description": "Service to process the changes of a device tracker or sensor.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entity ID",
+                    "description": "Name of the device tracker or sensor that has changed."
+                },
+                "from_state": {
+                    "name": "From State",
+                    "description": "The previous state."
+                },
+                "to_state": {
+                    "name": "To State",
+                    "description": "The updated state."
+                }
+            }
+        }
     }
 }
