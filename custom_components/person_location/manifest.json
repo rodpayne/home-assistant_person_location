@@ -1,24 +1,24 @@
 {
   "domain": "person_location",
   "name": "Person Location",
-  "integration_type": "hub",
-  "documentation": "https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#table-of-contents",
-  "issue_tracker": "https://github.com/rodpayne/home-assistant_person_location/issues",
+  "after_dependencies": [
+    "person",
+    "waze_travel_time"
+  ],
+  "codeowners": [
+    "@rodpayne"
+  ],
+  "config_flow": true,
   "dependencies": [
     "device_tracker",
     "mobile_app",
     "sensor",
     "zone"
   ],
-  "after_dependencies": [
-    "person",
-    "waze_travel_time"
-  ],
-  "config_flow": true,
-  "codeowners": [
-    "@rodpayne"
-  ],
+  "documentation": "https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#table-of-contents",
+  "integration_type": "hub",
   "iot_class": "calculated",
+  "issue_tracker": "https://github.com/rodpayne/home-assistant_person_location/issues",
   "requirements": [],
   "version": "2023.09.26"
 }
