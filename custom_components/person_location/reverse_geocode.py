@@ -1,5 +1,6 @@
 """ The person_location integration reverse_geocode service."""
 
+import asyncio
 import json
 import logging
 import math
@@ -17,9 +18,11 @@ from homeassistant.const import (
     CONF_FRIENDLY_NAME_TEMPLATE,
     STATE_ON,
 )
+from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.util.location import distance
-from requests import get
-from pywaze.route_calculator import WazeRouteCalculator
+# from requests import get
+import httpx
+from pywaze.route_calculator import WazeRouteCalculator,WRCError
 
 from .const import (
     ATTR_BREAD_CRUMBS,
@@ -430,7 +433,7 @@ def setup_reverse_geocode(pli):
                                     )
 
                                 osm_decoded = {}
-                                osm_response = get(osm_url)
+                                osm_response = httpx.get(osm_url)
                                 osm_json_input = osm_response.text
                                 osm_decoded = json.loads(osm_json_input)
 
@@ -515,7 +518,7 @@ def setup_reverse_geocode(pli):
                                     + pli.configuration[CONF_GOOGLE_API_KEY]
                                 )
                                 google_decoded = {}
-                                google_response = get(google_url)
+                                google_response = httpx.get(google_url)
                                 google_json_input = google_response.text
                                 google_decoded = json.loads(google_json_input)
 
@@ -614,7 +617,7 @@ def setup_reverse_geocode(pli):
                                     + pli.configuration[CONF_MAPQUEST_API_KEY]
                                 )
                                 mapquest_decoded = {}
-                                mapquest_response = get(mapquest_url)
+                                mapquest_response = httpx.get(mapquest_url)
                                 mapquest_json_input = mapquest_response.text
                                 _LOGGER.debug(
                                     "("
@@ -785,6 +788,22 @@ def setup_reverse_geocode(pli):
                                         "(" + entity_id + ") Waze calculation"
                                     )
 
+                                    async def async_get_waze_route (
+                                            from_location,
+                                            to_location,
+                                            waze_region,
+                                        ):
+                                        client = WazeRouteCalculator(
+                                            region=waze_region, 
+                                            client=get_async_client(pli.hass),
+                                        )
+                                        route = await client.calc_route_info(
+                                            from_location,
+                                            to_location,
+                                            avoid_toll_roads=True,
+                                        )
+                                        return route
+                                        
                                     from_location = (
                                         str(new_latitude) + "," + str(new_longitude)
                                     )
@@ -793,13 +812,14 @@ def setup_reverse_geocode(pli):
                                         + ","
                                         + str(pli.attributes["home_longitude"])
                                     )
-                                    route = WazeRouteCalculator(
+                                    routeTime, routeDistance = asyncio.run_coroutine_threadsafe(
+                                        async_get_waze_route(
                                         from_location,
                                         to_location,
-                                        pli.configuration["waze_region"],
-                                        avoid_toll_roads=True,
-                                    )
-                                    routeTime, routeDistance = route.calc_route_info()
+                                        pli.configuration["waze_region"].upper(),
+                                #        "US",
+                                        ),pli.hass.loop
+                                    ).result()
                                     _LOGGER.debug(
                                         "("
                                         + entity_id
