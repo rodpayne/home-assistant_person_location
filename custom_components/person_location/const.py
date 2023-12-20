@@ -18,13 +18,17 @@ from homeassistant.const import (
     ATTR_UNIT_OF_MEASUREMENT,
     STATE_UNKNOWN,
 )
+from homeassistant.util.yaml.objects import (
+    NodeListClass,
+    NodeStrClass,
+)
 
 # Our info:
 DOMAIN = "person_location"
 API_STATE_OBJECT = DOMAIN + "." + DOMAIN + "_integration"
 INTEGRATION_NAME = "Person Location"
 ISSUE_URL = "https://github.com/rodpayne/home-assistant/issues"
-VERSION = "2023.12.09"
+VERSION = "2023.12.20"
 
 # Fixed parameters:
 MIN_DISTANCE_TRAVELLED_TO_GEOCODE = 5
@@ -266,17 +270,19 @@ class PERSON_LOCATION_INTEGRATION:
                     self.configuration[CONF_WAZE_REGION],
                 )
             raw_conf_create_sensors = self.config[DOMAIN].get(CONF_CREATE_SENSORS, [])
-            if type(raw_conf_create_sensors) == list:
+            itemType = type(raw_conf_create_sensors)
+            if (itemType == list) or (itemType == NodeListClass):
                 self.configuration[CONF_CREATE_SENSORS] = sorted(raw_conf_create_sensors)
-            elif type(raw_conf_create_sensors) == str:
+            elif (itemType == str) or (itemType == NodeStrClass):
                 self.configuration[CONF_CREATE_SENSORS] = sorted([
                     x.strip() for x in raw_conf_create_sensors.split(",")
                 ])
             else:
                 _LOGGER.error(
-                    "Configured %s: %s is not valid",
+                    "Configured %s: %s is not valid (type %s)",
                     CONF_CREATE_SENSORS,
                     raw_conf_create_sensors,
+                    itemType,
                 )
                 self.configuration[CONF_CREATE_SENSORS] = []
             for sensor_name in self.configuration[CONF_CREATE_SENSORS]:
@@ -295,7 +301,7 @@ class PERSON_LOCATION_INTEGRATION:
                 person_name = person_name_config[CONF_NAME]
                 _LOGGER.debug("person_name_config name = %s", person_name)
                 devices = person_name_config[CONF_DEVICES]
-                if type(devices) == str:
+                if (type(devices) == str) or (type(devices) == NodeStrClass):
                     devices = [devices]
                 for device in devices:
                     _LOGGER.debug("person_name_config device = %s", device)
