@@ -51,18 +51,18 @@ def setup_process_trigger(pli):
     def call_rest_command_service(personName, newState):
         """(Optionally) notify HomeSeer of the state change."""
 
-        rest_command = ""
-        rest_command = (
-            "homeseer_" + personName.lower() + "_" + newState.lower().replace(" ", "_")
-        )
-        try:
-            pli.hass.services.call("rest_command", rest_command)
-        except ServiceNotFound as e:
-            _LOGGER.debug(
-                "call_rest_command_service Exception %s = %s",
-                type(e).__name__,
-                str(e),
-            )
+    #    rest_command = ""
+    #    rest_command = (
+    #        "homeseer_" + personName.lower() + "_" + newState.lower().replace(" ", "_")
+    #    )
+    #    try:
+    #        pli.hass.services.call("rest_command", rest_command)
+    #    except Exception as e:
+    #        _LOGGER.debug(
+    #            "call_rest_command_service Exception %s = %s",
+    #            type(e).__name__,
+    #            str(e),
+    #        )
 
     def handle_delayed_state_change(
         now, *, entity_id=None, from_state=None, to_state=None, minutes=3
