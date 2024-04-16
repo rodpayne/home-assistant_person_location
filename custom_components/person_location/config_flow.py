@@ -193,7 +193,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 else:
                     create_sensors_list = user_input[CONF_CREATE_SENSORS]
                 _LOGGER.debug("create_sensors_list before = %s", create_sensors_list)
-                create_sensors_list = sorted(list(set(create_sensors_list))) # sort and eliminate duplicates
+                create_sensors_list = sorted(list(set(create_sensors_list)))
                 _LOGGER.debug("create_sensors_list after  = %s", create_sensors_list)
                 for sensor_name in create_sensors_list:
                     if sensor_name not in VALID_CREATE_SENSORS:
@@ -218,7 +218,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         create_sensors_list = self.integration_config_data.get(CONF_CREATE_SENSORS, "")
         _LOGGER.debug("create_sensors_list = %s", create_sensors_list)
         user_input[CONF_CREATE_SENSORS] = ','.join(create_sensors_list)
-        
+
         user_input[CONF_OUTPUT_PLATFORM] = self.integration_config_data.get(
             CONF_OUTPUT_PLATFORM, DEFAULT_OUTPUT_PLATFORM
         )
@@ -377,7 +377,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         try:
             if osm_api_key == DEFAULT_API_KEY_NOT_SET:
                 return True
-            regex = "^[a-z0-9]+[\._]?[a-z0-9]+[@]\w+[.]\w{2,3}$"
+            regex = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+$"
             valid = re.search(regex, osm_api_key)
             _LOGGER.debug("osm_api_key test valid = %s", valid)
             if valid:
@@ -403,20 +403,20 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
         """Initialize options flow."""
 
         self._errors = {}       # error messages for the data entry flow
-        
+
         self._user_input = {}   # validated user_input to be saved
         self.config_entry = config_entry
         self.options = dict(config_entry.options)
 
     async def async_step_init(self, user_input=None):  # pylint: disable=unused-argument
         """Handle option flow initiated by the user."""
-    
+
         if user_input is not None:
             self.options.update(user_input)
             self._user_input.update(user_input)
 
             return await self.async_step_triggers()
-    
+
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
@@ -454,9 +454,9 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
 
     async def async_step_triggers(self, user_input=None):
         """Handle the option flow."""
-    
+
         self._errors = {}       # error messages for the data entry flow
-    
+
         if user_input is not None:
             redisplay = False
             # remove entity from self._all_devices if not in user_input[CONF_DEVICES]
@@ -473,7 +473,7 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
             # add any new entity to self._all_devices
             new_device = user_input[CONF_NEW_DEVICE]
             if (new_device != '') or (user_input[CONF_NEW_NAME] != ''):
-                if (new_device != ''):
+                if new_device != '':
                     _LOGGER.debug("new_device  = %s", new_device)
                     new_device_state = self.hass.states.get(new_device)
                     if new_device_state == None:
@@ -485,10 +485,10 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
                             _LOGGER.debug("new_device_state.state = %s", new_device_state.state)
                             self._errors[CONF_NEW_DEVICE] = "new_device_wrong_domain"
                             valid = False                
-                if (user_input[CONF_NEW_DEVICE] == ''):
+                if user_input[CONF_NEW_DEVICE] == '':
                     self._errors[CONF_NEW_DEVICE] = "device_and_name_required"
                     valid = False
-                if (user_input[CONF_NEW_NAME] == ''):
+                if user_input[CONF_NEW_NAME] == '':
                     self._errors[CONF_NEW_NAME] = "device_and_name_required"
                     valid = False
                 if valid:   # valid at this point is for CONF_NEW_DEVICE/CONF_NEW_NAME
@@ -512,8 +512,8 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
                     # location_name = self.hass.config.location_name
                     # our_currently_configured_entries = self._async_current_entries()
                     # if our_currently_configured_entries:
-                        # for our_current_entry in our_currently_configured_entries:
-                            # if our_current_entry.title == location_name:
+                    #     for our_current_entry in our_currently_configured_entries:
+                    #         if our_current_entry.title == location_name:
                     our_current_entry = self.config_entry
                     changed = self.hass.config_entries.async_update_entry(
                         our_current_entry, data={CONF_DEVICES: updated_conf_devices}
@@ -549,7 +549,7 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
                     ): cv.multi_select(self._all_devices),
                     vol.Optional(
                         CONF_NEW_DEVICE, default=user_input[CONF_NEW_DEVICE],
-                    # ): cv.entities_domain(VALID_ENTITY_DOMAINS),
+                        # ): cv.entities_domain(VALID_ENTITY_DOMAINS),
                     ): str,
                     vol.Optional(
                         CONF_NEW_NAME, default=user_input[CONF_NEW_NAME],

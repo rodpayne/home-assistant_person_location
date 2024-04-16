@@ -41,6 +41,7 @@ from .const import (
     DEFAULT_API_KEY_NOT_SET,
     DOMAIN,
     INTEGRATION_LOCK,
+    INTEGRATION_NAME,
     METERS_PER_KM,
     METERS_PER_MILE,
     MIN_DISTANCE_TRAVELLED_TO_GEOCODE,
@@ -52,6 +53,12 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+def is_json(myjson):
+  try:
+    json.loads(myjson)
+  except ValueError as e:
+    return False
+  return True
 
 def setup_reverse_geocode(pli):
     """Initialize reverse_geocode service."""
@@ -619,122 +626,131 @@ def setup_reverse_geocode(pli):
                                 mapquest_decoded = {}
                                 mapquest_response = httpx.get(mapquest_url)
                                 mapquest_json_input = mapquest_response.text
-                                _LOGGER.debug(
-                                    "("
-                                    + entity_id
-                                    + ") response - "
-                                    + mapquest_json_input
-                                )
-                                mapquest_decoded = json.loads(mapquest_json_input)
-
-                                mapquest_statuscode = mapquest_decoded["info"][
-                                    "statuscode"
-                                ]
-                                if mapquest_statuscode != 0:
+                                if not is_json(mapquest_json_input):
                                     _LOGGER.error(
-                                        "("
+                                        INTEGRATION_NAME
+                                        + " ("
                                         + entity_id
-                                        + ") mapquest_statuscode = "
-                                        + str(mapquest_statuscode)
-                                        + " messages = "
-                                        + mapquest_decoded["info"]["messages"]
+                                        + ") mapquest response - "
+                                        + mapquest_json_input
                                     )
                                 else:
-                                    if (
-                                        "results" in mapquest_decoded
-                                        and "locations"
-                                        in mapquest_decoded["results"][0]
-                                    ):
-                                        mapquest_location = mapquest_decoded["results"][
-                                            0
-                                        ]["locations"][0]
+                                    _LOGGER.debug(
+                                        "("
+                                        + entity_id
+                                        + ") mapquest response - "
+                                        + mapquest_json_input
+                                    )
+                                    mapquest_decoded = json.loads(mapquest_json_input)
 
-                                        formatted_address = ""
-                                        if "street" in mapquest_location:
-                                            formatted_address += (
-                                                mapquest_location["street"] + ", "
-                                            )
-                                        if "adminArea5" in mapquest_location:  # city
-                                            locality = mapquest_location["adminArea5"]
-                                            formatted_address += locality + ", "
-                                        elif (
-                                            "adminArea4" in mapquest_location
-                                            and "adminArea4Type" in mapquest_location
-                                        ):  # county
-                                            locality = (
-                                                mapquest_location["adminArea4"]
-                                                + " "
-                                                + mapquest_location["adminArea4Type"]
-                                            )
-                                            formatted_address += locality + ", "
-                                        if "adminArea3" in mapquest_location:  # state
-                                            formatted_address += (
-                                                mapquest_location["adminArea3"] + " "
-                                            )
-                                        if "postalCode" in mapquest_location:  # zip
-                                            formatted_address += (
-                                                mapquest_location["postalCode"] + " "
-                                            )
-                                        if (
-                                            "adminArea1" in mapquest_location
-                                            and mapquest_location["adminArea1"] != "US"
-                                        ):  # country
-                                            formatted_address += mapquest_location[
-                                                "adminArea1"
-                                            ]
-
-                                        _LOGGER.debug(
+                                    mapquest_statuscode = mapquest_decoded["info"][
+                                        "statuscode"
+                                    ]
+                                    if mapquest_statuscode != 0:
+                                        _LOGGER.error(
                                             "("
                                             + entity_id
-                                            + ") mapquest formatted_address = "
-                                            + formatted_address
+                                            + ") mapquest_statuscode = "
+                                            + str(mapquest_statuscode)
+                                            + " messages = "
+                                            + mapquest_decoded["info"]["messages"]
                                         )
-                                        target.attributes[
-                                            "MapQuest"
-                                        ] = formatted_address
-
-                                        _LOGGER.debug(
-                                            "("
-                                            + entity_id
-                                            + ") mapquest locality = "
-                                            + locality
-                                        )
-
-                                        mapquest_attribution = (
-                                            '"'
-                                            + mapquest_decoded["info"]["copyright"][
-                                                "text"
-                                            ]
-                                            + '"'
-                                        )
-                                        attribution += mapquest_attribution + "; "
-
+                                    else:
                                         if (
-                                            ATTR_GEOCODED
-                                            in pli.configuration[CONF_CREATE_SENSORS]
+                                            "results" in mapquest_decoded
+                                            and "locations"
+                                            in mapquest_decoded["results"][0]
                                         ):
-                                            target.make_template_sensor(
-                                                "MapQuest",
-                                                [
-                                                    {
-                                                        ATTR_COMPASS_BEARING: compass_bearing
-                                                    },
-                                                    ATTR_LATITUDE,
-                                                    ATTR_LONGITUDE,
-                                                    ATTR_SOURCE_TYPE,
-                                                    ATTR_GPS_ACCURACY,
-                                                    "icon",
-                                                    {"locality": locality},
-                                                    {
-                                                        "location_time": new_location_time.strftime(
-                                                            "%Y-%m-%d %H:%M:%S"
-                                                        )
-                                                    },
-                                                    {
-                                                        ATTR_ATTRIBUTION: mapquest_attribution
-                                                    },
-                                                ],
+                                            mapquest_location = mapquest_decoded["results"][
+                                                0
+                                            ]["locations"][0]
+
+                                            formatted_address = ""
+                                            if "street" in mapquest_location:
+                                                formatted_address += (
+                                                    mapquest_location["street"] + ", "
+                                                )
+                                            if "adminArea5" in mapquest_location:  # city
+                                                locality = mapquest_location["adminArea5"]
+                                                formatted_address += locality + ", "
+                                            elif (
+                                                "adminArea4" in mapquest_location
+                                                and "adminArea4Type" in mapquest_location
+                                            ):  # county
+                                                locality = (
+                                                    mapquest_location["adminArea4"]
+                                                    + " "
+                                                    + mapquest_location["adminArea4Type"]
+                                                )
+                                                formatted_address += locality + ", "
+                                            if "adminArea3" in mapquest_location:  # state
+                                                formatted_address += (
+                                                    mapquest_location["adminArea3"] + " "
+                                                )
+                                            if "postalCode" in mapquest_location:  # zip
+                                                formatted_address += (
+                                                    mapquest_location["postalCode"] + " "
+                                                )
+                                            if (
+                                                "adminArea1" in mapquest_location
+                                                and mapquest_location["adminArea1"] != "US"
+                                            ):  # country
+                                                formatted_address += mapquest_location[
+                                                    "adminArea1"
+                                                ]
+
+                                            _LOGGER.debug(
+                                                "("
+                                                + entity_id
+                                                + ") mapquest formatted_address = "
+                                                + formatted_address
                                             )
+                                            target.attributes[
+                                                "MapQuest"
+                                            ] = formatted_address
+
+                                            _LOGGER.debug(
+                                                "("
+                                                + entity_id
+                                                + ") mapquest locality = "
+                                                + locality
+                                            )
+
+                                            mapquest_attribution = (
+                                                '"'
+                                                + mapquest_decoded["info"]["copyright"][
+                                                    "text"
+                                                ]
+                                                + '"'
+                                            )
+                                            attribution += mapquest_attribution + "; "
+
+                                            if (
+                                                ATTR_GEOCODED
+                                                in pli.configuration[CONF_CREATE_SENSORS]
+                                            ):
+                                                target.make_template_sensor(
+                                                    "MapQuest",
+                                                    [
+                                                        {
+                                                            ATTR_COMPASS_BEARING: compass_bearing
+                                                        },
+                                                        ATTR_LATITUDE,
+                                                        ATTR_LONGITUDE,
+                                                        ATTR_SOURCE_TYPE,
+                                                        ATTR_GPS_ACCURACY,
+                                                        "icon",
+                                                        {"locality": locality},
+                                                        {
+                                                            "location_time": new_location_time.strftime(
+                                                                "%Y-%m-%d %H:%M:%S"
+                                                            )
+                                                        },
+                                                        {
+                                                            ATTR_ATTRIBUTION: mapquest_attribution
+                                                        },
+                                                    ],
+                                                )
 
                             if template != "NONE":
                                 target.attributes["friendly_name"] = template.replace(
