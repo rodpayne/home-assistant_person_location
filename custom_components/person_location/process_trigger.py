@@ -503,8 +503,11 @@ def setup_process_trigger(pli):
                         friendly_name_location == "Away"
                     ):  # "<identity> is in <locality>"; add new locality in geocoding
                         template = f"{friendly_name_identity} is in <locality>"
-                        friendly_name = template.replace(
-                            "<locality>", previous_locality
+                        if previous_locality == "?":
+                            friendly_name = f"{friendly_name_identity} is {friendly_name_location}"
+                        else:
+                            friendly_name = template.replace(
+                                "<locality>", previous_locality
                         )
                     else:  # "<identity> is at <name>"; don't add locality
                         friendly_name = (
