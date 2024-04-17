@@ -400,7 +400,9 @@ def setup_reverse_geocode(pli):
                                 distance_from_home / METERS_PER_MILE, 1
                             )
 
-                            if speed_during_interval <= 0.5:
+                            if distance_from_home >= 400:
+                                direction = "far away"
+                            elif speed_during_interval <= 0.5:
                                 direction = "stationary"
                             elif old_distance_from_home > distance_from_home:
                                 direction = "toward home"
