@@ -5,9 +5,9 @@ import string
 from datetime import datetime, timedelta, timezone
 from functools import partial
 
+from homeassistant.components.device_tracker import SourceType
 from homeassistant.components.device_tracker.const import (
     ATTR_SOURCE_TYPE,
-    SOURCE_TYPE_GPS,
 )
 from homeassistant.components.mobile_app.const import (
     ATTR_VERTICAL_ACCURACY,
@@ -23,7 +23,6 @@ from homeassistant.const import (
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
 )
-from homeassistant.exceptions import ServiceNotFound
 from homeassistant.helpers.event import (
     track_point_in_time,
 )
@@ -304,7 +303,7 @@ def setup_process_trigger(pli):
                             trigger.entity_id,
                             target.entity_id,
                         )
-                    elif triggerSourceType == SOURCE_TYPE_GPS:  # gps device?
+                    elif triggerSourceType == SourceType.GPS:  # gps device?
                         if triggerTo != triggerFrom:  # did it change zones?
                             saveThisUpdate = True  # gps changing zones is assumed to be new, correct info
                             _LOGGER.debug(
