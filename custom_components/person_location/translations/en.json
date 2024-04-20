@@ -2,7 +2,7 @@
     "config": {
         "step": {
             "user": {
-                "title": "(1 of 3) Person Location Geocode Configuration",
+                "title": "(1 of 3) Person Location Geocode",
                 "description": "Reverse geocoding can be done using one (or more) of three services.  If you need help with the configuration or obtaining keys, have a look at More Details [**here**](https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#configuration-parameters).",
                 "data": {
                     "language": "Google Language",
@@ -13,7 +13,7 @@
                 }
             },
             "sensors": {
-                "title": "(2 of 3) Person Location Sensors Configuration",
+                "title": "(2 of 3) Person Location Sensors",
                 "description": "Individual sensors can be created so that template sensors do not need to be configured. Choose from this list: altitude, bread_crumbs, direction, driving_miles, driving_minutes, geocoded, latitude, longitude, meters_from_home, miles_from_home.  If you need help with the configuration, have a look [**here**](https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#configuration-parameters).",
                 "data": {
                     "create_sensors": "Sensors to be created",
@@ -21,7 +21,7 @@
                 }
             },
             "triggers": {
-                "title": "(3 of 3) Person Location Triggers Configuration",
+                "title": "(3 of 3) Person Location Triggers",
                 "description": "You can follow updates of all Person entities rather than configuring individual Triggers. The individual Triggers may be specified by clicking CONFIGURE for the integration. If you need help with the configuration, have a look [**here**](https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#configuration-parameters).",
                 "data": {
                     "follow_person_integration": "Follow Person Integration"

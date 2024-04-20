@@ -140,11 +140,11 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 # return self.async_create_entry(title="", data={})
                 # return self.async_create_entry(title="", data=None)
                 return self.async_abort(reason="normal exit")
-            else:
-                self._errors["base"] = "nothing_was_changed"
-                return await self.async_step_user()
-        else:
-            return self.async_create_entry(title=location_name, data=self._user_input)
+            self._errors["base"] = "nothing_was_changed"
+            return await self.async_step_user()
+        return self.async_create_entry(
+            title=location_name,
+            data=self._user_input)
 
     async def _async_show_config_geocode_form(
         self, user_input
@@ -387,6 +387,11 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
         self._errors[CONF_OSM_API_KEY] = "invalid_email"
         return False
+
+    # ------------------------------------------------------------------
+
+    async def async_step_reconfigure(self, user_input=None):
+        return await self.async_step_user(user_input)
 
     # ------------------------------------------------------------------
 
