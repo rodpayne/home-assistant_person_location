@@ -384,9 +384,8 @@ def setup_process_trigger(pli):
                     # Carry over selected attributes from trigger to target:
 
                     if ATTR_SOURCE_TYPE in trigger.attributes:
-                        target.attributes[ATTR_SOURCE_TYPE] = trigger.attributes[
-                            ATTR_SOURCE_TYPE
-                        ]
+                        target.attributes[ATTR_SOURCE_TYPE] \
+                            = trigger.attributes[ATTR_SOURCE_TYPE]
                     else:
                         if ATTR_SOURCE_TYPE in target.attributes:
                             target.attributes.pop(ATTR_SOURCE_TYPE)
@@ -395,12 +394,10 @@ def setup_process_trigger(pli):
                         ATTR_LATITUDE in trigger.attributes
                         and ATTR_LONGITUDE in trigger.attributes
                     ):
-                        target.attributes[ATTR_LATITUDE] = trigger.attributes[
-                            ATTR_LATITUDE
-                        ]
-                        target.attributes[ATTR_LONGITUDE] = trigger.attributes[
-                            ATTR_LONGITUDE
-                        ]
+                        target.attributes[ATTR_LATITUDE] \
+                            = trigger.attributes[ATTR_LATITUDE]
+                        target.attributes[ATTR_LONGITUDE] \
+                            = trigger.attributes[ATTR_LONGITUDE]
                     else:
                         if ATTR_LATITUDE in target.attributes:
                             target.attributes.pop(ATTR_LATITUDE)
@@ -408,9 +405,8 @@ def setup_process_trigger(pli):
                             target.attributes.pop(ATTR_LONGITUDE)
 
                     if ATTR_GPS_ACCURACY in trigger.attributes:
-                        target.attributes[ATTR_GPS_ACCURACY] = trigger.attributes[
-                            ATTR_GPS_ACCURACY
-                        ]
+                        target.attributes[ATTR_GPS_ACCURACY] \
+                            = trigger.attributes[ATTR_GPS_ACCURACY]
                     else:
                         if ATTR_GPS_ACCURACY in target.attributes:
                             target.attributes.pop(ATTR_GPS_ACCURACY)
@@ -424,17 +420,15 @@ def setup_process_trigger(pli):
                             target.attributes.pop(ATTR_ALTITUDE)
 
                     if ATTR_VERTICAL_ACCURACY in trigger.attributes:
-                        target.attributes[ATTR_VERTICAL_ACCURACY] = trigger.attributes[
-                            ATTR_VERTICAL_ACCURACY
-                        ]
+                        target.attributes[ATTR_VERTICAL_ACCURACY] \
+                            = trigger.attributes[ATTR_VERTICAL_ACCURACY]
                     else:
                         if ATTR_VERTICAL_ACCURACY in target.attributes:
                             target.attributes.pop(ATTR_VERTICAL_ACCURACY)
 
                     if ATTR_ENTITY_PICTURE in trigger.attributes:
-                        target.attributes[ATTR_ENTITY_PICTURE] = trigger.attributes[
-                            ATTR_ENTITY_PICTURE
-                        ]
+                        target.attributes[ATTR_ENTITY_PICTURE] \
+                            = trigger.attributes[ATTR_ENTITY_PICTURE]
                     else:
                         if ATTR_ENTITY_PICTURE in target.attributes:
                             target.attributes.pop(ATTR_ENTITY_PICTURE)
@@ -444,18 +438,17 @@ def setup_process_trigger(pli):
                     target.attributes["person_name"] = string.capwords(
                         trigger.personName
                     )
-                    target.attributes["location_time"] = new_location_time.strftime(
-                        "%Y-%m-%d %H:%M:%S.%f"
-                    )
+                    target.attributes["location_time"] \
+                        = new_location_time.strftime("%Y-%m-%d %H:%M:%S.%f")
 
                     # Determine the zone and the icon to be used:
 
-                    if trigger.state.lower() in ["away", STATE_ON, STATE_NOT_HOME]:
-                        friendly_name_location = "Away"
-                    elif trigger.state == "Home":
-                        friendly_name_location = "Home"
+                    if trigger.state.lower() in ["away",
+                                                 STATE_ON,
+                                                 STATE_NOT_HOME]:
+                        friendly_name_location = "is Away"
                     else:
-                        friendly_name_location = trigger.state
+                        friendly_name_location = f"is at {trigger.state}"
 
                     if "zone" in trigger.attributes:
                         reportedZone = trigger.attributes["zone"]
@@ -466,17 +459,16 @@ def setup_process_trigger(pli):
                     zoneEntityID = "zone." + reportedZone
                     zoneStateObject = pli.hass.states.get(zoneEntityID)
                     icon = "mdi:help-circle"
-                    if zoneStateObject is None or reportedZone.lower().endswith(
-                        "stationary"
-                    ):
+                    if (zoneStateObject is None
+                            or reportedZone.lower().endswith("stationary")):
                         # Eliminate stray zone names:
-                        friendly_name_location = "Away"
+                        friendly_name_location = "is Away"
                     else:
-                        zoneAttributesObject = zoneStateObject.attributes.copy()
+                        zoneAttributesObject \
+                            = zoneStateObject.attributes.copy()
                         if "friendly_name" in zoneAttributesObject:
-                            friendly_name_location = zoneAttributesObject[
-                                "friendly_name"
-                            ]
+                            friendly_name_location = "is at " \
+                                + zoneAttributesObject["friendly_name"]
                         if "icon" in zoneAttributesObject:
                             icon = zoneAttributesObject["icon"]
 
@@ -491,7 +483,7 @@ def setup_process_trigger(pli):
                         friendly_name_location,
                     )
 
-                    # Format new friendly_name and the template to be updated by geocoding:
+                    # Format friendly_name and template to be updated by geocoding:
 
                     previous_locality = target.this_entity_info["locality"]
                     if string.capwords(trigger.personName) == trigger.friendlyName:
@@ -499,18 +491,18 @@ def setup_process_trigger(pli):
                     else:
                         friendly_name_identity = f"{string.capwords(trigger.personName)} ({trigger.friendlyName})"
                     if (
-                        friendly_name_location == "Away"
+                        friendly_name_location == "is Away"
                     ):  # "<identity> is in <locality>"; add new locality in geocoding
                         template = f"{friendly_name_identity} is in <locality>"
                         if previous_locality == "?":
-                            friendly_name = f"{friendly_name_identity} is {friendly_name_location}"
+                            friendly_name = f"{friendly_name_identity} {friendly_name_location}"
                         else:
                             friendly_name = template.replace(
                                 "<locality>", previous_locality
                         )
                     else:  # "<identity> is at <name>"; don't add locality
                         friendly_name = (
-                            f"{friendly_name_identity} is at {friendly_name_location}"
+                            f"{friendly_name_identity} {friendly_name_location}"
                         )
                         template = friendly_name
 
@@ -535,13 +527,17 @@ def setup_process_trigger(pli):
                         if (
                             oldTargetState in ["just left", "none"]
                             or ha_just_started
-                            or (pli.configuration[CONF_MINUTES_JUST_ARRIVED] == 0)
+                            or (pli.configuration[
+                                CONF_MINUTES_JUST_ARRIVED] == 0)
                         ):
                             newTargetState = "Home"
 
-                            target.attributes[ATTR_BREAD_CRUMBS] = newTargetState
-                            target.attributes[ATTR_COMPASS_BEARING] = 0
-                            target.attributes[ATTR_DIRECTION] = "home"
+                            target.attributes[
+                                ATTR_BREAD_CRUMBS] = newTargetState
+                            target.attributes[
+                                ATTR_COMPASS_BEARING] = 0
+                            target.attributes[
+                                ATTR_DIRECTION] = "home"
 
                             call_rest_command_service(
                                 trigger.personName, newTargetState
@@ -556,7 +552,8 @@ def setup_process_trigger(pli):
                                 target.entity_id,
                                 newTargetState,
                                 "Home",
-                                pli.configuration[CONF_MINUTES_JUST_ARRIVED],
+                                pli.configuration[
+                                    CONF_MINUTES_JUST_ARRIVED],
                             )
                             call_rest_command_service(
                                 trigger.personName, newTargetState
@@ -565,15 +562,18 @@ def setup_process_trigger(pli):
                         if oldTargetState != "away" and (
                             oldTargetState == "none"
                             or ha_just_started
-                            or (pli.configuration[CONF_MINUTES_JUST_LEFT] == 0)
+                            or (pli.configuration[
+                                CONF_MINUTES_JUST_LEFT] == 0)
                         ):
                             newTargetState = "Away"
-                            if pli.configuration[CONF_HOURS_EXTENDED_AWAY] != 0:
+                            if pli.configuration[
+                                    CONF_HOURS_EXTENDED_AWAY] != 0:
                                 change_state_later(
                                     target.entity_id,
                                     "Away",
                                     "Extended Away",
-                                    (pli.configuration[CONF_HOURS_EXTENDED_AWAY] * 60),
+                                    (pli.configuration[
+                                        CONF_HOURS_EXTENDED_AWAY] * 60),
                                 )
                             call_rest_command_service(
                                 trigger.personName, newTargetState
@@ -605,14 +605,16 @@ def setup_process_trigger(pli):
                     target.set_state()
 
                     # Call service to "reverse geocode" the location.
-                    # For devices at Home, this will only be done initially or on arrival.
+                    # For devices at Home, this will only be done during
+                    # startup or on arrival.
 
-                    if (newTargetState in ["Home", "Just Arrived"]) and (
-                        oldTargetState in ["away", "extended away", "just left"]
-                    ):
-                        force_update = True
-                    else:
-                        force_update = False
+                    force_update = (newTargetState in ["Home",
+                                                       "Just Arrived"]
+                                    ) and (
+                        oldTargetState in ["away",
+                                           "extended away",
+                                           "just left"]
+                        )
                     if (
                         newTargetState != "Home"
                         or pli.attributes["startup"]
@@ -636,5 +638,9 @@ def setup_process_trigger(pli):
             trigger.entity_id,
         )
 
-    pli.hass.services.register(DOMAIN, "process_trigger", handle_process_trigger)
+    pli.hass.services.register(
+        DOMAIN,
+        "process_trigger",
+        handle_process_trigger
+        )
     return True
