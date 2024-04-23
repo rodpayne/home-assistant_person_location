@@ -248,13 +248,13 @@ Assuming you have already [installed](https://hacs.xyz/docs/installation/prerequ
 
 3. Restart Home Assistant.
 
-4. Configure in Home Assistant `Configuration > Integrations` or add configuration in `<config>/configuration.yaml`.
+4. Configure in Home Assistant `Settings > Devices & services` or add configuration in `<config>/configuration.yaml`.
 
 5. Restart Home Assistant if `<config>/configuration.yaml` was updated.
 
 ### **Configuration Parameters**
 
-The configuration can be updated in either the `Configuration > Integrations` GUI, or by adding parameters to `configutation.yaml`, or both.
+The configuration can be updated in either the `Settings > Devices & services` GUI, or by adding parameters to `configutation.yaml`, or both.
 
 | GUI Parameter | YAML Parameter | Optional | Description | Default |
 | :------------ | :------------- | :------: | :---------- | :------ |
@@ -421,14 +421,13 @@ camera:
       {%- set pri_latitude = state_attr(pri_entity, 'latitude') -%}
       {%- set zoom = 16 -%}
       {%- if (pri_longitude == None) or (pri_latitude == None) -%}
-        None
-      {%- else -%}
-        https://maps.googleapis.com/maps/api/staticmap?&zoom={{zoom}}&size=400x400&maptype=roadmap&markers=color:blue%7Csize:mid%7Clabel:{{pri_pin}}%7C{{pri_latitude}},{{pri_longitude}}&key={{google_api_key}}
+        {%- set pri_longitude = state_attr('zone.home', 'longitude') -%}
+        {%- set pri_latitude = state_attr('zone.home', 'latitude') -%}
       {%- endif -%}
+      https://maps.googleapis.com/maps/api/staticmap?&zoom={{zoom}}&size=400x400&maptype=roadmap&markers=color:blue%7Csize:mid%7Clabel:{{pri_pin}}%7C{{pri_latitude}},{{pri_longitude}}&key={{google_api_key}}
     state: >-
       {%- set pri_entity = 'sensor.rod_location' -%}
       {{ states(pri_entity) }}
-#      {{ state_attr(pri_entity, 'Google_Maps') }}
 ```
 ```yaml
 # Example ui-lovelace.yaml
@@ -450,7 +449,7 @@ See https://docs.mapbox.com/api/maps/static-images/ for help.
 <details>
   <summary>Click for Configuration Details</summary>
 
-This one zooms the map to show the location of everyone.
+This one zooms the map to show the location of everyone. This example will show the state as either `stationary` or `motion_detected`
 
 ```yaml
 # Example configuration.yaml entry
@@ -459,16 +458,24 @@ camera:
   - name: combined_location_mapbox
     platform: person_location
     still_image_url: >-
-      {%- set sec_entity = 'sensor.rod_location' -%}
-      {%- set sec_pin = 'r' -%}
-      {%- set sec_longitude = state_attr(sec_entity, 'longitude') |float -%}
-      {%- set sec_latitude = state_attr(sec_entity, 'latitude') |float -%}
-      {%- set pri_entity = 'sensor.pam_location' -%}
-      {%- set pri_pin = 'p' -%}
-      {%- set pri_longitude = state_attr(pri_entity, 'longitude') |float -%}
-      {%- set pri_latitude = state_attr(pri_entity, 'latitude') |float -%}
       {%- set home_longitude = state_attr('zone.home', 'longitude') -%}
       {%- set home_latitude = state_attr('zone.home', 'latitude') -%}
+      {%- set sec_entity = 'sensor.rod_location' -%}
+      {%- set sec_pin = 'r' -%}
+      {%- set sec_longitude = state_attr(sec_entity, 'longitude') |float(0) -%}
+      {%- set sec_latitude = state_attr(sec_entity, 'latitude') |float(0) -%}
+      {%- if (sec_longitude == 0.0) or (sec_latitude == 0.0) -%}
+        {%- set sec_longitude = home_longitude -%}
+        {%- set sec_latitude = home_latitude -%}
+      {%- endif -%}
+      {%- set pri_entity = 'sensor.pam_location' -%}
+      {%- set pri_pin = 'p' -%}
+      {%- set pri_longitude = state_attr(pri_entity, 'longitude') |float(0) -%}
+      {%- set pri_latitude = home_latitude |float(0) -%}
+      {%- if (pri_longitude == 0.0) or (pri_latitude == 0.0) -%}
+        {%- set pri_longitude = home_longitude -%}
+        {%- set pri_latitude = state_attr('zone.home', 'latitude') -%}
+      {%- endif -%}
       {%- set min_longitude = [pri_longitude,sec_longitude,home_longitude]|min -%}
       {%- set max_longitude = [pri_longitude,sec_longitude,home_longitude]|max -%}
       {%- set min_latitude = [pri_latitude,sec_latitude,home_latitude]|min -%}
@@ -483,6 +490,16 @@ camera:
       {%- set max_latitude = max_latitude + 0.001 -%}
       {%- endif -%}
       https://api.mapbox.com/styles/v1/{{style}}/static/pin-s-{{sec_pin}}+2ecc71({{sec_longitude}},{{sec_latitude}}),pin-s-{{pri_pin}}+3498db({{pri_longitude}},{{pri_latitude}})/[{{min_longitude}},{{min_latitude}},{{max_longitude}},{{max_latitude}}]/400x400?logo=false&padding=60,21,14,21&access_token={{mapbox_api_key}}
+    state: >-
+      {%- set pri_entity_direction = state_attr('sensor.pam_location', 'direction') -%}
+      {%- set sec_entity_direction = state_attr('sensor.rod_location', 'direction') -%}
+      {%- set combined_state = 'stationary' -%}
+      {%- if pri_entity_direction is not none and pri_entity_direction not in ['stationary', 'unknown', 'home'] -%}
+        {%- set combined_state = 'motion_detected' -%}
+      {%- elif sec_entity_direction is not none and sec_entity_direction not in ['stationary', 'unknown', 'home'] -%}
+        {%- set combined_state = 'motion_detected' -%}
+      {%- endif -%}
+      {{ combined_state }}
 ```
 ```yaml
 # Example ui-lovelace.yaml
