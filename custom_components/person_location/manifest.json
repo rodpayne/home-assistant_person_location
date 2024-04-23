@@ -16,9 +16,9 @@
     "zone"
   ],
   "documentation": "https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#table-of-contents",
-  "integration_type": "hub",
+  "integration_type": "service",
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/rodpayne/home-assistant_person_location/issues",
   "requirements": [],
-  "version": "2024.04.17"
+  "version": "2024.04.22"
 }
