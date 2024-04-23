@@ -47,13 +47,19 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Required(CONF_STILL_IMAGE_URL): cv.template,
         vol.Optional(CONF_STATE, default=STATE_IDLE): cv.template,
         vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
-        vol.Optional(CONF_CONTENT_TYPE, default=DEFAULT_CONTENT_TYPE): cv.string,
+        vol.Optional(CONF_CONTENT_TYPE, default=DEFAULT_CONTENT_TYPE):
+            cv.string,
         vol.Optional(CONF_VERIFY_SSL, default=True): cv.boolean,
     }
 )
 
 
-async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
+async def async_setup_platform(
+        hass,
+        config,
+        async_add_entities,
+        discovery_info=None
+        ):
     """Set up a location IP Camera."""
 
     await async_setup_reload_service(hass, DOMAIN, PLATFORMS)
@@ -84,12 +90,14 @@ class PersonLocationCamera(Camera):
         self._last_url = None
         self._last_image = None
 
-        google_api_key = self.hass.data[DOMAIN][DATA_CONFIGURATION][CONF_GOOGLE_API_KEY]
-        mapbox_api_key = self.hass.data[DOMAIN][DATA_CONFIGURATION][CONF_MAPBOX_API_KEY]
+        google_api_key = self.hass.data[DOMAIN][DATA_CONFIGURATION][
+            CONF_GOOGLE_API_KEY]
+        mapbox_api_key = self.hass.data[DOMAIN][DATA_CONFIGURATION][
+            CONF_MAPBOX_API_KEY]
         mapquest_api_key = self.hass.data[DOMAIN][DATA_CONFIGURATION][
-            CONF_MAPQUEST_API_KEY
-        ]
-        osm_api_key = self.hass.data[DOMAIN][DATA_CONFIGURATION][CONF_OSM_API_KEY]
+            CONF_MAPQUEST_API_KEY]
+        osm_api_key = self.hass.data[DOMAIN][DATA_CONFIGURATION][
+            CONF_OSM_API_KEY]
         self._template_variables = {
             "parse_result": False,
             "google_api_key": google_api_key,
@@ -103,7 +111,8 @@ class PersonLocationCamera(Camera):
             if entity not in self._entities:
                 self._entities.append(entity)
         _LOGGER.debug("(%s) entities = %s", self._name, self._entities)
-        # TODO: set up a Track State Change to do update when template entities change?
+        # TODO: set up a Track State Change to do update when
+        #   template entities change?
         # https://developers.home-assistant.io/docs/core/entity/
         # (It currently checks every ten seconds.)
 
@@ -140,7 +149,7 @@ class PersonLocationCamera(Camera):
         try:
             url = self._still_image_url.async_render(**self._template_variables)
         except TemplateError as err:
-            _LOGGER.error("Error parsing template %s: %s", self._still_image_url, err)
+            _LOGGER.error("Error parsing url template %s: %s", self._still_image_url, err)
             return self._last_url, self._last_image
 
         try:
@@ -148,9 +157,10 @@ class PersonLocationCamera(Camera):
                 parse_result=False,
             )
         except TemplateError as err:
-            _LOGGER.error("Error parsing template %s: %s", self._state_template, err)
+            _LOGGER.error("Error parsing state template %s: %s", self._state_template, err)
             new_state = STATE_PROBLEM
         if new_state != self._state:
+            _LOGGER.debug("State template %s returned state: %s", self._name, new_state)
             self._state = new_state
             self.async_schedule_update_ha_state()
 
