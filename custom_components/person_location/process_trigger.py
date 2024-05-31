@@ -456,9 +456,6 @@ def setup_process_trigger(pli):
                             and not reportedZone.lower().endswith("stationary")):
                         zoneAttributesObject \
                             = zoneStateObject.attributes.copy()
-                        if "friendly_name" in zoneAttributesObject:
-                            friendly_name_location = "is at " \
-                                + zoneAttributesObject["friendly_name"]
                         if "icon" in zoneAttributesObject:
                             icon = zoneAttributesObject["icon"]
 
@@ -466,11 +463,10 @@ def setup_process_trigger(pli):
                     target.attributes["zone"] = reportedZone
 
                     _LOGGER.debug(
-                        "(%s) zone = %s; icon = %s; friendly_name_location = %s",
+                        "(%s) zone = %s; icon = %s",
                         trigger.entity_id,
                         reportedZone,
                         target.attributes["icon"],
-                        friendly_name_location,
                     )
 
                     ha_just_started = pli.attributes["startup"]
