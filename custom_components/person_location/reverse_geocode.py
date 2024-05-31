@@ -8,6 +8,9 @@ import time
 import traceback
 from datetime import datetime
 
+from .const import (
+    CONF_FRIENDLY_NAME_TEMPLATE,
+)
 from homeassistant.components.device_tracker.const import ATTR_SOURCE_TYPE
 from homeassistant.const import (
     ATTR_ATTRIBUTION,
@@ -15,13 +18,14 @@ from homeassistant.const import (
     ATTR_LATITUDE,
     ATTR_LONGITUDE,
     CONF_ENTITY_ID,
-    CONF_FRIENDLY_NAME_TEMPLATE,
+    STATE_NOT_HOME,
     STATE_ON,
 )
+from homeassistant.exceptions import TemplateError
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.util.location import distance
-# from requests import get
 import httpx
+from jinja2 import Template
 from pywaze.route_calculator import WazeRouteCalculator,WRCError
 
 from .const import (
@@ -40,6 +44,7 @@ from .const import (
     CONF_REGION,
     DEFAULT_API_KEY_NOT_SET,
     DOMAIN,
+    FAR_AWAY_METERS,
     INTEGRATION_LOCK,
     INTEGRATION_NAME,
     METERS_PER_KM,
@@ -531,7 +536,7 @@ def setup_reverse_geocode(pli):
                                 distance_from_home / METERS_PER_MILE, 1
                             )
 
-                            if distance_from_home >= 400:
+                            if distance_from_home >= FAR_AWAY_METERS:
                                 direction = "far away"
                             elif speed_during_interval <= 0.5:
                                 direction = "stationary"
@@ -886,11 +891,7 @@ def setup_reverse_geocode(pli):
                                                     ],
                                                 )
 
-                            if template != "NONE":
-                                target.attributes["friendly_name"] = template.replace(
-                                    "<locality>", locality
-                                )
-                            target.this_entity_info["locality"] = locality
+                            target.attributes["locality"] = locality
                             target.this_entity_info["geocode_count"] += 1
                             target.this_entity_info["location_latitude"] = new_latitude
                             target.this_entity_info[
@@ -922,6 +923,69 @@ def setup_reverse_geocode(pli):
                                 new_latitude,
                                 new_longitude,
                                 )
+
+                            if template != "NONE":
+
+                                # Determine friendly_name_location component of friendly_name:
+
+                                if target.attributes["reported_state"] in [
+                                                            "Away",
+                                                            STATE_ON,
+                                                            STATE_NOT_HOME,
+                                                            ]:
+                                    friendly_name_location = "is Away"
+                                else:
+                                    friendly_name_location = f"is at {target.attributes["reported_state"]}"
+
+                                reportedZone = target.attributes["zone"]
+                                zoneStateObject = pli.hass.states.get("zone." + reportedZone)
+                                if (zoneStateObject is None
+                                        or reportedZone.lower().endswith("stationary")):
+                                    # Eliminate stray zone names:
+                                    friendly_name_location = "is Away"
+                                else:
+                                    zoneAttributesObject \
+                                        = zoneStateObject.attributes.copy()
+                                    if "friendly_name" in zoneAttributesObject:
+                                        friendly_name_location = "is at " \
+                                            + zoneAttributesObject["friendly_name"]
+                                    
+                                _LOGGER.debug(
+                                    "(%s) friendly_name_location = %s",
+                                    target.entity_id,
+                                    friendly_name_location,
+                                )
+
+                                if (friendly_name_location == "is Away"):
+                                    # "<identity> is in <locality>"; add new locality
+                                    friendly_name_location = f"is in {target.attributes['locality']}"
+
+                                # Format new friendly_name using the supplied template:
+    
+                                if "source" in target.attributes:
+                                    sourceObject = pli.hass.states.get(target.attributes["source"])
+                                    if sourceObject is not None and "source" in sourceObject.attributes:
+                                        # Find the source for a person entity:
+                                        sourceObject = pli.hass.states.get(sourceObject.attributes["source"])
+                                else:
+                                    sourceObject = None
+
+                                friendly_name_variables = {
+                                    "friendly_name_location": friendly_name_location,
+                                    "person_name": target.attributes['person_name'],
+                                    "source": { "attributes": sourceObject.attributes },
+                                    "target": { "attributes": target.attributes },
+                                }
+                                _LOGGER.debug(f"friendly_name_variables = {friendly_name_variables}")
+
+                                try:
+                                    target.attributes["friendly_name"] \
+                                        = Template(pli.configuration[CONF_FRIENDLY_NAME_TEMPLATE]) \
+                                            .render(**friendly_name_variables) \
+                                            .replace('()','') \
+                                            .replace('  ',' ')
+                                except TemplateError as err:
+                                    _LOGGER.error("Error parsing friendly_name_template: %s", err)
 
                         target.set_state()
 

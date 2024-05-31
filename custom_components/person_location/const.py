@@ -7,7 +7,8 @@ from datetime import datetime, timedelta
 import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
 from homeassistant.components.mobile_app.const import ATTR_VERTICAL_ACCURACY
-from homeassistant.components.waze_travel_time.const import REGIONS as WAZE_REGIONS
+from homeassistant.components.waze_travel_time.const \
+    import REGIONS as WAZE_REGIONS
 from homeassistant.const import (
     ATTR_ATTRIBUTION,
     ATTR_FRIENDLY_NAME,
@@ -27,8 +28,12 @@ from homeassistant.util.yaml.objects import (
 DOMAIN = "person_location"
 API_STATE_OBJECT = DOMAIN + "." + DOMAIN + "_integration"
 INTEGRATION_NAME = "Person Location"
-ISSUE_URL = "https://github.com/rodpayne/home-assistant/issues"
-VERSION = "2024.04.22"
+ISSUE_URL = "https://github.com/rodpayne/home-assistant_person_location/issues"
+VERSION = "2024.05.30"
+
+# Constants:
+METERS_PER_KM = 1000
+METERS_PER_MILE = 1609.34
 
 # Fixed parameters:
 MIN_DISTANCE_TRAVELLED_TO_GEOCODE = 5
@@ -36,10 +41,7 @@ THROTTLE_INTERVAL = timedelta(
     seconds=1
 )  # See https://operations.osmfoundation.org/policies/nominatim/ regarding throttling.
 WAZE_MIN_METERS_FROM_HOME = 500
-
-# Constants:
-METERS_PER_KM = 1000
-METERS_PER_MILE = 1609.34
+FAR_AWAY_METERS = 400 * METERS_PER_KM
 
 # Attribute names:
 ATTR_ALTITUDE = "altitude"
@@ -52,9 +54,16 @@ ATTR_GEOCODED = "geocoded"
 ATTR_METERS_FROM_HOME = "meters_from_home"
 ATTR_MILES_FROM_HOME = "miles_from_home"
 
+# Configuration Version:
+CONF_VERSION = 1
+CONF_MINOR_VERSION = 2
+
 # Configuration Parameters:
 CONF_LANGUAGE = "language"
 DEFAULT_LANGUAGE = "en"
+
+CONF_FRIENDLY_NAME_TEMPLATE = "friendly_name_template"
+DEFAULT_FRIENDLY_NAME_TEMPLATE = "{{person_name}} ({{source.attributes.friendly_name}}) {{friendly_name_location}}"
 
 CONF_HOURS_EXTENDED_AWAY = "extended_away"
 DEFAULT_HOURS_EXTENDED_AWAY = 48
@@ -64,6 +73,9 @@ DEFAULT_MINUTES_JUST_ARRIVED = 3
 
 CONF_MINUTES_JUST_LEFT = "just_left"
 DEFAULT_MINUTES_JUST_LEFT = 3
+
+CONF_SHOW_ZONE_WHEN_AWAY = "show_zone_when_away"
+DEFAULT_SHOW_ZONE_WHEN_AWAY = False
 
 CONF_OUTPUT_PLATFORM = "platform"
 DEFAULT_OUTPUT_PLATFORM = "sensor"
@@ -130,15 +142,22 @@ CONFIG_SCHEMA = vol.Schema(
                     cv.ensure_list, [vol.In(VALID_CREATE_SENSORS)]
                 ),
                 vol.Optional(
-                    CONF_HOURS_EXTENDED_AWAY, default=DEFAULT_HOURS_EXTENDED_AWAY
+                    CONF_HOURS_EXTENDED_AWAY,
+                    default=DEFAULT_HOURS_EXTENDED_AWAY
                 ): cv.string,
                 vol.Optional(
-                    CONF_MINUTES_JUST_ARRIVED, default=DEFAULT_MINUTES_JUST_ARRIVED
+                    CONF_MINUTES_JUST_ARRIVED,
+                    default=DEFAULT_MINUTES_JUST_ARRIVED
                 ): cv.string,
                 vol.Optional(
                     CONF_MINUTES_JUST_LEFT, default=DEFAULT_MINUTES_JUST_LEFT
                 ): cv.string,
-                vol.Optional(CONF_LANGUAGE, default=DEFAULT_LANGUAGE): cv.string,
+                vol.Optional(
+                    CONF_SHOW_ZONE_WHEN_AWAY,
+                    default=DEFAULT_SHOW_ZONE_WHEN_AWAY
+                ): cv.boolean,
+                vol.Optional(
+                    CONF_LANGUAGE, default=DEFAULT_LANGUAGE): cv.string,
                 vol.Optional(
                     CONF_OUTPUT_PLATFORM, default=DEFAULT_OUTPUT_PLATFORM
                 ): cv.string,
@@ -155,7 +174,9 @@ CONFIG_SCHEMA = vol.Schema(
                 vol.Optional(
                     CONF_GOOGLE_API_KEY, default=DEFAULT_API_KEY_NOT_SET
                 ): cv.string,
-                vol.Optional(CONF_FOLLOW_PERSON_INTEGRATION, default=False): cv.boolean,
+                vol.Optional(
+                    CONF_FOLLOW_PERSON_INTEGRATION, default=False
+                ): cv.boolean,
                 vol.Optional(CONF_PERSON_NAMES, default=[]): vol.All(
                     cv.ensure_list, [PERSON_SCHEMA]
                 ),
@@ -219,7 +240,8 @@ class PERSON_LOCATION_INTEGRATION:
         self.attributes["waze_error_count"] = 0
         self.attributes[
             ATTR_ATTRIBUTION
-        ] = f"System information for the {INTEGRATION_NAME} integration ({DOMAIN}), version {VERSION}."
+        ] = f"System information for the {INTEGRATION_NAME} integration \
+                ({DOMAIN}), version {VERSION}."
 
         if DOMAIN in self.config:
 
@@ -233,27 +255,42 @@ class PERSON_LOCATION_INTEGRATION:
             self.configuration[CONF_LANGUAGE] = self.config[DOMAIN].get(
                 CONF_LANGUAGE, DEFAULT_LANGUAGE
             )
-            self.configuration[CONF_HOURS_EXTENDED_AWAY] = self.config[DOMAIN].get(
-                CONF_HOURS_EXTENDED_AWAY, DEFAULT_HOURS_EXTENDED_AWAY
-            )
-            self.configuration[CONF_MINUTES_JUST_ARRIVED] = self.config[DOMAIN].get(
-                CONF_MINUTES_JUST_ARRIVED, DEFAULT_MINUTES_JUST_ARRIVED
-            )
-            self.configuration[CONF_MINUTES_JUST_LEFT] = self.config[DOMAIN].get(
-                CONF_MINUTES_JUST_LEFT, DEFAULT_MINUTES_JUST_LEFT
-            )
-            self.configuration[CONF_OUTPUT_PLATFORM] = self.config[DOMAIN].get(
-                CONF_OUTPUT_PLATFORM, DEFAULT_OUTPUT_PLATFORM
-            )
-            self.configuration[CONF_MAPBOX_API_KEY] = self.config[DOMAIN].get(
-                CONF_MAPBOX_API_KEY, DEFAULT_API_KEY_NOT_SET
-            )
-            self.configuration[CONF_MAPQUEST_API_KEY] = self.config[DOMAIN].get(
-                CONF_MAPQUEST_API_KEY, DEFAULT_API_KEY_NOT_SET
-            )
-            self.configuration[CONF_OSM_API_KEY] = self.config[DOMAIN].get(
-                CONF_OSM_API_KEY, DEFAULT_API_KEY_NOT_SET
-            )
+            self.configuration[CONF_FRIENDLY_NAME_TEMPLATE] \
+                = self.config[DOMAIN].get(
+                    CONF_FRIENDLY_NAME_TEMPLATE, DEFAULT_FRIENDLY_NAME_TEMPLATE
+                )
+            self.configuration[CONF_HOURS_EXTENDED_AWAY] \
+                = self.config[DOMAIN].get(
+                    CONF_HOURS_EXTENDED_AWAY, DEFAULT_HOURS_EXTENDED_AWAY
+                )
+            self.configuration[CONF_MINUTES_JUST_ARRIVED] \
+                = self.config[DOMAIN].get(
+                    CONF_MINUTES_JUST_ARRIVED, DEFAULT_MINUTES_JUST_ARRIVED
+                )
+            self.configuration[CONF_MINUTES_JUST_LEFT] \
+                = self.config[DOMAIN].get(
+                    CONF_MINUTES_JUST_LEFT, DEFAULT_MINUTES_JUST_LEFT
+                )
+            self.configuration[CONF_OUTPUT_PLATFORM] \
+                = self.config[DOMAIN].get(
+                    CONF_OUTPUT_PLATFORM, DEFAULT_OUTPUT_PLATFORM
+                )
+            self.configuration[CONF_MAPBOX_API_KEY] \
+                = self.config[DOMAIN].get(
+                    CONF_MAPBOX_API_KEY, DEFAULT_API_KEY_NOT_SET
+                )
+            self.configuration[CONF_MAPQUEST_API_KEY] \
+                = self.config[DOMAIN].get(
+                    CONF_MAPQUEST_API_KEY, DEFAULT_API_KEY_NOT_SET
+                )
+            self.configuration[CONF_OSM_API_KEY] \
+                = self.config[DOMAIN].get(
+                    CONF_OSM_API_KEY, DEFAULT_API_KEY_NOT_SET
+                )
+            self.configuration[CONF_SHOW_ZONE_WHEN_AWAY] \
+                = self.config[DOMAIN].get(
+                    CONF_SHOW_ZONE_WHEN_AWAY, DEFAULT_SHOW_ZONE_WHEN_AWAY
+                )
             # TODO: may need to split these up later (Google vs Waze):
             self.configuration[CONF_REGION] = self.config[DOMAIN].get(
                 CONF_REGION, DEFAULT_REGION
@@ -269,11 +306,13 @@ class PERSON_LOCATION_INTEGRATION:
                     "Configured Waze region (%s) is not valid",
                     self.configuration[CONF_WAZE_REGION],
                 )
-            raw_conf_create_sensors = self.config[DOMAIN].get(CONF_CREATE_SENSORS, [])
+            raw_conf_create_sensors \
+                = self.config[DOMAIN].get(CONF_CREATE_SENSORS, [])
             itemType = type(raw_conf_create_sensors)
-            if (itemType == list) or (itemType == NodeListClass):
-                self.configuration[CONF_CREATE_SENSORS] = sorted(raw_conf_create_sensors)
-            elif (itemType == str) or (itemType == NodeStrClass):
+            if itemType in (list, NodeListClass):
+                self.configuration[CONF_CREATE_SENSORS] \
+                    = sorted(raw_conf_create_sensors)
+            elif itemType in (str, NodeStrClass):
                 self.configuration[CONF_CREATE_SENSORS] = sorted([
                     x.strip() for x in raw_conf_create_sensors.split(",")
                 ])
@@ -297,7 +336,8 @@ class PERSON_LOCATION_INTEGRATION:
             ].get(CONF_FOLLOW_PERSON_INTEGRATION, False)
 
             self.configuration[CONF_DEVICES] = {}
-            for person_name_config in self.config[DOMAIN].get(CONF_PERSON_NAMES, []):
+            for person_name_config \
+                    in self.config[DOMAIN].get(CONF_PERSON_NAMES, []):
                 person_name = person_name_config[CONF_NAME]
                 _LOGGER.debug("person_name_config name = %s", person_name)
                 devices = person_name_config[CONF_DEVICES]
@@ -315,9 +355,12 @@ class PERSON_LOCATION_INTEGRATION:
 
             self.configuration[CONF_GOOGLE_API_KEY] = DEFAULT_API_KEY_NOT_SET
             self.configuration[CONF_LANGUAGE] = DEFAULT_LANGUAGE
-            self.configuration[CONF_HOURS_EXTENDED_AWAY] = DEFAULT_HOURS_EXTENDED_AWAY
-            self.configuration[CONF_MINUTES_JUST_ARRIVED] = DEFAULT_MINUTES_JUST_ARRIVED
-            self.configuration[CONF_MINUTES_JUST_LEFT] = DEFAULT_MINUTES_JUST_LEFT
+            self.configuration[CONF_HOURS_EXTENDED_AWAY] \
+                = DEFAULT_HOURS_EXTENDED_AWAY
+            self.configuration[CONF_MINUTES_JUST_ARRIVED] \
+                = DEFAULT_MINUTES_JUST_ARRIVED
+            self.configuration[CONF_MINUTES_JUST_LEFT] \
+                = DEFAULT_MINUTES_JUST_LEFT
             self.configuration[CONF_OUTPUT_PLATFORM] = DEFAULT_OUTPUT_PLATFORM
             self.configuration[CONF_MAPQUEST_API_KEY] = DEFAULT_API_KEY_NOT_SET
             self.configuration[CONF_OSM_API_KEY] = DEFAULT_API_KEY_NOT_SET
@@ -343,7 +386,7 @@ class PERSON_LOCATION_INTEGRATION:
         else:
             self.hass.data[DOMAIN] = integration_state_data
 
-        #        self.hass.states.set(self.entity_id, self.state, self.attributes)
+        # self.hass.states.set(self.entity_id, self.state, self.attributes)
         simple_attributes = {
             "icon": self.attributes["icon"],
         }
@@ -364,7 +407,8 @@ class PERSON_LOCATION_ENTITY:
     def __init__(self, _entity_id, _pli):
         """Initialize the entity instance."""
 
-        _LOGGER.debug("[PERSON_LOCATION_ENTITY] (%s) === __init__ ===", _entity_id)
+        _LOGGER.debug("[PERSON_LOCATION_ENTITY] (%s) === __init__ ===",
+                       _entity_id)
 
         self.entity_id = _entity_id
         self.pli = _pli
@@ -425,16 +469,19 @@ class PERSON_LOCATION_ENTITY:
         elif "account_name" in self.attributes:
             self.personName = self.attributes["account_name"]
         elif "owner_fullname" in self.attributes:
-            self.personName = self.attributes["owner_fullname"].split()[0].lower()
+            self.personName \
+                = self.attributes["owner_fullname"].split()[0].lower()
         else:
-            self.personName = self.entity_id.split(".")[1].split("_")[0].lower()
+            self.personName \
+                = self.entity_id.split(".")[1].split("_")[0].lower()
             if self.firstTime is False:
                 _LOGGER.debug(
-                    'The account_name (or person_name) attribute is missing in %s, trying "%s"',
+                    'The account_name (or person_name) attribute \
+                        is missing in %s, trying "%s"',
                     self.entity_id,
                     self.personName,
                 )
-        # It is tempting to make the output a device_tracker instead of a sensor,
+        # It is tempting to make the output a device_tracker instead of sensor,
         # so that it can be input into the Person built-in integration,
         # but if you do, be very careful not to trigger a loop.
 
@@ -464,9 +511,8 @@ class PERSON_LOCATION_ENTITY:
         for supplementalAttribute in supplementalAttributeArray:
             if type(supplementalAttribute) is str:
                 if supplementalAttribute in self.attributes:
-                    templateAttributes[supplementalAttribute] = self.attributes[
-                        supplementalAttribute
-                    ]
+                    templateAttributes[supplementalAttribute] \
+                        = self.attributes[supplementalAttribute]
             elif type(supplementalAttribute) is dict:
                 for supplementalAttributeKey in supplementalAttribute:
                     templateAttributes[
@@ -484,7 +530,8 @@ class PERSON_LOCATION_ENTITY:
             templateState,
             templateAttributes,
         )
-        _LOGGER.debug("[make_template_sensor] === Return === %s", attributeName)
+        _LOGGER.debug("[make_template_sensor] === Return === %s", 
+                      attributeName)
 
     def set_state(self):
         """Save changed target sensor information as a unit."""
@@ -497,7 +544,8 @@ class PERSON_LOCATION_ENTITY:
             self.this_entity_info,
         )
         self.hass.states.set(self.entity_id, self.state, self.attributes)
-        self.hass.data[DOMAIN][DATA_ENTITY_INFO][self.entity_id] = self.this_entity_info
+        self.hass.data[DOMAIN][DATA_ENTITY_INFO][self.entity_id] \
+            = self.this_entity_info
 
     def make_template_sensors(self):
         """Make the additional sensors if they are requested."""
@@ -558,7 +606,8 @@ class PERSON_LOCATION_ENTITY:
                 pass
 
             elif attributeName == ATTR_LATITUDE:
-                self.make_template_sensor(ATTR_LATITUDE, [ATTR_GPS_ACCURACY, ATTR_ICON])
+                self.make_template_sensor(
+                    ATTR_LATITUDE, [ATTR_GPS_ACCURACY, ATTR_ICON])
 
             elif attributeName == ATTR_LONGITUDE:
                 self.make_template_sensor(

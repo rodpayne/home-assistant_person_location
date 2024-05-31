@@ -14,7 +14,7 @@
             },
             "sensors": {
                 "title": "(2 of 3) Person Location Sensors",
-                "description": "Individual sensors can be created so that template sensors do not need to be configured. Choose from this list: altitude, bread_crumbs, direction, driving_miles, driving_minutes, geocoded, latitude, longitude, meters_from_home, miles_from_home.  If you need help with the configuration, have a look [**here**](https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#configuration-parameters).",
+                "description": "We can create individual sensors so that template sensors do not need to be manually configured. Choose from this list: altitude, bread_crumbs, direction, driving_miles, driving_minutes, geocoded, latitude, longitude, meters_from_home, miles_from_home.  If you need help with the configuration, have a look [**here**](https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#configuration-parameters).",
                 "data": {
                     "create_sensors": "Sensors to be created",
                     "platform": "Platform for output sensor (experimental)"
@@ -48,6 +48,8 @@
                     "extended_away": "Hours Extended Away",
                     "just_arrived": "Minutes Just Arrived",
                     "just_left": "Minutes Just Left",
+                    "friendly_name_template": "Friendly Name Template",
+                    "show_zone_when_away": "Show zone when away?",
                     "create_sensors": "Sensors to be created"
                 }
             },

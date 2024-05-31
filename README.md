@@ -215,11 +215,13 @@ Input:
   - Parameters for the call:
       entity_id
       friendly_name_template (optional)
+      force_update (optional)
   - Attributes of entity_id:
       - attributes supplied by another process (to provide current location):
           latitude
           longitude
           location_time (optional)
+          source (optional)
 ```
 </details>
 
@@ -258,20 +260,22 @@ The configuration can be updated in either the `Settings > Devices & services` G
 
 | GUI Parameter | YAML Parameter | Optional | Description | Default |
 | :------------ | :------------- | :------: | :---------- | :------ |
+| Follow Person Integration? | `follow_person_integration` | Yes | Follow updates of all Person entities rather than looking at individual device trackers. | False
+| Friendly Name Template<sup>*</sup> | `friendly_name_template` | Yes | A template that specifies how the `friendly_name` of the sensor is formatted. See the note concerning template variables in More Details below. | The original format: `{{person_name}} ({{source.attributes.friendly_name}}) {{friendly_name_location}}` |
 | Google API Key | `google_api_key` | Yes | Google API Key obtained from the [Google Maps Platform](https://cloud.google.com/maps-platform#get-started). | Do not do the Google reverse geocoding.
 | Google Language | `language`       | Yes | Language parameter for the Google API. | `en`
 | Google Region | `region`         | Yes | Region parameter for the Google API. | `US`
-| Hours Extended Away`*` | `extended_away`  | Yes | Number of **hours** before changing `Away` into `Extended Away`. Set to `0` to not use `Extended Away` state. | `48`
+| Hours Extended Away<sup>*</sup> | `extended_away`  | Yes | Number of **hours** before changing `Away` into `Extended Away`. Set to `0` to not use `Extended Away` state. | `48`
 | MapQuest API Key | `mapquest_api_key`    | Yes | MapQuest API Key obtained from the [MapQuest Developer site](https://developer.mapquest.com/user/me/apps). | Do not do the MapQuest reverse geocoding.
-| Minutes Just Arrived`*` | `just_arrived`   | Yes | Number of **minutes** before changing `Just Arrived` into `Home`. Set to `0` to not use `Just Arrived` state. | `3`
-| Minutes Just Left`*` | `just_left`      | Yes | Number of **minutes** before changing `Just Left` into `Away`. Set to `0` to not use `Just Left` state. | `3`
+| Minutes Just Arrived<sup>*</sup> | `just_arrived`   | Yes | Number of **minutes** before changing `Just Arrived` into `Home`. Set to `0` to not use `Just Arrived` state. | `3`
+| Minutes Just Left<sup>*</sup> | `just_left`      | Yes | Number of **minutes** before changing `Just Left` into `Away`. Set to `0` to not use `Just Left` state. | `3`
 | OSM API Key (your eMail Address) | `osm_api_key`    | Yes | Contact email address to be used by the Open Street Map API. | Do not do the OSM reverse geocoding.
 | Platform for output sensor | `platform`       | Yes | Platform used for the person location "sensor". (Experimental.) | `sensor` as in `sensor.<name>_location`.
 | Sensors to be created | `create_sensors`  | Yes | List of attributes for which individual sensors are to be created so that template sensors do not need to be configured.  Choose from this list: `altitude`, `bread_crumbs`, `direction`, `driving_miles`, `driving_minutes`, `geocoded`, `latitude`, `longitude`, `meters_from_home`, `miles_from_home`. | None
-| Follow Person Integration | `follow_person_integration` | Yes | Follow updates of all Person entities rather than looking at individual device trackers. | False
-| Person Location Triggers`*` | `person_names` | Yes | List of person names and devices to be followed.  (See example in More Details.) | None
+| Show zone when away?<sup>*</sup> | `show_zone_when_away` | Yes | Show the state as the zone name when it is available, rather than just `Away`.| False |
+| Person Location Triggers<sup>*</sup> | `person_names` | Yes | List of person names and devices to be followed.  (See example in More Details.) | None
 
-`*` Located in the options flow (activated by clicking `CONFIGURE`).
+`*` Located in the options flow (activated by clicking `CONFIGURE`). All others are located in the configuration flow (activated when adding the integration or by clicking `... Reconfigure`)
 <details>
   <summary>Click for More Details</summary>
 
@@ -320,6 +324,21 @@ To activate the custom integration with the MapQuest Reverse Geocode feature, ad
 person_location:
     mapquest_api_key: !secret mapquest_api_key
 ```
+
+#### **Friendly Name Template Variables**
+| Example Variable | Description | Sample |
+| :--------------- | :---------- | ------ |
+| `friendly_name_location` | The zone or locality that was determined. | "is Away", "is at Walmart", "is in Peoria". |
+| `person_name` | The person's name from the configuration. | "Rod" |
+| `source.attributes.friendly_name` | The `friendly_name` of the device tracker that triggered the update. | "Rod's iPhone App" |
+| `target.attributes.reported_state` | The `reported_state` recorded in the output sensor. (The other attributes of the output sensor can be similarly referenced,)
+
+| Example Template | Sample Result |
+| :--------------- | :------------ |
+| `{{ person_name }} ({{ source.attributes.friendly_name }}) {{ friendly_name_location }}` | "Rod (Rod's iPhone App) is in Peoria" |
+| `{{ person_name }}` | "Rod" |
+| `{{ person_name }} {{ friendly_name_location }}` | "Rod is in Peoria" |
+| `{{ person_name }}'s Location` | "Rod's Location" |
 
 #### **A note about iCloud3**
 If you use the iCloud3 integration, the following setting helps with showing the zone and icon when you have an apostrophe in the zone's friendly name.

@@ -11,6 +11,7 @@ import logging
 from datetime import datetime, timedelta
 from functools import partial
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_OFF, STATE_ON
 from homeassistant.helpers.event import track_point_in_time, track_state_change
 
@@ -18,11 +19,17 @@ from .const import (
     API_STATE_OBJECT,
     CONF_DEVICES,
     CONF_FOLLOW_PERSON_INTEGRATION,
+    CONF_FRIENDLY_NAME_TEMPLATE,
+    CONF_MINOR_VERSION as new_configuration_minor_version,
+    CONF_SHOW_ZONE_WHEN_AWAY,
+    CONF_VERSION as new_configuration_version,
     DATA_ASYNC_SETUP_ENTRY,
     DATA_CONFIG_ENTRY,
     DATA_CONFIGURATION,
     DATA_UNDO_STATE_LISTENER,
     DATA_UNDO_UPDATE_LISTENER,
+    DEFAULT_FRIENDLY_NAME_TEMPLATE,
+    DEFAULT_SHOW_ZONE_WHEN_AWAY,
     DOMAIN,
     INTEGRATION_LOCK,
     PERSON_LOCATION_INTEGRATION,
@@ -223,5 +230,48 @@ async def async_unload_entry(hass, entry):
 
     hass.data[DOMAIN].pop(DATA_UNDO_UPDATE_LISTENER)
     hass.data[DOMAIN].pop(DATA_CONFIG_ENTRY)
+
+    return True
+
+# ------------------------------------------------------------------
+
+async def async_migrate_entry(hass, config_entry: ConfigEntry):
+    """Migrate old configuration entry."""
+    _LOGGER.debug("Migrating configuration from version %s.%s", config_entry.version, config_entry.minor_version)
+
+    if config_entry.version > new_configuration_version:
+      _LOGGER.error("Component has been downgraded without restoring configuration from backup")
+      return False
+
+    new_data = {**config_entry.data}
+    new_options = {**config_entry.options}
+
+    if config_entry.version == 1:
+
+        if config_entry.minor_version < 2:
+        #    # merge "options" into "data" to simplify reconfiguration flows:
+        #    new_data = {**new_data, **new_options}
+        #    new_options = {}
+
+            # Add two new settings:
+            if CONF_FRIENDLY_NAME_TEMPLATE not in new_options:
+                _LOGGER.debug(f"Adding { CONF_FRIENDLY_NAME_TEMPLATE }")
+                new_options[CONF_FRIENDLY_NAME_TEMPLATE] = DEFAULT_FRIENDLY_NAME_TEMPLATE
+            if CONF_SHOW_ZONE_WHEN_AWAY not in new_options:
+                _LOGGER.debug(f"Adding { CONF_SHOW_ZONE_WHEN_AWAY }")
+                new_options[CONF_SHOW_ZONE_WHEN_AWAY] = DEFAULT_SHOW_ZONE_WHEN_AWAY
+
+    _LOGGER.debug(f"data={ new_data }")
+    _LOGGER.debug(f"options={ new_options }")
+
+    hass.config_entries.async_update_entry(config_entry,
+                                           data=new_data,
+                                           options=new_options,
+                                           minor_version=new_configuration_minor_version,
+                                           version=new_configuration_version,
+                                           title="Person Locations",
+                                           )
+
+    _LOGGER.debug("Migration to configuration version %s.%s successful", config_entry.version, config_entry.minor_version)
 
     return True

@@ -32,6 +32,7 @@ from .const import (
     ATTR_BREAD_CRUMBS,
     ATTR_COMPASS_BEARING,
     ATTR_DIRECTION,
+    CONF_FRIENDLY_NAME_TEMPLATE,
     CONF_HOURS_EXTENDED_AWAY,
     CONF_MINUTES_JUST_ARRIVED,
     CONF_MINUTES_JUST_LEFT,
@@ -443,27 +444,16 @@ def setup_process_trigger(pli):
 
                     # Determine the zone and the icon to be used:
 
-                    if trigger.state.lower() in ["away",
-                                                 STATE_ON,
-                                                 STATE_NOT_HOME]:
-                        friendly_name_location = "is Away"
-                    else:
-                        friendly_name_location = f"is at {trigger.state}"
-
                     if "zone" in trigger.attributes:
                         reportedZone = trigger.attributes["zone"]
                     else:
                         reportedZone = (
                             trigger.state.lower().replace(" ", "_").replace("'", "_")
                         )
-                    zoneEntityID = "zone." + reportedZone
-                    zoneStateObject = pli.hass.states.get(zoneEntityID)
+                    zoneStateObject = pli.hass.states.get("zone." + reportedZone)
                     icon = "mdi:help-circle"
-                    if (zoneStateObject is None
-                            or reportedZone.lower().endswith("stationary")):
-                        # Eliminate stray zone names:
-                        friendly_name_location = "is Away"
-                    else:
+                    if (zoneStateObject is not None
+                            and not reportedZone.lower().endswith("stationary")):
                         zoneAttributesObject \
                             = zoneStateObject.attributes.copy()
                         if "friendly_name" in zoneAttributesObject:
@@ -482,31 +472,6 @@ def setup_process_trigger(pli):
                         target.attributes["icon"],
                         friendly_name_location,
                     )
-
-                    # Format friendly_name and template to be updated by geocoding:
-
-                    previous_locality = target.this_entity_info["locality"]
-                    if string.capwords(trigger.personName) == trigger.friendlyName:
-                        friendly_name_identity = trigger.friendlyName
-                    else:
-                        friendly_name_identity = f"{string.capwords(trigger.personName)} ({trigger.friendlyName})"
-                    if (
-                        friendly_name_location == "is Away"
-                    ):  # "<identity> is in <locality>"; add new locality in geocoding
-                        template = f"{friendly_name_identity} is in <locality>"
-                        if previous_locality == "?":
-                            friendly_name = f"{friendly_name_identity} {friendly_name_location}"
-                        else:
-                            friendly_name = template.replace(
-                                "<locality>", previous_locality
-                        )
-                    else:  # "<identity> is at <name>"; don't add locality
-                        friendly_name = (
-                            f"{friendly_name_identity} {friendly_name_location}"
-                        )
-                        template = friendly_name
-
-                    target.attributes["friendly_name"] = friendly_name
 
                     ha_just_started = pli.attributes["startup"]
                     if ha_just_started:
@@ -605,8 +570,8 @@ def setup_process_trigger(pli):
                     target.set_state()
 
                     # Call service to "reverse geocode" the location.
-                    # For devices at Home, this will only be done during
-                    # startup or on arrival.
+                    # For devices at Home, this will be forced to run
+                    # once at startup or on arrival.
 
                     force_update = (newTargetState in ["Home",
                                                        "Just Arrived"]
@@ -622,7 +587,7 @@ def setup_process_trigger(pli):
                     ):
                         service_data = {
                             "entity_id": target.entity_id,
-                            "friendly_name_template": template,
+                            "friendly_name_template": pli.configuration[CONF_FRIENDLY_NAME_TEMPLATE],
                             "force_update": force_update,
                         }
                         pli.hass.services.call(
