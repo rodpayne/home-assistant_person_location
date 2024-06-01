@@ -237,9 +237,8 @@ def setup_process_trigger(pli):
             else:
                 triggerSourceType = "other"
                 # person entities do not indicate the source type, dig deeper:
-                if "source" in trigger.attributes:
-                    triggerSource = trigger.attributes["source"]
-                    triggerSourceObject = pli.hass.states.get(triggerSource)
+                if "source" in trigger.attributes and '.' in trigger.attributes["source"]:
+                    triggerSourceObject = pli.hass.states.get(trigger.attributes["source"])
                     if triggerSourceObject is not None:
                         if ATTR_SOURCE_TYPE in triggerSourceObject.attributes:
                             triggerSourceType = triggerSourceObject.attributes[
@@ -567,7 +566,7 @@ def setup_process_trigger(pli):
 
                     # Call service to "reverse geocode" the location.
                     # For devices at Home, this will be forced to run
-                    # once at startup or on arrival.
+                    # at startup or on arrival.
 
                     force_update = (newTargetState in ["Home",
                                                        "Just Arrived"]
@@ -576,19 +575,17 @@ def setup_process_trigger(pli):
                                            "extended away",
                                            "just left"]
                         )
-                    if (
-                        newTargetState != "Home"
-                        or pli.attributes["startup"]
-                        or force_update
-                    ):
-                        service_data = {
-                            "entity_id": target.entity_id,
-                            "friendly_name_template": pli.configuration[CONF_FRIENDLY_NAME_TEMPLATE],
-                            "force_update": force_update,
-                        }
-                        pli.hass.services.call(
-                            DOMAIN, "reverse_geocode", service_data, False
-                        )
+                    if pli.attributes["startup"]:
+                        force_update = True
+                        
+                    service_data = {
+                        "entity_id": target.entity_id,
+                        "friendly_name_template": pli.configuration[CONF_FRIENDLY_NAME_TEMPLATE],
+                        "force_update": force_update,
+                    }
+                    pli.hass.services.call(
+                        DOMAIN, "reverse_geocode", service_data, False
+                    )
 
                 _LOGGER.debug(
                     "(%s) TARGET_LOCK release...",

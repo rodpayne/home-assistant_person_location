@@ -924,68 +924,79 @@ def setup_reverse_geocode(pli):
                                 new_longitude,
                                 )
 
-                            if template != "NONE":
+                        if template != "NONE":
 
-                                # Determine friendly_name_location component of friendly_name:
+                            # Determine friendly_name_location component of friendly_name:
 
-                                if target.attributes["reported_state"] in [
-                                                            "Away",
-                                                            STATE_ON,
-                                                            STATE_NOT_HOME,
-                                                            ]:
-                                    friendly_name_location = "is Away"
-                                else:
-                                    friendly_name_location = f"is at {target.attributes["reported_state"]}"
+                            if target.attributes["reported_state"] in [
+                                                        "Away",
+                                                        STATE_ON,
+                                                        STATE_NOT_HOME,
+                                                        ]:
+                                friendly_name_location = "is Away"
+                            else:
+                                friendly_name_location = f"is at {target.attributes["reported_state"]}"
 
-                                reportedZone = target.attributes["zone"]
-                                zoneStateObject = pli.hass.states.get("zone." + reportedZone)
-                                if (zoneStateObject is None
-                                        or reportedZone.lower().endswith("stationary")):
-                                    # Eliminate stray zone names:
-                                    friendly_name_location = "is Away"
-                                else:
-                                    zoneAttributesObject \
-                                        = zoneStateObject.attributes.copy()
-                                    if "friendly_name" in zoneAttributesObject:
-                                        friendly_name_location = "is at " \
-                                            + zoneAttributesObject["friendly_name"]
-                                    
-                                _LOGGER.debug(
-                                    "(%s) friendly_name_location = %s",
-                                    target.entity_id,
-                                    friendly_name_location,
-                                )
+                            reportedZone = target.attributes["zone"]
+                            zoneStateObject = pli.hass.states.get("zone." + reportedZone)
+                            if (zoneStateObject is None
+                                    or reportedZone.lower().endswith("stationary")):
+                                # Eliminate stray zone names:
+                                friendly_name_location = "is Away"
+                            else:
+                                zoneAttributesObject \
+                                    = zoneStateObject.attributes.copy()
+                                if "friendly_name" in zoneAttributesObject:
+                                    friendly_name_location = "is at " \
+                                        + zoneAttributesObject["friendly_name"]
+                                
+                            _LOGGER.debug(
+                                "(%s) friendly_name_location = %s",
+                                target.entity_id,
+                                friendly_name_location,
+                            )
 
-                                if (friendly_name_location == "is Away"):
-                                    # "<identity> is in <locality>"; add new locality
-                                    friendly_name_location = f"is in {target.attributes['locality']}"
+                            if (friendly_name_location == "is Away"):
+                                # "<identity> is in <locality>"; add new locality
+                                friendly_name_location = f"is in {target.attributes['locality']}"
 
-                                # Format new friendly_name using the supplied template:
-    
-                                if "source" in target.attributes:
-                                    sourceObject = pli.hass.states.get(target.attributes["source"])
-                                    if sourceObject is not None and "source" in sourceObject.attributes:
-                                        # Find the source for a person entity:
-                                        sourceObject = pli.hass.states.get(sourceObject.attributes["source"])
-                                else:
-                                    sourceObject = None
+                            # Format new friendly_name using the supplied template:
 
-                                friendly_name_variables = {
-                                    "friendly_name_location": friendly_name_location,
-                                    "person_name": target.attributes['person_name'],
-                                    "source": { "attributes": sourceObject.attributes },
-                                    "target": { "attributes": target.attributes },
-                                }
-                                _LOGGER.debug(f"friendly_name_variables = {friendly_name_variables}")
+                            if "source" in target.attributes and '.' in target.attributes["source"]:
+                                sourceEntity = target.attributes["source"]
+                                sourceObject = pli.hass.states.get(sourceEntity)
+                                if sourceObject is not None and "source" in sourceObject.attributes \
+                                    and '.' in target.attributes["source"]:
+                                    # Find the source for a person entity:
+                                    sourceEntity = sourceObject.attributes["source"]
+                                    sourceObject = pli.hass.states.get(sourceEntity)
+                            else:
+                                sourceObject = target
 
-                                try:
-                                    target.attributes["friendly_name"] \
-                                        = Template(pli.configuration[CONF_FRIENDLY_NAME_TEMPLATE]) \
-                                            .render(**friendly_name_variables) \
-                                            .replace('()','') \
-                                            .replace('  ',' ')
-                                except TemplateError as err:
-                                    _LOGGER.error("Error parsing friendly_name_template: %s", err)
+                            friendly_name_variables = {
+                                "friendly_name_location": friendly_name_location,
+                                "person_name": target.attributes['person_name'],
+                                "source": {
+                                    "entity_id": sourceEntity,
+                                    "state": sourceObject.state,
+                                    "attributes": sourceObject.attributes,
+                                    },
+                                "target": {
+                                    "entity_id": target.entity_id,
+                                    "state": target.state,
+                                    "attributes": target.attributes,
+                                    },
+                            }
+                            _LOGGER.debug(f"friendly_name_variables = {friendly_name_variables}")
+
+                            try:
+                                target.attributes["friendly_name"] \
+                                    = Template(pli.configuration[CONF_FRIENDLY_NAME_TEMPLATE]) \
+                                        .render(**friendly_name_variables) \
+                                        .replace('()','') \
+                                        .replace('  ',' ')
+                            except TemplateError as err:
+                                _LOGGER.error("Error parsing friendly_name_template: %s", err)
 
                         target.set_state()
 
