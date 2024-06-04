@@ -67,7 +67,9 @@ When a person is detected as moving between `Home` and `Away`, instead of going 
 
 ![Person State Diagram](docs/images/PersonHomeState.png)
 
-*Inspired by <https://philhawthorne.com/making-home-assistants-presence-detection-not-so-binary/>* 
+*Inspired by <https://philhawthorne.com/making-home-assistants-presence-detection-not-so-binary/>*
+
+If `CONF_SHOW_ZONE_WHEN_AWAY`, then `<Zone>` is reported instead of `Away`.                
 
 ### **Reverse geocode the location and make distance calculations**
 The custom integration supplies a service to reverse geocode the location (making it human readable) using `Open Street Map`, `MapQuest`, or `Google Maps` and calculate the distance from home (miles and minutes) using `WazeRouteCalculator`.  

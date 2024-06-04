@@ -36,6 +36,7 @@ from .const import (
     CONF_HOURS_EXTENDED_AWAY,
     CONF_MINUTES_JUST_ARRIVED,
     CONF_MINUTES_JUST_LEFT,
+    CONF_SHOW_ZONE_WHEN_AWAY,
     DOMAIN,
     PERSON_LOCATION_ENTITY,
     TARGET_LOCK,
@@ -105,13 +106,27 @@ def setup_process_trigger(pli):
                     target.attributes[ATTR_COMPASS_BEARING] = 0
                     target.attributes[ATTR_DIRECTION] = "home"
                 elif to_state == "Away":
-                    change_state_later(
-                        target.entity_id,
-                        "Away",
-                        "Extended Away",
-                        (pli.configuration[CONF_HOURS_EXTENDED_AWAY] * 60),
-                    )
-                    pass
+                    if pli.configuration[CONF_SHOW_ZONE_WHEN_AWAY]:
+                        reportedZone = target.attributes["zone"]
+                        zoneStateObject = pli.hass.states.get("zone." + reportedZone)
+                        if (zoneStateObject is None
+                                or reportedZone.lower().endswith("stationary")):
+                            _LOGGER.debug(f"Skipping use of zone {reportedZone} for Away state")
+                            pass
+                        else:
+                            zoneAttributesObject \
+                                = zoneStateObject.attributes.copy()
+                            if "friendly_name" in zoneAttributesObject:
+                                target.state = zoneAttributesObject["friendly_name"]
+                    if pli.configuration[
+                        CONF_HOURS_EXTENDED_AWAY] != 0:
+                        change_state_later(
+                            target.entity_id,
+                            target.state,
+                            "Extended Away",
+                            (pli.configuration[CONF_HOURS_EXTENDED_AWAY] * 60),
+                        )
+                        pass
                 elif to_state == "Extended Away":
                     pass
 
@@ -150,11 +165,6 @@ def setup_process_trigger(pli):
         if str(local)[-6] == "-" or str(local)[-6] == "+":
             local = str(local)[:-6]  # remove offset to make it offset-naive
             local = datetime.strptime(local, "%Y-%m-%d %H:%M:%S.%f")
-        _LOGGER.debug(
-            "[utc2local_naive] utc = %s; local = %s",
-            utc_dt,
-            local,
-        )
         return local
 
     def handle_process_trigger(call):
@@ -171,6 +181,7 @@ def setup_process_trigger(pli):
                 Attributes:
                 - selected attributes from the triggered device tracker
                 - state: "Just Arrived", "Home", "Just Left", "Away", or "Extended Away"
+                  If CONF_SHOW_ZONE_WHEN_AWAY, then <Zone> is reported instead of "Away".
                 - person_name: <personName>
                 - source: entity_id of the device tracker that triggered the automation
                 - reported_state: the state reported by device tracker = "Home", "Away", or <zone>
@@ -555,11 +566,23 @@ def setup_process_trigger(pli):
                             call_rest_command_service(
                                 trigger.personName, newTargetState
                             )
+                    if newTargetState == "Away" and pli.configuration[CONF_SHOW_ZONE_WHEN_AWAY]:
+                        # Get the state from the zone friendly_name:
+                        if (zoneStateObject is None
+                                or reportedZone.lower().endswith("stationary")):
+                            # Skip stray zone names:
+                            pass
+                        else:
+                            zoneAttributesObject \
+                                = zoneStateObject.attributes.copy()
+                            if "friendly_name" in zoneAttributesObject:
+                                newTargetState = zoneAttributesObject["friendly_name"]
+
+                    target.state = newTargetState
 
                     if ha_just_started:
                         target.attributes[ATTR_BREAD_CRUMBS] = newTargetState
 
-                    target.state = newTargetState
                     target.attributes["version"] = f"{DOMAIN} {VERSION}"
 
                     target.set_state()
