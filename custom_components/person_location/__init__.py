@@ -26,6 +26,7 @@ from .const import (
     DATA_ASYNC_SETUP_ENTRY,
     DATA_CONFIG_ENTRY,
     DATA_CONFIGURATION,
+    DATA_ENTITY_INFO,
     DATA_UNDO_STATE_LISTENER,
     DATA_UNDO_UPDATE_LISTENER,
     DEFAULT_FRIENDLY_NAME_TEMPLATE,
@@ -88,12 +89,39 @@ def setup(hass, config):
             entry.options,
         )
 
+        friendly_name_template_changed = (
+            entry.options["friendly_name_template"] != pli.configuration["friendly_name_template"]
+            )
         pli.configuration.update(entry.data)
         pli.configuration.update(entry.options)
 
         hass.data[DOMAIN][DATA_CONFIGURATION] = pli.configuration
 
         await hass.async_add_executor_job(_listen_for_configured_entities)
+
+        if friendly_name_template_changed:
+
+            # Update the friendly_name for all enties that have been geocoded:
+
+            entity_info = hass.data[DOMAIN][DATA_ENTITY_INFO]
+
+            for sensor in entity_info:
+
+                if (
+                    "geocode_count" in entity_info[sensor]
+                    and entity_info[sensor]["geocode_count"] != 0
+                ):
+
+                    _LOGGER.debug(f"sensor to be updated = {sensor}")
+                    service_data = {
+                        "entity_id": sensor,
+                        "friendly_name_template": pli.configuration[CONF_FRIENDLY_NAME_TEMPLATE],
+                        "force_update": False,
+                    }
+                    await pli.hass.services.async_call(
+                        DOMAIN, "reverse_geocode", service_data, False
+                    )
+
 
         _LOGGER.debug("[_async_setup_entry] === Return ===")
         return True
@@ -224,7 +252,6 @@ async def async_options_update_listener(hass, entry):
 async def async_unload_entry(hass, entry):
     """Unload a config entry."""
 
-    _LOGGER.debug("===== async_unload_entry")
     if DATA_UNDO_UPDATE_LISTENER in hass.data[DOMAIN]:
         hass.data[DOMAIN][DATA_UNDO_UPDATE_LISTENER]()
 
