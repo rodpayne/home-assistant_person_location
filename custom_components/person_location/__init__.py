@@ -137,7 +137,7 @@ def setup(hass, config):
         _LOGGER.debug("[_handle_device_tracker_state_change]" + " === Start ===")
 
         _LOGGER.debug("[_handle_device_tracker_state_change]" + " (%s) " % (entity_id))
-        if hasattr('old_state', 'state'):
+        if hasattr(old_state, 'state'):
             fromState = old_state.state
         else:
             fromState = 'unknown'
