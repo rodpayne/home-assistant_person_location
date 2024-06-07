@@ -9,6 +9,8 @@ import voluptuous as vol
 from homeassistant.components.mobile_app.const import ATTR_VERTICAL_ACCURACY
 from homeassistant.components.waze_travel_time.const \
     import REGIONS as WAZE_REGIONS
+from homeassistant.components.zone.const \
+    import DOMAIN as ZONE_DOMAIN
 from homeassistant.const import (
     ATTR_ATTRIBUTION,
     ATTR_FRIENDLY_NAME,
@@ -17,6 +19,10 @@ from homeassistant.const import (
     ATTR_LATITUDE,
     ATTR_LONGITUDE,
     ATTR_UNIT_OF_MEASUREMENT,
+    STATE_ON,
+    STATE_OFF,
+    STATE_HOME,
+    STATE_NOT_HOME,
     STATE_UNKNOWN,
 )
 from homeassistant.util.yaml.objects import (
@@ -29,7 +35,7 @@ DOMAIN = "person_location"
 API_STATE_OBJECT = DOMAIN + "." + DOMAIN + "_integration"
 INTEGRATION_NAME = "Person Location"
 ISSUE_URL = "https://github.com/rodpayne/home-assistant_person_location/issues"
-VERSION = "2024.06.04"
+VERSION = "2024.06.07"
 
 # Constants:
 METERS_PER_KM = 1000
@@ -51,8 +57,15 @@ ATTR_DIRECTION = "direction"
 ATTR_DRIVING_MILES = "driving_miles"
 ATTR_DRIVING_MINUTES = "driving_minutes"
 ATTR_GEOCODED = "geocoded"
+ATTR_ICON = "icon"
+ATTR_LAST_LOCATED = "last_located"
+ATTR_LOCATION_TIME = "location_time"
 ATTR_METERS_FROM_HOME = "meters_from_home"
 ATTR_MILES_FROM_HOME = "miles_from_home"
+ATTR_PERSON_NAME = "person_name"
+ATTR_REPORTED_STATE = "reported_state"
+ATTR_SOURCE = "source"
+ATTR_ZONE = "zone"
 
 # Configuration Version:
 CONF_VERSION = 1
@@ -420,7 +433,7 @@ class PERSON_LOCATION_ENTITY:
         if targetStateObject is not None:
             self.firstTime = False
             if (targetStateObject.state.lower().endswith("stationary")) or (
-                targetStateObject.state == "not_home"
+                targetStateObject.state == STATE_NOT_HOME
             ):
                 self.state = "Away"
             else:
@@ -457,7 +470,7 @@ class PERSON_LOCATION_ENTITY:
             self.state = "Home"
         else:
             self.stateHomeAway = "Away"
-            if self.state == "not_home":
+            if self.state == STATE_NOT_HOME:
                 self.state = "Away"
 
         if self.entity_id in self.pli.configuration[CONF_DEVICES]:

@@ -18,7 +18,9 @@ from homeassistant.const import (
     ATTR_LATITUDE,
     ATTR_LONGITUDE,
     CONF_ENTITY_ID,
+    STATE_HOME,
     STATE_NOT_HOME,
+    STATE_OFF,
     STATE_ON,
 )
 from homeassistant.exceptions import TemplateError
@@ -54,6 +56,7 @@ from .const import (
     TARGET_LOCK,
     THROTTLE_INTERVAL,
     WAZE_MIN_METERS_FROM_HOME,
+    ZONE_DOMAIN,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -256,7 +259,9 @@ def setup_reverse_geocode(pli):
             - determine <locality> for friendly_name
             - record full location from Google_Maps, MapQuest, and/or Open_Street_Map
             - calculate other location-based statistics, such as distance_from_home
+            - add to bread_crumbs as locality changes
             - create/update additional sensors if requested
+            - friendly_name: something like "Rod (i.e. Rod's watch) is at Drew's"
         """
 
         entity_id = call.data.get(CONF_ENTITY_ID, "NONE")
@@ -901,22 +906,6 @@ def setup_reverse_geocode(pli):
                                 "reverse_geocode_location_time"
                             ] = new_location_time
 
-                            if "reported_state" in target.attributes:
-                                if target.attributes["reported_state"] != "Away":
-                                    newBreadCrumb = target.attributes["reported_state"]
-                                else:
-                                    newBreadCrumb = locality
-                            else:
-                                newBreadCrumb = locality
-                            if ATTR_BREAD_CRUMBS in target.attributes:
-                                oldBreadCrumbs = target.attributes[ATTR_BREAD_CRUMBS]
-                                if not oldBreadCrumbs.endswith(newBreadCrumb):
-                                    target.attributes[ATTR_BREAD_CRUMBS] = (
-                                        oldBreadCrumbs + "> " + newBreadCrumb
-                                    )[-255:]
-                            else:
-                                target.attributes[ATTR_BREAD_CRUMBS] = newBreadCrumb
-
                             # Call WazeRouteCalculator if not at Home:
                             _get_waze_driving_miles_and_minutes(
                                 target,
@@ -924,43 +913,61 @@ def setup_reverse_geocode(pli):
                                 new_longitude,
                                 )
 
-                        if template != "NONE":
+                        # Determine friendly_name_location and new_bread_crumb:
 
-                            # Determine friendly_name_location component of friendly_name:
+                        if target.attributes["reported_state"].lower() in [
+                            STATE_HOME,
+                            STATE_OFF,
+                        ]:
+                            new_bread_crumb = "Home"
+                            friendly_name_location = "is Home"
+                        elif target.attributes["reported_state"].lower() in [
+                            "away",
+                            STATE_NOT_HOME,
+                            STATE_ON,
+                        ]:
+                            new_bread_crumb = "Away"
+                            friendly_name_location = "is Away"
+                        else:
+                            new_bread_crumb = target.attributes["reported_state"]
+                            friendly_name_location = f"is at {new_bread_crumb}"
 
-                            if target.attributes["reported_state"] in [
-                                                        "Away",
-                                                        STATE_ON,
-                                                        STATE_NOT_HOME,
-                                                        ]:
-                                friendly_name_location = "is Away"
-                            else:
-                                friendly_name_location = f"is at {target.attributes["reported_state"]}"
-
+                        if "zone" in target.attributes:
                             reportedZone = target.attributes["zone"]
-                            zoneStateObject = pli.hass.states.get("zone." + reportedZone)
-                            if (zoneStateObject is None
-                                    or reportedZone.lower().endswith("stationary")):
-                                # Eliminate stray zone names:
-                                friendly_name_location = "is Away"
-                            else:
+                            zoneStateObject = pli.hass.states.get(ZONE_DOMAIN + "." + reportedZone)
+                            if (zoneStateObject is not None
+                                    and not reportedZone.lower().endswith("stationary")):
                                 zoneAttributesObject \
                                     = zoneStateObject.attributes.copy()
                                 if "friendly_name" in zoneAttributesObject:
-                                    friendly_name_location = "is at " \
-                                        + zoneAttributesObject["friendly_name"]
-                                
-                            _LOGGER.debug(
-                                "(%s) friendly_name_location = %s",
-                                target.entity_id,
-                                friendly_name_location,
-                            )
+                                    new_bread_crumb = zoneAttributesObject["friendly_name"]
+                                    friendly_name_location = f"is at {new_bread_crumb}"
 
-                            if (friendly_name_location == "is Away"):
-                                # "<identity> is in <locality>"; add new locality
-                                friendly_name_location = f"is in {target.attributes['locality']}"
+                        if new_bread_crumb == "Away" and "locality" in target.attributes:
+                            new_bread_crumb = target.attributes['locality']
+                            friendly_name_location = f"is in {new_bread_crumb}"
 
-                            # Format new friendly_name using the supplied template:
+                        _LOGGER.debug(
+                            "(%s) friendly_name_location = %s; new_bread_crumb = %s",
+                            target.entity_id,
+                            friendly_name_location,
+                            new_bread_crumb,
+                        )
+
+                        # Append location to bread_crumbs attribute:
+
+                        if ATTR_BREAD_CRUMBS in target.attributes:
+                            old_bread_crumbs = target.attributes[ATTR_BREAD_CRUMBS]
+                            if not old_bread_crumbs.endswith(new_bread_crumb):
+                                target.attributes[ATTR_BREAD_CRUMBS] = (
+                                    old_bread_crumbs + "> " + new_bread_crumb
+                                )[-255:]
+                        else:
+                            target.attributes[ATTR_BREAD_CRUMBS] = new_bread_crumb
+
+                        if template != "NONE":
+
+                            # Format friendly_name attribute using the supplied friendly_name_template:
 
                             if "source" in target.attributes and '.' in target.attributes["source"]:
                                 sourceEntity = target.attributes["source"]

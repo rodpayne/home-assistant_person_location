@@ -32,6 +32,13 @@ from .const import (
     ATTR_BREAD_CRUMBS,
     ATTR_COMPASS_BEARING,
     ATTR_DIRECTION,
+    ATTR_ICON,
+    ATTR_LAST_LOCATED,
+    ATTR_LOCATION_TIME,
+    ATTR_PERSON_NAME,
+    ATTR_REPORTED_STATE,
+    ATTR_SOURCE,
+    ATTR_ZONE,
     CONF_FRIENDLY_NAME_TEMPLATE,
     CONF_HOURS_EXTENDED_AWAY,
     CONF_MINUTES_JUST_ARRIVED,
@@ -41,6 +48,7 @@ from .const import (
     PERSON_LOCATION_ENTITY,
     TARGET_LOCK,
     VERSION,
+    ZONE_DOMAIN,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -107,8 +115,8 @@ def setup_process_trigger(pli):
                     target.attributes[ATTR_DIRECTION] = "home"
                 elif to_state == "Away":
                     if pli.configuration[CONF_SHOW_ZONE_WHEN_AWAY]:
-                        reportedZone = target.attributes["zone"]
-                        zoneStateObject = pli.hass.states.get("zone." + reportedZone)
+                        reportedZone = target.attributes[ATTR_ZONE]
+                        zoneStateObject = pli.hass.states.get(ZONE_DOMAIN + "." + reportedZone)
                         if (zoneStateObject is None
                                 or reportedZone.lower().endswith("stationary")):
                             _LOGGER.debug(f"Skipping use of zone {reportedZone} for Away state")
@@ -181,11 +189,11 @@ def setup_process_trigger(pli):
                 Attributes:
                 - selected attributes from the triggered device tracker
                 - state: "Just Arrived", "Home", "Just Left", "Away", or "Extended Away"
-                  If CONF_SHOW_ZONE_WHEN_AWAY, then <Zone> is reported instead of "Away".
+                  If CONF_SHOW_ZONE_WHEN_AWAY, then the <Zone> is reported instead of "Away".
                 - person_name: <personName>
                 - source: entity_id of the device tracker that triggered the automation
                 - reported_state: the state reported by device tracker = "Home", "Away", or <zone>
-                - friendly_name: something like "Rod (i.e. Rod's watch) is at Drew's"
+                - bread_crumbs: the series of locations that have been seen
                 - icon: the icon that correspondes with the current zone
             - Call rest_command service to update HomeSeer: 'homeseer_<personName>_<state>'
         """
@@ -193,6 +201,8 @@ def setup_process_trigger(pli):
         entity_id = call.data.get(CONF_ENTITY_ID, "NONE")
         triggerFrom = call.data.get("from_state", "NONE")
         triggerTo = call.data.get("to_state", "NONE")
+
+        # Validate the input entity:
 
         if entity_id == "NONE":
             {
@@ -235,8 +245,8 @@ def setup_process_trigger(pli):
             )
         else:
 
-            if "last_located" in trigger.attributes:
-                last_located = trigger.attributes["last_located"]
+            if ATTR_LAST_LOCATED in trigger.attributes:
+                last_located = trigger.attributes[ATTR_LAST_LOCATED]
                 new_location_time = datetime.strptime(last_located, "%Y-%m-%d %H:%M:%S")
             else:
                 new_location_time = utc2local_naive(
@@ -273,22 +283,15 @@ def setup_process_trigger(pli):
 
                 target.this_entity_info["trigger_count"] += 1
 
-                if "location_time" in target.attributes:
+                if ATTR_LOCATION_TIME in target.attributes:
                     old_location_time = datetime.strptime(
-                        str(target.attributes["location_time"]),
+                        str(target.attributes[ATTR_LOCATION_TIME]),
                         "%Y-%m-%d %H:%M:%S.%f",
                     )
                 else:
                     old_location_time = utc2local_naive(
                         target.last_updated
                     )  # HA last_updated is UTC
-
-                _LOGGER.debug(
-                    "(%s) new_location_time (from trigger) = %s; old_location_time (from target) = %s",
-                    trigger.entity_id,
-                    new_location_time,
-                    old_location_time,
-                )
 
                 if new_location_time < old_location_time:
                     _LOGGER.debug(
@@ -323,9 +326,9 @@ def setup_process_trigger(pli):
                             )
                         else:
                             if (
-                                not ("source" in target.attributes)
+                                not (ATTR_SOURCE in target.attributes)
+                                or target.attributes[ATTR_SOURCE] == trigger.entity_id
                                 or not ("reported_state" in target.attributes)
-                                or target.attributes["source"] == trigger.entity_id
                             ):  # same entity as we are following, if any?
                                 saveThisUpdate = True
                                 _LOGGER.debug(
@@ -333,7 +336,7 @@ def setup_process_trigger(pli):
                                     trigger.entity_id,
                                 )
                             elif (
-                                trigger.state == target.attributes["reported_state"]
+                                trigger.state == target.attributes[ATTR_REPORTED_STATE]
                             ):  # same status as the one we are following?
                                 if ATTR_VERTICAL_ACCURACY in trigger.attributes:
                                     if (
@@ -349,7 +352,7 @@ def setup_process_trigger(pli):
                                         _LOGGER.debug(
                                             "(%s) Decision: vertical_accuracy is better than %s",
                                             trigger.entity_id,
-                                            target.attributes["source"],
+                                            target.attributes[ATTR_SOURCE],
                                         )
                                 if (
                                     ATTR_GPS_ACCURACY in trigger.attributes
@@ -361,7 +364,7 @@ def setup_process_trigger(pli):
                                     _LOGGER.debug(
                                         "(%s) Decision: gps_accuracy is better than %s",
                                         trigger.entity_id,
-                                        target.attributes["source"],
+                                        target.attributes[ATTR_SOURCE],
                                     )
                     else:  # source = router or ping
                         if triggerTo != triggerFrom:  # did tracker change state?
@@ -444,39 +447,39 @@ def setup_process_trigger(pli):
                         if ATTR_ENTITY_PICTURE in target.attributes:
                             target.attributes.pop(ATTR_ENTITY_PICTURE)
 
-                    target.attributes["source"] = trigger.entity_id
-                    target.attributes["reported_state"] = trigger.state
-                    target.attributes["person_name"] = string.capwords(
+                    target.attributes[ATTR_SOURCE] = trigger.entity_id
+                    target.attributes[ATTR_REPORTED_STATE] = trigger.state
+                    target.attributes[ATTR_PERSON_NAME] = string.capwords(
                         trigger.personName
                     )
-                    target.attributes["location_time"] \
+                    target.attributes[ATTR_LOCATION_TIME] \
                         = new_location_time.strftime("%Y-%m-%d %H:%M:%S.%f")
 
                     # Determine the zone and the icon to be used:
 
-                    if "zone" in trigger.attributes:
-                        reportedZone = trigger.attributes["zone"]
+                    if ATTR_ZONE in trigger.attributes:
+                        reportedZone = trigger.attributes[ATTR_ZONE]
                     else:
                         reportedZone = (
                             trigger.state.lower().replace(" ", "_").replace("'", "_")
                         )
-                    zoneStateObject = pli.hass.states.get("zone." + reportedZone)
+                    zoneStateObject = pli.hass.states.get(ZONE_DOMAIN + "." + reportedZone)
                     icon = "mdi:help-circle"
                     if (zoneStateObject is not None
                             and not reportedZone.lower().endswith("stationary")):
                         zoneAttributesObject \
                             = zoneStateObject.attributes.copy()
-                        if "icon" in zoneAttributesObject:
-                            icon = zoneAttributesObject["icon"]
+                        if ATTR_ICON in zoneAttributesObject:
+                            icon = zoneAttributesObject[ATTR_ICON]
 
-                    target.attributes["icon"] = icon
-                    target.attributes["zone"] = reportedZone
+                    target.attributes[ATTR_ICON] = icon
+                    target.attributes[ATTR_ZONE] = reportedZone
 
                     _LOGGER.debug(
                         "(%s) zone = %s; icon = %s",
                         trigger.entity_id,
                         reportedZone,
-                        target.attributes["icon"],
+                        target.attributes[ATTR_ICON],
                     )
 
                     ha_just_started = pli.attributes["startup"]
@@ -492,15 +495,20 @@ def setup_process_trigger(pli):
                         ]
 
                     # Set up something like https://philhawthorne.com/making-home-assistants-presence-detection-not-so-binary/
+                    # https://github.com/rodpayne/home-assistant_person_location?tab=readme-ov-file#make-presence-detection-not-so-binary
                     # If Home Assistant just started, just go with Home or Away as the initial state.
 
                     if trigger.stateHomeAway == "Home":
+                        # State is changing to Home.
                         if (
                             oldTargetState in ["just left", "none"]
                             or ha_just_started
                             or (pli.configuration[
                                 CONF_MINUTES_JUST_ARRIVED] == 0)
                         ):
+                            # Initial setting at startup goes straight to Home.
+                            # Just Left also goes straight back to Home.
+                            # Anything else goes straight to Home if Just Arrived is not an option.
                             newTargetState = "Home"
 
                             target.attributes[
@@ -530,12 +538,14 @@ def setup_process_trigger(pli):
                                 trigger.personName, newTargetState
                             )
                     else:
+                        # State is changing to not Home.
                         if oldTargetState != "away" and (
                             oldTargetState == "none"
                             or ha_just_started
                             or (pli.configuration[
                                 CONF_MINUTES_JUST_LEFT] == 0)
                         ):
+                            # initial setting at startup goes straight to Away
                             newTargetState = "Away"
                             if pli.configuration[
                                     CONF_HOURS_EXTENDED_AWAY] != 0:
@@ -549,13 +559,11 @@ def setup_process_trigger(pli):
                             call_rest_command_service(
                                 trigger.personName, newTargetState
                             )
-                        elif oldTargetState == "just left":
+                        elif oldTargetState in ["just left", "just arrived"]:
                             newTargetState = "Just Left"
-                        elif oldTargetState == "away":
-                            newTargetState = "Away"
                         elif oldTargetState == "extended away":
                             newTargetState = "Extended Away"
-                        else:
+                        elif oldTargetState == "home":
                             newTargetState = "Just Left"
                             change_state_later(
                                 target.entity_id,
@@ -566,6 +574,9 @@ def setup_process_trigger(pli):
                             call_rest_command_service(
                                 trigger.personName, newTargetState
                             )
+                        else:
+                            # oldTargetState is either "away" or a Zone
+                            newTargetState = "Away"
                     if newTargetState == "Away" and pli.configuration[CONF_SHOW_ZONE_WHEN_AWAY]:
                         # Get the state from the zone friendly_name:
                         if (zoneStateObject is None
@@ -589,7 +600,7 @@ def setup_process_trigger(pli):
 
                     # Call service to "reverse geocode" the location.
                     # For devices at Home, this will be forced to run
-                    # at startup or on arrival.
+                    # just at startup or on arrival.
 
                     force_update = (newTargetState in ["Home",
                                                        "Just Arrived"]
