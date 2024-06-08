@@ -90,7 +90,10 @@ def setup(hass, config):
         )
 
         friendly_name_template_changed = (
-            entry.options["friendly_name_template"] != pli.configuration["friendly_name_template"]
+            (pli.attributes['startup'] == False)
+            and ("friendly_name_template" in entry.options)
+            and ("friendly_name_template" in pli.configuration)
+            and (entry.options["friendly_name_template"] != pli.configuration["friendly_name_template"])
             )
         pli.configuration.update(entry.data)
         pli.configuration.update(entry.options)
@@ -103,25 +106,27 @@ def setup(hass, config):
 
             # Update the friendly_name for all enties that have been geocoded:
 
-            entity_info = hass.data[DOMAIN][DATA_ENTITY_INFO]
+            try:
+                entity_info = hass.data[DOMAIN][DATA_ENTITY_INFO]
 
-            for sensor in entity_info:
+                for sensor in entity_info:
 
-                if (
-                    "geocode_count" in entity_info[sensor]
-                    and entity_info[sensor]["geocode_count"] != 0
-                ):
+                    if (
+                        "geocode_count" in entity_info[sensor]
+                        and entity_info[sensor]["geocode_count"] != 0
+                    ):
 
-                    _LOGGER.debug(f"sensor to be updated = {sensor}")
-                    service_data = {
-                        "entity_id": sensor,
-                        "friendly_name_template": pli.configuration[CONF_FRIENDLY_NAME_TEMPLATE],
-                        "force_update": False,
-                    }
-                    await pli.hass.services.async_call(
-                        DOMAIN, "reverse_geocode", service_data, False
-                    )
-
+                        _LOGGER.debug(f"sensor to be updated = {sensor}")
+                        service_data = {
+                            "entity_id": sensor,
+                            "friendly_name_template": pli.configuration[CONF_FRIENDLY_NAME_TEMPLATE],
+                            "force_update": False,
+                        }
+                        await pli.hass.services.async_call(
+                            DOMAIN, "reverse_geocode", service_data, False
+                        )
+            except Exception as e:
+                _LOGGER.warning(f"Exception updating friendly name after template change - {e}")
 
         _LOGGER.debug("[_async_setup_entry] === Return ===")
         return True
