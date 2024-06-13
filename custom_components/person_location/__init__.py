@@ -13,7 +13,13 @@ from functools import partial
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_OFF, STATE_ON
-from homeassistant.helpers.event import track_point_in_time, track_state_change
+
+from homeassistant.core import Event, EventStateChangedData
+from homeassistant.helpers.event import (
+    async_track_state_change_event,
+    threaded_listener_factory,
+    track_point_in_time,
+)
 
 from .const import (
     API_STATE_OBJECT,
@@ -90,7 +96,7 @@ def setup(hass, config):
         )
 
         friendly_name_template_changed = (
-            (pli.attributes['startup'] == False)
+            (not pli.attributes['startup'])
             and ("friendly_name_template" in entry.options)
             and ("friendly_name_template" in pli.configuration)
             and (entry.options["friendly_name_template"] != pli.configuration["friendly_name_template"])
@@ -136,16 +142,25 @@ def setup(hass, config):
     hass.services.register(DOMAIN, "geocode_api_on", handle_geocode_api_on)
     hass.services.register(DOMAIN, "geocode_api_off", handle_geocode_api_off)
 
-    def _handle_device_tracker_state_change(entity_id, old_state, new_state):
-        """Handle device tracker state change."""
 
-        _LOGGER.debug("[_handle_device_tracker_state_change]" + " === Start ===")
+    def _handle_device_tracker_state_change(
+        event: Event[EventStateChangedData],
+    ) -> None:
+        """Handle device tracker state change event."""
+        entity_id = event.data["entity_id"]
+        old_state = event.data["old_state"]
+        new_state = event.data["new_state"]
 
-        _LOGGER.debug("[_handle_device_tracker_state_change]" + " (%s) " % (entity_id))
-        if hasattr(old_state, 'state'):
+        _LOGGER.debug(
+            "[_handle_device_tracker_state_change]"
+            + " === Start === (%s) " % (entity_id)
+        )
+
+        #        _LOGGER.debug("[_handle_device_tracker_state_change]" + " (%s) " % (entity_id))
+        if hasattr(old_state, "state"):
             fromState = old_state.state
         else:
-            fromState = 'unknown'
+            fromState = "unknown"
         service_data = {
             "entity_id": entity_id,
             "from_state": fromState,
@@ -155,23 +170,28 @@ def setup(hass, config):
 
         _LOGGER.debug("[_handle_device_tracker_state_change]" + " === Return ===")
 
+    track_state_change_event = threaded_listener_factory(async_track_state_change_event)
+
     def _listen_for_device_tracker_state_changes(entity_id):
         """Request notification of device tracker state changes."""
 
         if entity_id not in pli.entity_info:
             pli.entity_info[entity_id] = {}
+
         if DATA_UNDO_STATE_LISTENER not in pli.entity_info[entity_id]:
-            remove = track_state_change(
+            remove = track_state_change_event(
                 pli.hass,
                 entity_id,
                 _handle_device_tracker_state_change,
             )
+
             if remove:
                 pli.entity_info[entity_id][DATA_UNDO_STATE_LISTENER] = remove
                 _LOGGER.debug(
                     "[_listen_for_device_tracker_state_changes] _handle_device_tracker_state_change (%s)"
                     % (entity_id)
                 )
+
 
     def _listen_for_configured_entities():
         """Request notification of state changes for configured entities."""
