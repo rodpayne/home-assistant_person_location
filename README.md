@@ -258,7 +258,7 @@ Assuming you have already [installed](https://hacs.xyz/docs/installation/prerequ
 
 ### **Configuration Parameters**
 
-The configuration can be updated in either the `Settings > Devices & services` GUI, or by adding parameters to `configutation.yaml`, or both.
+The configuration can be updated in either the `Settings > Devices & services` GUI, or by adding parameters to `configutation.yaml`. To avoid confusion and prevent unexpected results, choose to use one or the other, not both.
 
 | GUI Parameter | YAML Parameter | Optional | Description | Default |
 | :------------ | :------------- | :------: | :---------- | :------ |
@@ -268,6 +268,7 @@ The configuration can be updated in either the `Settings > Devices & services` G
 | Google Language | `language`       | Yes | Language parameter for the Google API. | `en`
 | Google Region | `region`         | Yes | Region parameter for the Google API. | `US`
 | Hours Extended Away<sup>*</sup> | `extended_away`  | Yes | Number of **hours** before changing `Away` into `Extended Away`. Set to `0` to not use `Extended Away` state. | `48`
+| Mapbox Access Token | `mapbox_api_key`    | Yes | Mapbox Access Token obtained from the [Mapbox Account page](https://account.mapbox.com/). (Sign up for a free "hobbyist" account.)| Do not use MapBox to generate maps.
 | MapQuest API Key | `mapquest_api_key`    | Yes | MapQuest API Key obtained from the [MapQuest Developer site](https://developer.mapquest.com/user/me/apps). | Do not do the MapQuest reverse geocoding.
 | Minutes Just Arrived<sup>*</sup> | `just_arrived`   | Yes | Number of **minutes** before changing `Just Arrived` into `Home`. Set to `0` to not use `Just Arrived` state. | `3`
 | Minutes Just Left<sup>*</sup> | `just_left`      | Yes | Number of **minutes** before changing `Just Left` into `Away`. Set to `0` to not use `Just Left` state. | `3`
@@ -371,7 +372,7 @@ switch:
 
 ### **Map Configuration Examples (Optional)**
 
-The integration provides a camera platform that can be used to provide a map image. Some knowledge of the 3rd-party mapping API's is necessary to adjust these maps, so get into it only if you enjoy coding and figuring things out. The map providers each require an API key, but do not put the key into the camera configuration. Instead, pull the key from the integration using something like `&key={{google_api_key}}` in the camera configuration template.
+The integration provides a camera platform that can be used to provide a map image. Some knowledge of the 3rd-party mapping API is necessary to adjust these maps, so get into it only if you enjoy coding and figuring things out. The map providers each require an API key, but do not put the key into the camera configuration. Instead, pull the key from the integration using something like `&key={{google_api_key}}` in the camera configuration template.
 
  Here are a few examples.
 

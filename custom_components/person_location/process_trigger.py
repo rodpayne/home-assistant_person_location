@@ -45,6 +45,7 @@ from .const import (
     CONF_MINUTES_JUST_LEFT,
     CONF_SHOW_ZONE_WHEN_AWAY,
     DOMAIN,
+    IC3_STATIONARY_ZONE,
     PERSON_LOCATION_ENTITY,
     TARGET_LOCK,
     VERSION,
@@ -118,7 +119,7 @@ def setup_process_trigger(pli):
                         reportedZone = target.attributes[ATTR_ZONE]
                         zoneStateObject = pli.hass.states.get(ZONE_DOMAIN + "." + reportedZone)
                         if (zoneStateObject is None
-                                or reportedZone.lower().endswith("stationary")):
+                                or IC3_STATIONARY_ZONE in reportedZone.lower()):
                             _LOGGER.debug(f"Skipping use of zone {reportedZone} for Away state")
                             pass
                         else:
@@ -326,9 +327,9 @@ def setup_process_trigger(pli):
                             )
                         else:
                             if (
-                                not (ATTR_SOURCE in target.attributes)
+                                ATTR_SOURCE not in target.attributes
                                 or target.attributes[ATTR_SOURCE] == trigger.entity_id
-                                or not ("reported_state" in target.attributes)
+                                or "reported_state" not in target.attributes
                             ):  # same entity as we are following, if any?
                                 saveThisUpdate = True
                                 _LOGGER.debug(
@@ -339,11 +340,7 @@ def setup_process_trigger(pli):
                                 trigger.state == target.attributes[ATTR_REPORTED_STATE]
                             ):  # same status as the one we are following?
                                 if ATTR_VERTICAL_ACCURACY in trigger.attributes:
-                                    if (
-                                        not (
-                                            ATTR_VERTICAL_ACCURACY in target.attributes
-                                        )
-                                    ) or (
+                                    if (ATTR_VERTICAL_ACCURACY not in target.attributes) or (
                                         trigger.attributes[ATTR_VERTICAL_ACCURACY] > 0
                                         and target.attributes[ATTR_VERTICAL_ACCURACY]
                                         == 0
@@ -395,6 +392,13 @@ def setup_process_trigger(pli):
                         trigger.entity_id,
                     )
                 else:
+                    _LOGGER.debug(
+                        "(%s saveThisUpdate) -state: %s -attributes: %s",
+                        trigger.entity_id,
+                        trigger.state,
+                        trigger.attributes,
+                    )
+
                     # Carry over selected attributes from trigger to target:
 
                     if ATTR_SOURCE_TYPE in trigger.attributes:
@@ -466,7 +470,7 @@ def setup_process_trigger(pli):
                     zoneStateObject = pli.hass.states.get(ZONE_DOMAIN + "." + reportedZone)
                     icon = "mdi:help-circle"
                     if (zoneStateObject is not None
-                            and not reportedZone.lower().endswith("stationary")):
+                            and IC3_STATIONARY_ZONE not in reportedZone.lower()):
                         zoneAttributesObject \
                             = zoneStateObject.attributes.copy()
                         if ATTR_ICON in zoneAttributesObject:
@@ -580,7 +584,7 @@ def setup_process_trigger(pli):
                     if newTargetState == "Away" and pli.configuration[CONF_SHOW_ZONE_WHEN_AWAY]:
                         # Get the state from the zone friendly_name:
                         if (zoneStateObject is None
-                                or reportedZone.lower().endswith("stationary")):
+                                or IC3_STATIONARY_ZONE in reportedZone.lower()):
                             # Skip stray zone names:
                             pass
                         else:

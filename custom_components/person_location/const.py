@@ -7,10 +7,8 @@ from datetime import datetime, timedelta
 import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
 from homeassistant.components.mobile_app.const import ATTR_VERTICAL_ACCURACY
-from homeassistant.components.waze_travel_time.const \
-    import REGIONS as WAZE_REGIONS
-from homeassistant.components.zone.const \
-    import DOMAIN as ZONE_DOMAIN
+from homeassistant.components.waze_travel_time.const import REGIONS as WAZE_REGIONS
+from homeassistant.components.zone.const import DOMAIN as ZONE_DOMAIN
 from homeassistant.const import (
     ATTR_ATTRIBUTION,
     ATTR_FRIENDLY_NAME,
@@ -19,10 +17,10 @@ from homeassistant.const import (
     ATTR_LATITUDE,
     ATTR_LONGITUDE,
     ATTR_UNIT_OF_MEASUREMENT,
-    STATE_ON,
-    STATE_OFF,
     STATE_HOME,
     STATE_NOT_HOME,
+    STATE_OFF,
+    STATE_ON,
     STATE_UNKNOWN,
 )
 from homeassistant.util.yaml.objects import (
@@ -35,12 +33,12 @@ DOMAIN = "person_location"
 API_STATE_OBJECT = DOMAIN + "." + DOMAIN + "_integration"
 INTEGRATION_NAME = "Person Location"
 ISSUE_URL = "https://github.com/rodpayne/home-assistant_person_location/issues"
-VERSION = "2024.06.13"
+VERSION = "2024.06.28"
 
 # Constants:
 METERS_PER_KM = 1000
 METERS_PER_MILE = 1609.34
-IC3_STATIONARY = "stationary"
+IC3_STATIONARY_ZONE = "statzon"
 
 # Fixed parameters:
 MIN_DISTANCE_TRAVELLED_TO_GEOCODE = 5
@@ -433,7 +431,7 @@ class PERSON_LOCATION_ENTITY:
         targetStateObject = self.hass.states.get(self.entity_id)
         if targetStateObject is not None:
             self.firstTime = False
-            if (IC3_STATIONARY in targetStateObject.state.lower()) or (
+            if (IC3_STATIONARY_ZONE in targetStateObject.state.lower()) or (
                 targetStateObject.state == STATE_NOT_HOME
             ):
                 self.state = "Away"

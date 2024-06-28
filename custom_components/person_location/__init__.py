@@ -13,7 +13,6 @@ from functools import partial
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_OFF, STATE_ON
-
 from homeassistant.core import Event, EventStateChangedData
 from homeassistant.helpers.event import (
     async_track_state_change_event,
@@ -26,9 +25,7 @@ from .const import (
     CONF_DEVICES,
     CONF_FOLLOW_PERSON_INTEGRATION,
     CONF_FRIENDLY_NAME_TEMPLATE,
-    CONF_MINOR_VERSION as new_configuration_minor_version,
     CONF_SHOW_ZONE_WHEN_AWAY,
-    CONF_VERSION as new_configuration_version,
     DATA_ASYNC_SETUP_ENTRY,
     DATA_CONFIG_ENTRY,
     DATA_CONFIGURATION,
@@ -40,6 +37,12 @@ from .const import (
     DOMAIN,
     INTEGRATION_LOCK,
     PERSON_LOCATION_INTEGRATION,
+)
+from .const import (
+    CONF_MINOR_VERSION as new_configuration_minor_version,
+)
+from .const import (
+    CONF_VERSION as new_configuration_version,
 )
 from .process_trigger import setup_process_trigger
 from .reverse_geocode import setup_reverse_geocode

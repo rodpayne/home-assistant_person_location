@@ -3,8 +3,8 @@
 import logging
 import re
 
-import voluptuous as vol
 import homeassistant.helpers.config_validation as cv
+import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
@@ -18,6 +18,7 @@ from .const import (
     CONF_GOOGLE_API_KEY,
     CONF_HOURS_EXTENDED_AWAY,
     CONF_LANGUAGE,
+    CONF_MAPBOX_API_KEY,
     CONF_MAPQUEST_API_KEY,
     CONF_MINUTES_JUST_ARRIVED,
     CONF_MINUTES_JUST_LEFT,
@@ -56,11 +57,10 @@ _LOGGER = logging.getLogger(__name__)
 class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     """Person Location config flow handler."""
 
-    #VERSION = 1
-    #MINOR_VERSION = 1
-
     from .const import (
         CONF_MINOR_VERSION as MINOR_VERSION,
+    )
+    from .const import (
         CONF_VERSION as VERSION,
     )
     
@@ -95,6 +95,9 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         user_input[CONF_LANGUAGE] = self.integration_config_data.get(
             CONF_LANGUAGE, DEFAULT_LANGUAGE
         )
+        user_input[CONF_MAPBOX_API_KEY] = self.integration_config_data.get(
+            CONF_MAPBOX_API_KEY, DEFAULT_API_KEY_NOT_SET
+        )
         user_input[CONF_MAPQUEST_API_KEY] = self.integration_config_data.get(
             CONF_MAPQUEST_API_KEY, DEFAULT_API_KEY_NOT_SET
         )
@@ -108,12 +111,20 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         return await self._async_show_config_geocode_form(user_input)
 
     def _load_previous_integration_config_data(self):
+        """Get current config entry data and options; get current hass domain data."""
 
         our_currently_configured_entries = self._async_current_entries()
         if our_currently_configured_entries:
             for our_current_entry in our_currently_configured_entries:
-                _LOGGER.debug("our_current_entry.data = %s", our_current_entry.data)
-                _LOGGER.debug("our_current_entry.options = %s", our_current_entry.options)
+                self.config_entry = our_current_entry
+                self.config_entry_data = {**our_current_entry.data}
+                self.config_entry_options = {**our_current_entry.options}
+        else:
+            self.config_entry = None
+            self.config_entry_data = {}
+            self.config_entry_options = {}
+        _LOGGER.debug("config_entry_data = %s", self.config_entry_data)
+        _LOGGER.debug("config_entry_options = %s", self.config_entry_options)
 
         try:
             self.integration_config_data
@@ -122,12 +133,9 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 self.integration_config_data = self.hass.data[DOMAIN][
                     DATA_CONFIGURATION
                 ]
-                _LOGGER.debug(
-                    "_load_previous_integration_config_data config = %s",
-                    self.integration_config_data,
-                )
             else:
                 self.integration_config_data = {}
+        _LOGGER.debug("integration_config_data = %s", self.integration_config_data)
 
     async def _async_save__integration_config_data(self):
         config_title = "Person Locations"
@@ -140,8 +148,10 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     our_current_entry_configured = True
                     break
         if our_current_entry_configured:
+            new_config_data = {**our_current_entry.data}
+            new_config_data.update(self._user_input)
             changed = self.hass.config_entries.async_update_entry(
-                our_current_entry, data=self._user_input
+                our_current_entry, new_config_data
             )
             if changed:
                 # TODO: Figure out how to exit the flow gracefully:
@@ -168,6 +178,10 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Optional(CONF_REGION, default=user_input[CONF_REGION]): str,
                     vol.Optional(
                         CONF_GOOGLE_API_KEY, default=user_input[CONF_GOOGLE_API_KEY]
+                    ): str,
+                    vol.Optional(
+                        CONF_MAPBOX_API_KEY,
+                        default=user_input[CONF_MAPBOX_API_KEY],
                     ): str,
                     vol.Optional(
                         CONF_MAPQUEST_API_KEY,
@@ -420,13 +434,14 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
 
         self._user_input = {}   # validated user_input to be saved
         self.config_entry = config_entry
-        self.options = dict(config_entry.options)
+        self.config_entry_data = {**config_entry.data}
+        self.config_entry_options = {**config_entry.options}
 
     async def async_step_init(self, user_input=None):  # pylint: disable=unused-argument
         """Handle option flow initiated by the user."""
 
         if user_input is not None:
-            self.options.update(user_input)
+            self.config_entry_options.update(user_input)
             self._user_input.update(user_input)
 
             return await self.async_step_triggers()
@@ -437,35 +452,35 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
                 {
                     vol.Optional(
                         CONF_HOURS_EXTENDED_AWAY,
-                        default=self.options.get(
+                        default=self.config_entry_options.get(
                             CONF_HOURS_EXTENDED_AWAY,
                             DEFAULT_HOURS_EXTENDED_AWAY
                         ),
                     ): int,
                     vol.Optional(
                         CONF_MINUTES_JUST_ARRIVED,
-                        default=self.options.get(
+                        default=self.config_entry_options.get(
                             CONF_MINUTES_JUST_ARRIVED,
                             DEFAULT_MINUTES_JUST_ARRIVED
                         ),
                     ): int,
                     vol.Optional(
                         CONF_MINUTES_JUST_LEFT,
-                        default=self.options.get(
+                        default=self.config_entry_options.get(
                             CONF_MINUTES_JUST_LEFT,
                             DEFAULT_MINUTES_JUST_LEFT
                         ),
                     ): int,
                     vol.Optional(
                         CONF_SHOW_ZONE_WHEN_AWAY,
-                        default=self.options.get(
+                        default=self.config_entry_options.get(
                             CONF_SHOW_ZONE_WHEN_AWAY,
                             DEFAULT_SHOW_ZONE_WHEN_AWAY
                         ),
                     ): cv.boolean,
                     vol.Optional(
                         CONF_FRIENDLY_NAME_TEMPLATE,
-                        default=self.options.get(
+                        default=self.config_entry_options.get(
                             CONF_FRIENDLY_NAME_TEMPLATE,
                             DEFAULT_FRIENDLY_NAME_TEMPLATE
                         ),
@@ -480,9 +495,9 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
     async def _update_options(self):
         """Update config entry options."""
 
-        _LOGGER.debug("===== _update_options options = %s", self.options)
+        _LOGGER.debug("===== _update_options options = %s", self.config_entry_options)
         config_title = "Person Locations"
-        return self.async_create_entry(title=config_title, data=self.options)
+        return self.async_create_entry(title=config_title, data=self.config_entry_options)
 
     async def async_step_triggers(self, user_input=None):
         """Handle the option flow."""
@@ -508,7 +523,7 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
                 if new_device != '':
                     _LOGGER.debug("new_device  = %s", new_device)
                     new_device_state = self.hass.states.get(new_device)
-                    if new_device_state == None:
+                    if new_device_state is None:
                         self._errors[CONF_NEW_DEVICE] = "new_device_not_found"
                         valid = False
                     else:
@@ -546,14 +561,15 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
                     # if our_currently_configured_entries:
                     #     for our_current_entry in our_currently_configured_entries:
                     #         if our_current_entry.title == config_title:
+                    self.config_entry_data.update({CONF_DEVICES: updated_conf_devices})
                     our_current_entry = self.config_entry
                     changed = self.hass.config_entries.async_update_entry(
-                        our_current_entry, data={CONF_DEVICES: updated_conf_devices}
+                        our_current_entry, data=self.config_entry_data
                     )
                     _LOGGER.debug("updated CONF_DEVICES saved (changed=%s)", changed)
                     # break
 
-                if changed == True or self.options != dict(self.config_entry.options):
+                if changed or self.config_entry_options != dict(self.config_entry.options):
                     return await self._update_options()
                 else:
                     self._errors["base"] = "nothing_was_changed"

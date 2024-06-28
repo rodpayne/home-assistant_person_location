@@ -8,55 +8,54 @@ import time
 import traceback
 from datetime import datetime
 
-from .const import (
-    CONF_FRIENDLY_NAME_TEMPLATE,
-)
+import httpx
 from homeassistant.components.device_tracker.const import ATTR_SOURCE_TYPE
 from homeassistant.const import (
-    ATTR_ATTRIBUTION,
-    ATTR_GPS_ACCURACY,
-    ATTR_LATITUDE,
-    ATTR_LONGITUDE,
-    CONF_ENTITY_ID,
-    STATE_HOME,
-    STATE_NOT_HOME,
-    STATE_OFF,
-    STATE_ON,
+  ATTR_ATTRIBUTION,
+  ATTR_GPS_ACCURACY,
+  ATTR_LATITUDE,
+  ATTR_LONGITUDE,
+  CONF_ENTITY_ID,
+  STATE_HOME,
+  STATE_NOT_HOME,
+  STATE_OFF,
+  STATE_ON,
 )
 from homeassistant.exceptions import TemplateError
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.util.location import distance
-import httpx
 from jinja2 import Template
-from pywaze.route_calculator import WazeRouteCalculator,WRCError
+from pywaze.route_calculator import WazeRouteCalculator
 
 from .const import (
-    ATTR_BREAD_CRUMBS,
-    ATTR_COMPASS_BEARING,
-    ATTR_DRIVING_MILES,
-    ATTR_DRIVING_MINUTES,
-    ATTR_GEOCODED,
-    ATTR_METERS_FROM_HOME,
-    ATTR_MILES_FROM_HOME,
-    CONF_CREATE_SENSORS,
-    CONF_GOOGLE_API_KEY,
-    CONF_LANGUAGE,
-    CONF_MAPQUEST_API_KEY,
-    CONF_OSM_API_KEY,
-    CONF_REGION,
-    DEFAULT_API_KEY_NOT_SET,
-    DOMAIN,
-    FAR_AWAY_METERS,
-    INTEGRATION_LOCK,
-    INTEGRATION_NAME,
-    METERS_PER_KM,
-    METERS_PER_MILE,
-    MIN_DISTANCE_TRAVELLED_TO_GEOCODE,
-    PERSON_LOCATION_ENTITY,
-    TARGET_LOCK,
-    THROTTLE_INTERVAL,
-    WAZE_MIN_METERS_FROM_HOME,
-    ZONE_DOMAIN,
+  ATTR_BREAD_CRUMBS,
+  ATTR_COMPASS_BEARING,
+  ATTR_DRIVING_MILES,
+  ATTR_DRIVING_MINUTES,
+  ATTR_GEOCODED,
+  ATTR_METERS_FROM_HOME,
+  ATTR_MILES_FROM_HOME,
+  CONF_CREATE_SENSORS,
+  CONF_FRIENDLY_NAME_TEMPLATE,
+  CONF_GOOGLE_API_KEY,
+  CONF_LANGUAGE,
+  CONF_MAPQUEST_API_KEY,
+  CONF_OSM_API_KEY,
+  CONF_REGION,
+  DEFAULT_API_KEY_NOT_SET,
+  DOMAIN,
+  FAR_AWAY_METERS,
+  IC3_STATIONARY_ZONE,
+  INTEGRATION_LOCK,
+  INTEGRATION_NAME,
+  METERS_PER_KM,
+  METERS_PER_MILE,
+  MIN_DISTANCE_TRAVELLED_TO_GEOCODE,
+  PERSON_LOCATION_ENTITY,
+  TARGET_LOCK,
+  THROTTLE_INTERVAL,
+  WAZE_MIN_METERS_FROM_HOME,
+  ZONE_DOMAIN,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -64,7 +63,7 @@ _LOGGER = logging.getLogger(__name__)
 def is_json(myjson):
   try:
     json.loads(myjson)
-  except ValueError as e:
+  except ValueError:
     return False
   return True
 
@@ -936,7 +935,7 @@ def setup_reverse_geocode(pli):
                             reportedZone = target.attributes["zone"]
                             zoneStateObject = pli.hass.states.get(ZONE_DOMAIN + "." + reportedZone)
                             if (zoneStateObject is not None
-                                    and not reportedZone.lower().endswith("stationary")):
+                                    and IC3_STATIONARY_ZONE not in reportedZone.lower()):
                                 zoneAttributesObject \
                                     = zoneStateObject.attributes.copy()
                                 if "friendly_name" in zoneAttributesObject:
@@ -994,7 +993,7 @@ def setup_reverse_geocode(pli):
                                     "attributes": target.attributes,
                                     },
                             }
-                            _LOGGER.debug(f"friendly_name_variables = {friendly_name_variables}")
+                    #        _LOGGER.debug(f"friendly_name_variables = {friendly_name_variables}")
 
                             try:
                                 target.attributes["friendly_name"] \
