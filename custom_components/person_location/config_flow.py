@@ -1,5 +1,7 @@
 """Add config flow for Person Location."""
 
+import asyncio
+import httpx
 import logging
 import re
 
@@ -8,6 +10,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
+from homeassistant.helpers.httpx_client import get_async_client
 
 from .api import PersonLocation_aiohttp_Client
 from .const import (
@@ -45,6 +48,8 @@ from .const import (
 CONF_NEW_DEVICE = "new_device"
 CONF_NEW_NAME = "new_person_name"
 
+GET_IMAGE_TIMEOUT = 10
+
 # Platforms
 BINARY_SENSOR = "binary_sensor"
 SENSOR = "sensor"
@@ -78,11 +83,14 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             valid1 = await self._test_google_api_key(user_input[CONF_GOOGLE_API_KEY])
+            valid4 = await self._test_mapbox_api_key(
+                user_input[CONF_MAPBOX_API_KEY]
+            )
             valid2 = await self._test_mapquest_api_key(
                 user_input[CONF_MAPQUEST_API_KEY]
             )
             valid3 = await self._test_osm_api_key(user_input[CONF_OSM_API_KEY])
-            if valid1 and valid2 and valid3:
+            if valid1 and valid2 and valid3 and valid4:
                 self._user_input.update(user_input)
                 return await self.async_step_sensors()
 
@@ -151,7 +159,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             new_config_data = {**our_current_entry.data}
             new_config_data.update(self._user_input)
             changed = self.hass.config_entries.async_update_entry(
-                our_current_entry, new_config_data
+                our_current_entry, data=new_config_data
             )
             if changed:
                 # TODO: Figure out how to exit the flow gracefully:
@@ -352,6 +360,52 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 "google_api_key test exception %s: %s", type(e).__name__, str(e)
             )
         self._errors[CONF_GOOGLE_API_KEY] = "invalid_key"
+        return False
+
+    async def _test_mapbox_api_key(self, mapbox_api_key):
+        """Return true if api_key is valid."""
+
+        try:
+            if mapbox_api_key == DEFAULT_API_KEY_NOT_SET:
+                return True
+            latitude = self.hass.config.latitude
+            longitude = self.hass.config.longitude
+            url = (
+                "https://api.mapbox.com/styles/v1/mapbox/streets-v11/static/"
+                + str(longitude)
+                + ","
+                + str(latitude)
+                + ",5,0/300x200?access_token="
+                + mapbox_api_key
+            )
+
+            response = None
+            try:
+                async_client = get_async_client(self.hass)
+                response = await async_client.get(
+                    url, timeout=GET_IMAGE_TIMEOUT
+                )
+                response.raise_for_status()
+                # image = response.content
+                _LOGGER.debug("Success testing Mapbox API Access Token")
+                return True
+            except httpx.TimeoutException:
+                _LOGGER.error("Timeout testing Mapbox API Access Token")
+                self._errors[CONF_MAPBOX_API_KEY] = "invalid_key"
+                return False
+            except (httpx.RequestError, httpx.HTTPStatusError) as err:
+                _LOGGER.error("Error testing Mapbox API Access Token: %s", err)
+                self._errors[CONF_MAPBOX_API_KEY] = "invalid_key"
+                return False
+            finally:
+                if response:
+                    await response.aclose()
+        
+        except Exception as e:  # pylint: disable=broad-except
+            _LOGGER.debug(
+                "Exception testing mapbox_api_key %s: %s", type(e).__name__, str(e)
+            )
+        self._errors[CONF_MAPBOX_API_KEY] = "invalid_key"
         return False
 
     async def _test_mapquest_api_key(self, mapquest_api_key):
