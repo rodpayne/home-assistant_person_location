@@ -75,7 +75,7 @@ def setup(hass, config):
         _LOGGER.debug("[geocode_api_on] === Return ===")
 
     def handle_geocode_api_off(call):
-        """Turn off the geocode service. """
+        """Turn off the geocode service."""
 
         _LOGGER.debug("[geocode_api_off] === Start ===")
         with INTEGRATION_LOCK:
@@ -99,11 +99,14 @@ def setup(hass, config):
         )
 
         friendly_name_template_changed = (
-            (not pli.attributes['startup'])
+            (not pli.attributes["startup"])
             and ("friendly_name_template" in entry.options)
             and ("friendly_name_template" in pli.configuration)
-            and (entry.options["friendly_name_template"] != pli.configuration["friendly_name_template"])
+            and (
+                entry.options["friendly_name_template"]
+                != pli.configuration["friendly_name_template"]
             )
+        )
         pli.configuration.update(entry.data)
         pli.configuration.update(entry.options)
 
@@ -112,30 +115,31 @@ def setup(hass, config):
         await hass.async_add_executor_job(_listen_for_configured_entities)
 
         if friendly_name_template_changed:
-
             # Update the friendly_name for all enties that have been geocoded:
 
             try:
                 entity_info = hass.data[DOMAIN][DATA_ENTITY_INFO]
 
                 for sensor in entity_info:
-
                     if (
                         "geocode_count" in entity_info[sensor]
                         and entity_info[sensor]["geocode_count"] != 0
                     ):
-
                         _LOGGER.debug(f"sensor to be updated = {sensor}")
                         service_data = {
                             "entity_id": sensor,
-                            "friendly_name_template": pli.configuration[CONF_FRIENDLY_NAME_TEMPLATE],
+                            "friendly_name_template": pli.configuration[
+                                CONF_FRIENDLY_NAME_TEMPLATE
+                            ],
                             "force_update": False,
                         }
                         await pli.hass.services.async_call(
                             DOMAIN, "reverse_geocode", service_data, False
                         )
             except Exception as e:
-                _LOGGER.warning(f"Exception updating friendly name after template change - {e}")
+                _LOGGER.warning(
+                    f"Exception updating friendly name after template change - {e}"
+                )
 
         _LOGGER.debug("[_async_setup_entry] === Return ===")
         return True
@@ -144,7 +148,6 @@ def setup(hass, config):
 
     hass.services.register(DOMAIN, "geocode_api_on", handle_geocode_api_on)
     hass.services.register(DOMAIN, "geocode_api_off", handle_geocode_api_off)
-
 
     def _handle_device_tracker_state_change(
         event: Event[EventStateChangedData],
@@ -194,7 +197,6 @@ def setup(hass, config):
                     "[_listen_for_device_tracker_state_changes] _handle_device_tracker_state_change (%s)"
                     % (entity_id)
                 )
-
 
     def _listen_for_configured_entities():
         """Request notification of state changes for configured entities."""
@@ -288,30 +290,39 @@ async def async_unload_entry(hass, entry):
 
     return True
 
+
 # ------------------------------------------------------------------
+
 
 async def async_migrate_entry(hass, config_entry: ConfigEntry):
     """Migrate old configuration entry."""
-    _LOGGER.debug("Migrating configuration from version %s.%s", config_entry.version, config_entry.minor_version)
+    _LOGGER.debug(
+        "Migrating configuration from version %s.%s",
+        config_entry.version,
+        config_entry.minor_version,
+    )
 
     if config_entry.version > new_configuration_version:
-      _LOGGER.error("Component has been downgraded without restoring configuration from backup")
-      return False
+        _LOGGER.error(
+            "Component has been downgraded without restoring configuration from backup"
+        )
+        return False
 
     new_data = {**config_entry.data}
     new_options = {**config_entry.options}
 
     if config_entry.version == 1:
-
         if config_entry.minor_version < 2:
-        #    # merge "options" into "data" to simplify reconfiguration flows:
-        #    new_data = {**new_data, **new_options}
-        #    new_options = {}
+            #    # merge "options" into "data" to simplify reconfiguration flows:
+            #    new_data = {**new_data, **new_options}
+            #    new_options = {}
 
             # Add two new settings:
             if CONF_FRIENDLY_NAME_TEMPLATE not in new_options:
                 _LOGGER.debug(f"Adding { CONF_FRIENDLY_NAME_TEMPLATE }")
-                new_options[CONF_FRIENDLY_NAME_TEMPLATE] = DEFAULT_FRIENDLY_NAME_TEMPLATE
+                new_options[CONF_FRIENDLY_NAME_TEMPLATE] = (
+                    DEFAULT_FRIENDLY_NAME_TEMPLATE
+                )
             if CONF_SHOW_ZONE_WHEN_AWAY not in new_options:
                 _LOGGER.debug(f"Adding { CONF_SHOW_ZONE_WHEN_AWAY }")
                 new_options[CONF_SHOW_ZONE_WHEN_AWAY] = DEFAULT_SHOW_ZONE_WHEN_AWAY
@@ -319,14 +330,19 @@ async def async_migrate_entry(hass, config_entry: ConfigEntry):
     _LOGGER.debug(f"data={ new_data }")
     _LOGGER.debug(f"options={ new_options }")
 
-    hass.config_entries.async_update_entry(config_entry,
-                                           data=new_data,
-                                           options=new_options,
-                                           minor_version=new_configuration_minor_version,
-                                           version=new_configuration_version,
-                                           title="Person Locations",
-                                           )
+    hass.config_entries.async_update_entry(
+        config_entry,
+        data=new_data,
+        options=new_options,
+        minor_version=new_configuration_minor_version,
+        version=new_configuration_version,
+        title="Person Locations",
+    )
 
-    _LOGGER.debug("Migration to configuration version %s.%s successful", config_entry.version, config_entry.minor_version)
+    _LOGGER.debug(
+        "Migration to configuration version %s.%s successful",
+        config_entry.version,
+        config_entry.minor_version,
+    )
 
     return True

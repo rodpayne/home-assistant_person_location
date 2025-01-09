@@ -1,6 +1,5 @@
 """Add config flow for Person Location."""
 
-import asyncio
 import httpx
 import logging
 import re
@@ -68,11 +67,11 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     from .const import (
         CONF_VERSION as VERSION,
     )
-    
+
     def __init__(self):
         """Initialize config flow."""
-        self._errors = {}       # error messages for the data entry flow
-        self._user_input = {}   # validated user_input to be saved
+        self._errors = {}  # error messages for the data entry flow
+        self._user_input = {}  # validated user_input to be saved
 
     # ------------------------------------------------------------------
 
@@ -83,9 +82,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             valid1 = await self._test_google_api_key(user_input[CONF_GOOGLE_API_KEY])
-            valid4 = await self._test_mapbox_api_key(
-                user_input[CONF_MAPBOX_API_KEY]
-            )
+            valid4 = await self._test_mapbox_api_key(user_input[CONF_MAPBOX_API_KEY])
             valid2 = await self._test_mapquest_api_key(
                 user_input[CONF_MAPQUEST_API_KEY]
             )
@@ -169,13 +166,9 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_abort(reason="normal exit")
             self._errors["base"] = "nothing_was_changed"
             return await self.async_step_user()
-        return self.async_create_entry(
-            title=config_title,
-            data=self._user_input)
+        return self.async_create_entry(title=config_title, data=self._user_input)
 
-    async def _async_show_config_geocode_form(
-        self, user_input
-    ):  # pylint: disable=unused-argument
+    async def _async_show_config_geocode_form(self, user_input):  # pylint: disable=unused-argument
         """Show the configuration form for reverse geocoding."""
 
         return self.async_show_form(
@@ -236,7 +229,9 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                         self._errors[CONF_CREATE_SENSORS] = "sensor_invalid"
                         valid = False
             if valid:
-                self._user_input[CONF_OUTPUT_PLATFORM] = user_input[CONF_OUTPUT_PLATFORM]
+                self._user_input[CONF_OUTPUT_PLATFORM] = user_input[
+                    CONF_OUTPUT_PLATFORM
+                ]
                 self._user_input[CONF_CREATE_SENSORS] = create_sensors_list
 
                 return await self.async_step_triggers()
@@ -248,7 +243,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         user_input = {}
         create_sensors_list = self.integration_config_data.get(CONF_CREATE_SENSORS, "")
         _LOGGER.debug("create_sensors_list = %s", create_sensors_list)
-        user_input[CONF_CREATE_SENSORS] = ','.join(create_sensors_list)
+        user_input[CONF_CREATE_SENSORS] = ",".join(create_sensors_list)
 
         user_input[CONF_OUTPUT_PLATFORM] = self.integration_config_data.get(
             CONF_OUTPUT_PLATFORM, DEFAULT_OUTPUT_PLATFORM
@@ -256,9 +251,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
         return await self._show_config_sensors_form(user_input)
 
-    async def _show_config_sensors_form(
-        self, user_input
-    ):  # pylint: disable=unused-argument
+    async def _show_config_sensors_form(self, user_input):  # pylint: disable=unused-argument
         """Show the configuration form for sensors."""
 
         return self.async_show_form(
@@ -290,7 +283,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
             if valid:
                 self._user_input.update(user_input)
- 
+
                 # ----------------------------------------------------------------------
                 return await self._async_save__integration_config_data()
                 # ----------------------------------------------------------------------
@@ -304,9 +297,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
         return await self._show_config_triggers_form(user_input)
 
-    async def _show_config_triggers_form(
-        self, user_input
-    ):  # pylint: disable=unused-argument
+    async def _show_config_triggers_form(self, user_input):  # pylint: disable=unused-argument
         """Show the configuration form for triggers."""
 
         return self.async_show_form(
@@ -382,9 +373,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             response = None
             try:
                 async_client = get_async_client(self.hass)
-                response = await async_client.get(
-                    url, timeout=GET_IMAGE_TIMEOUT
-                )
+                response = await async_client.get(url, timeout=GET_IMAGE_TIMEOUT)
                 response.raise_for_status()
                 # image = response.content
                 _LOGGER.debug("Success testing Mapbox API Access Token")
@@ -400,7 +389,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             finally:
                 if response:
                     await response.aclose()
-        
+
         except Exception as e:  # pylint: disable=broad-except
             _LOGGER.debug(
                 "Exception testing mapbox_api_key %s: %s", type(e).__name__, str(e)
@@ -484,9 +473,9 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self, config_entry):
         """Initialize options flow."""
 
-        self._errors = {}       # error messages for the data entry flow
+        self._errors = {}  # error messages for the data entry flow
 
-        self._user_input = {}   # validated user_input to be saved
+        self._user_input = {}  # validated user_input to be saved
         self.config_entry = config_entry
         self.config_entry_data = {**config_entry.data}
         self.config_entry_options = {**config_entry.options}
@@ -507,39 +496,33 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
                     vol.Optional(
                         CONF_HOURS_EXTENDED_AWAY,
                         default=self.config_entry_options.get(
-                            CONF_HOURS_EXTENDED_AWAY,
-                            DEFAULT_HOURS_EXTENDED_AWAY
+                            CONF_HOURS_EXTENDED_AWAY, DEFAULT_HOURS_EXTENDED_AWAY
                         ),
                     ): int,
                     vol.Optional(
                         CONF_MINUTES_JUST_ARRIVED,
                         default=self.config_entry_options.get(
-                            CONF_MINUTES_JUST_ARRIVED,
-                            DEFAULT_MINUTES_JUST_ARRIVED
+                            CONF_MINUTES_JUST_ARRIVED, DEFAULT_MINUTES_JUST_ARRIVED
                         ),
                     ): int,
                     vol.Optional(
                         CONF_MINUTES_JUST_LEFT,
                         default=self.config_entry_options.get(
-                            CONF_MINUTES_JUST_LEFT,
-                            DEFAULT_MINUTES_JUST_LEFT
+                            CONF_MINUTES_JUST_LEFT, DEFAULT_MINUTES_JUST_LEFT
                         ),
                     ): int,
                     vol.Optional(
                         CONF_SHOW_ZONE_WHEN_AWAY,
                         default=self.config_entry_options.get(
-                            CONF_SHOW_ZONE_WHEN_AWAY,
-                            DEFAULT_SHOW_ZONE_WHEN_AWAY
+                            CONF_SHOW_ZONE_WHEN_AWAY, DEFAULT_SHOW_ZONE_WHEN_AWAY
                         ),
                     ): cv.boolean,
                     vol.Optional(
                         CONF_FRIENDLY_NAME_TEMPLATE,
                         default=self.config_entry_options.get(
-                            CONF_FRIENDLY_NAME_TEMPLATE,
-                            DEFAULT_FRIENDLY_NAME_TEMPLATE
+                            CONF_FRIENDLY_NAME_TEMPLATE, DEFAULT_FRIENDLY_NAME_TEMPLATE
                         ),
                     ): str,
-
                 }
             ),
             errors=self._errors,
@@ -551,17 +534,19 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
 
         _LOGGER.debug("===== _update_options options = %s", self.config_entry_options)
         config_title = "Person Locations"
-        return self.async_create_entry(title=config_title, data=self.config_entry_options)
+        return self.async_create_entry(
+            title=config_title, data=self.config_entry_options
+        )
 
     async def async_step_triggers(self, user_input=None):
         """Handle the option flow."""
 
-        self._errors = {}       # error messages for the data entry flow
+        self._errors = {}  # error messages for the data entry flow
 
         if user_input is not None:
             redisplay = False
             # remove entity from self._all_devices if not in user_input[CONF_DEVICES]
-            updated_all_devices = {} 
+            updated_all_devices = {}
             for device in self._all_devices.keys():
                 if device in user_input[CONF_DEVICES]:
                     updated_all_devices[device] = self._all_devices[device]
@@ -573,31 +558,35 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
             valid = True
             # add any new entity to self._all_devices
             new_device = user_input[CONF_NEW_DEVICE]
-            if (new_device != '') or (user_input[CONF_NEW_NAME] != ''):
-                if new_device != '':
+            if (new_device != "") or (user_input[CONF_NEW_NAME] != ""):
+                if new_device != "":
                     _LOGGER.debug("new_device  = %s", new_device)
                     new_device_state = self.hass.states.get(new_device)
                     if new_device_state is None:
                         self._errors[CONF_NEW_DEVICE] = "new_device_not_found"
                         valid = False
                     else:
-                        entity_domain = new_device.split('.')[0]
+                        entity_domain = new_device.split(".")[0]
                         if entity_domain not in VALID_ENTITY_DOMAINS:
-                            _LOGGER.debug("new_device_state.state = %s", new_device_state.state)
+                            _LOGGER.debug(
+                                "new_device_state.state = %s", new_device_state.state
+                            )
                             self._errors[CONF_NEW_DEVICE] = "new_device_wrong_domain"
-                            valid = False                
-                if user_input[CONF_NEW_DEVICE] == '':
+                            valid = False
+                if user_input[CONF_NEW_DEVICE] == "":
                     self._errors[CONF_NEW_DEVICE] = "device_and_name_required"
                     valid = False
-                if user_input[CONF_NEW_NAME] == '':
+                if user_input[CONF_NEW_NAME] == "":
                     self._errors[CONF_NEW_NAME] = "device_and_name_required"
                     valid = False
-                if valid:   # valid at this point is for CONF_NEW_DEVICE/CONF_NEW_NAME
-                    self._all_devices[new_device] = new_device + ' = ' + user_input[CONF_NEW_NAME]
+                if valid:  # valid at this point is for CONF_NEW_DEVICE/CONF_NEW_NAME
+                    self._all_devices[new_device] = (
+                        new_device + " = " + user_input[CONF_NEW_NAME]
+                    )
                     _LOGGER.debug("_all_devices = %s", self._all_devices)
-                    user_input[CONF_NEW_DEVICE] = ''
-                    user_input[CONF_NEW_NAME] = ''
-                    redisplay = True   # return to the form to add more
+                    user_input[CONF_NEW_DEVICE] = ""
+                    user_input[CONF_NEW_NAME] = ""
+                    redisplay = True  # return to the form to add more
 
             if valid and not redisplay:
                 changed = False
@@ -605,7 +594,7 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
                 _LOGGER.debug("self._all_devices = %s", self._all_devices)
                 updated_conf_devices = {}
                 for device in self._all_devices.keys():
-                    person_name = self._all_devices[device].split(' = ')[1]
+                    person_name = self._all_devices[device].split(" = ")[1]
                     updated_conf_devices[device] = person_name
                 # save CONF_DEVICES to configuration
                 if updated_conf_devices != self.integration_config_data[CONF_DEVICES]:
@@ -623,7 +612,9 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
                     _LOGGER.debug("updated CONF_DEVICES saved (changed=%s)", changed)
                     # break
 
-                if changed or self.config_entry_options != dict(self.config_entry.options):
+                if changed or self.config_entry_options != dict(
+                    self.config_entry.options
+                ):
                     return await self._update_options()
                 else:
                     self._errors["base"] = "nothing_was_changed"
@@ -633,13 +624,18 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
             self.integration_config_data = self.hass.data[DOMAIN][DATA_CONFIGURATION]
 
             user_input = {}
-            user_input[CONF_NEW_DEVICE] = ''
-            user_input[CONF_NEW_NAME] = ''
+            user_input[CONF_NEW_DEVICE] = ""
+            user_input[CONF_NEW_NAME] = ""
 
-            _LOGGER.debug("self.integration_config_data[CONF_DEVICES] = %s", self.integration_config_data[CONF_DEVICES])
+            _LOGGER.debug(
+                "self.integration_config_data[CONF_DEVICES] = %s",
+                self.integration_config_data[CONF_DEVICES],
+            )
             self._all_devices = {}
             for device in self.integration_config_data[CONF_DEVICES].keys():
-                self._all_devices[device] = device + ' = ' + self.integration_config_data[CONF_DEVICES][device]
+                self._all_devices[device] = (
+                    device + " = " + self.integration_config_data[CONF_DEVICES][device]
+                )
             _LOGGER.debug("_all_devices = %s", self._all_devices)
 
         return self.async_show_form(
@@ -650,11 +646,13 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
                         CONF_DEVICES, default=list(self._all_devices.keys())
                     ): cv.multi_select(self._all_devices),
                     vol.Optional(
-                        CONF_NEW_DEVICE, default=user_input[CONF_NEW_DEVICE],
+                        CONF_NEW_DEVICE,
+                        default=user_input[CONF_NEW_DEVICE],
                         # ): cv.entities_domain(VALID_ENTITY_DOMAINS),
                     ): str,
                     vol.Optional(
-                        CONF_NEW_NAME, default=user_input[CONF_NEW_NAME],
+                        CONF_NEW_NAME,
+                        default=user_input[CONF_NEW_NAME],
                     ): str,
                 },
             ),
