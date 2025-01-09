@@ -33,7 +33,7 @@ DOMAIN = "person_location"
 API_STATE_OBJECT = DOMAIN + "." + DOMAIN + "_integration"
 INTEGRATION_NAME = "Person Location"
 ISSUE_URL = "https://github.com/rodpayne/home-assistant_person_location/issues"
-VERSION = "2024.06.29"
+VERSION = "2025.01.08"
 
 # Constants:
 METERS_PER_KM = 1000
