@@ -34,7 +34,7 @@ jobs:
         with:
           python-version: "3.10"
       - name: Cache
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: pip-flake8
