@@ -1,4 +1,4 @@
-# Home Assistant Person Location Custom Integration[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](#hacs)
+# Home Assistant Person Location Custom Integration[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](#hacs) [![Validate](https://github.com/rodpayne/home-assistant_person_location/actions/workflows/validate.yaml/badge.svg)](https://github.com/rodpayne/home-assistant_person_location/actions/workflows/validate.yaml)
 
 ## Table of Contents
 

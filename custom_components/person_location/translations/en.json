@@ -3,7 +3,7 @@
         "step": {
             "user": {
                 "title": "(1 of 3) Person Location Geocode",
-                "description": "Reverse geocoding can be done using one (or more) of three services.  If you need help with the configuration or obtaining keys, have a look at More Details [**here**](https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#configuration-parameters).",
+                "description": "Reverse geocoding and mapping can be done using one (or more) external services.  If you need help with the configuration or obtaining keys, have a look at More Details [**here**](https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#configuration-parameters).",
                 "data": {
                     "language": "Google Language",
                     "region": "Google Region",

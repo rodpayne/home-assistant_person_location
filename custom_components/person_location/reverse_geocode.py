@@ -35,6 +35,7 @@ from .const import (
     ATTR_GEOCODED,
     ATTR_METERS_FROM_HOME,
     ATTR_MILES_FROM_HOME,
+    ATTR_SPEED,
     CONF_CREATE_SENSORS,
     CONF_FRIENDLY_NAME_TEMPLATE,
     CONF_GOOGLE_API_KEY,
@@ -476,6 +477,9 @@ def setup_reverse_geocode(pli):
                                 )
                             else:
                                 speed_during_interval = 0
+                            target.attributes[ATTR_SPEED] = round(
+                                speed_during_interval, 1
+                            )
 
                             if (
                                 "reported_state" in target.attributes
@@ -1017,9 +1021,9 @@ def setup_reverse_geocode(pli):
                                     "Error parsing friendly_name_template: %s", err
                                 )
 
-                        target.set_state()
+                            target.set_state()
 
-                        target.make_template_sensors()
+                            target.make_template_sensors()
 
                         _LOGGER.debug("TARGET_LOCK release...")
             except Exception as e:

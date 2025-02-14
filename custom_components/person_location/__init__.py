@@ -11,6 +11,8 @@ import logging
 from datetime import datetime, timedelta
 from functools import partial
 
+import homeassistant.helpers.config_validation as cv
+import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_OFF, STATE_ON
 from homeassistant.core import Event, EventStateChangedData
@@ -26,6 +28,7 @@ from .const import (
     CONF_FOLLOW_PERSON_INTEGRATION,
     CONF_FRIENDLY_NAME_TEMPLATE,
     CONF_SHOW_ZONE_WHEN_AWAY,
+    #CONFIG_SCHEMA,
     DATA_ASYNC_SETUP_ENTRY,
     DATA_CONFIG_ENTRY,
     DATA_CONFIGURATION,
@@ -54,6 +57,12 @@ def setup(hass, config):
     """Setup is called by Home Assistant to load our integration."""
 
     _LOGGER.debug("[setup] === Start ===")
+
+    #try:
+    #    config = CONFIG_SCHEMA(config)
+    #except vol.Invalid as err:
+    #    # Handle invalid configuration
+    #    _LOGGER.error("Invalid yaml configuration: %s", err)
 
     pli = PERSON_LOCATION_INTEGRATION(API_STATE_OBJECT, hass, config)
     setup_process_trigger(pli)

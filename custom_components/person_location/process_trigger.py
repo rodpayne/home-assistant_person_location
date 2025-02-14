@@ -38,6 +38,7 @@ from .const import (
     ATTR_PERSON_NAME,
     ATTR_REPORTED_STATE,
     ATTR_SOURCE,
+    ATTR_SPEED,
     ATTR_ZONE,
     CONF_FRIENDLY_NAME_TEMPLATE,
     CONF_HOURS_EXTENDED_AWAY,
@@ -199,7 +200,7 @@ def setup_process_trigger(pli):
                 - source: entity_id of the device tracker that triggered the automation
                 - reported_state: the state reported by device tracker = "Home", "Away", or <zone>
                 - bread_crumbs: the series of locations that have been seen
-                - icon: the icon that correspondes with the current zone
+                - icon: the icon that corresponds with the current zone
             - Call rest_command service to update HomeSeer: 'homeseer_<personName>_<state>'
         """
 
@@ -217,6 +218,10 @@ def setup_process_trigger(pli):
                 )
             }
             return False
+
+        ha_just_started = pli.attributes["startup"]
+        if ha_just_started:
+            _LOGGER.debug("HA just started flag is on")
 
         trigger = PERSON_LOCATION_ENTITY(entity_id, pli)
 
@@ -241,12 +246,6 @@ def setup_process_trigger(pli):
                 "(%s) Decision: skip update: gps_accuracy = %s",
                 trigger.entity_id,
                 trigger.attributes[ATTR_GPS_ACCURACY],
-            )
-        elif triggerTo in ["NotSet", STATE_UNAVAILABLE, STATE_UNKNOWN]:
-            _LOGGER.debug(
-                "(%s) Decision: skip update: triggerTo = %s",
-                trigger.entity_id,
-                triggerTo,
             )
         else:
             if ATTR_LAST_LOCATED in trigger.attributes:
@@ -291,6 +290,21 @@ def setup_process_trigger(pli):
                 target = PERSON_LOCATION_ENTITY(trigger.targetName, pli)
 
                 target.this_entity_info["trigger_count"] += 1
+
+                if triggerTo in ["NotSet", STATE_UNAVAILABLE, STATE_UNKNOWN]:
+                    _LOGGER.debug(
+                        "(%s) Decision: skip update: triggerTo = %s",
+                        trigger.entity_id,
+                        triggerTo,
+                    )
+                    if ATTR_SOURCE in target.attributes and target.attributes[ATTR_SOURCE] == trigger.entity_id:
+                        _LOGGER.debug(
+                            "(%s) Removing from target's source",
+                            trigger.entity_id,
+                        )
+                        target.attributes.pop(ATTR_SOURCE)
+                        target.set_state()
+                    return True
 
                 if ATTR_LOCATION_TIME in target.attributes:
                     old_location_time = datetime.strptime(
@@ -345,27 +359,38 @@ def setup_process_trigger(pli):
                                     trigger.entity_id,
                                 )
                             elif (
+                                ATTR_LATITUDE in trigger.attributes
+                                and ATTR_LONGITUDE in trigger.attributes
+                                and ATTR_LATITUDE not in target.attributes
+                                and ATTR_LONGITUDE not in target.attributes
+                            ):
+                                saveThisUpdate = True
+                                _LOGGER.debug(
+                                    "(%s) Decision: use source that has coordinates",
+                                    trigger.entity_id,
+                                )
+                            elif (
                                 trigger.state == target.attributes[ATTR_REPORTED_STATE]
                             ):  # same status as the one we are following?
-                                if ATTR_VERTICAL_ACCURACY in trigger.attributes:
-                                    if (
-                                        ATTR_VERTICAL_ACCURACY not in target.attributes
-                                    ) or (
-                                        trigger.attributes[ATTR_VERTICAL_ACCURACY] > 0
-                                        and target.attributes[ATTR_VERTICAL_ACCURACY]
-                                        == 0
-                                    ):  # better choice based on accuracy?
-                                        saveThisUpdate = True
-                                        _LOGGER.debug(
-                                            "(%s) Decision: vertical_accuracy is better than %s",
-                                            trigger.entity_id,
-                                            target.attributes[ATTR_SOURCE],
-                                        )
+                                #if ATTR_VERTICAL_ACCURACY in trigger.attributes:
+                                #    if (
+                                #        ATTR_VERTICAL_ACCURACY not in target.attributes
+                                #    ) or (
+                                #        trigger.attributes[ATTR_VERTICAL_ACCURACY] > 0
+                                #        and target.attributes[ATTR_VERTICAL_ACCURACY]
+                                #        == 0
+                                #    ):  # better choice based on accuracy?
+                                #        saveThisUpdate = True
+                                #        _LOGGER.debug(
+                                #            "(%s) Decision: vertical_accuracy is better than %s",
+                                #            trigger.entity_id,
+                                #            target.attributes[ATTR_SOURCE],
+                                #        )
                                 if (
                                     ATTR_GPS_ACCURACY in trigger.attributes
-                                    and ATTR_GPS_ACCURACY in target.attributes
-                                    and trigger.attributes[ATTR_GPS_ACCURACY]
-                                    < target.attributes[ATTR_GPS_ACCURACY]
+                                    and (ATTR_GPS_ACCURACY not in target.attributes
+                                    or trigger.attributes[ATTR_GPS_ACCURACY]
+                                    < target.attributes[ATTR_GPS_ACCURACY])
                                 ):  # better choice based on accuracy?
                                     saveThisUpdate = True
                                     _LOGGER.debug(
@@ -373,24 +398,22 @@ def setup_process_trigger(pli):
                                         trigger.entity_id,
                                         target.attributes[ATTR_SOURCE],
                                     )
+                            elif (
+                                ha_just_started
+                                and ATTR_LATITUDE in trigger.attributes
+                                and ATTR_LONGITUDE in trigger.attributes
+                            ):
+                                saveThisUpdate = True
+                                _LOGGER.debug(
+                                    "(%s) Decision: accept gps source that has coordinates during startup",
+                                    trigger.entity_id,
+                                )
                     else:  # source = router or ping
                         if triggerTo != triggerFrom:  # did tracker change state?
-                            if trigger.stateHomeAway == "Home":  # reporting Home
-                                if (
-                                    oldTargetState != "home"
-                                ):  # no additional information if already Home
+                            if ((trigger.stateHomeAway == "Home") != (oldTargetState == "home")):  # reporting Home
                                     saveThisUpdate = True
                                     _LOGGER.debug(
-                                        "(%s) Decision: trigger has changed state",
-                                        trigger.entity_id,
-                                    )
-                            else:  # reporting Away
-                                if (
-                                    oldTargetState == "home"
-                                ):  # no additional information if already Away
-                                    saveThisUpdate = True
-                                    _LOGGER.debug(
-                                        "(%s) Decision: trigger has changed state",
+                                        "(%s) Decision: non-GPS trigger has changed state",
                                         trigger.entity_id,
                                     )
 
@@ -403,7 +426,7 @@ def setup_process_trigger(pli):
                     )
                 else:
                     _LOGGER.debug(
-                        "(%s saveThisUpdate) -state: %s -attributes: %s",
+                        "(%s Saving This Update) -state: %s -attributes: %s",
                         trigger.entity_id,
                         trigger.state,
                         trigger.attributes,
@@ -467,13 +490,32 @@ def setup_process_trigger(pli):
                         if ATTR_ENTITY_PICTURE in target.attributes:
                             target.attributes.pop(ATTR_ENTITY_PICTURE)
 
+                    if ATTR_SPEED in trigger.attributes:
+                        target.attributes[ATTR_SPEED] = trigger.attributes[
+                            ATTR_SPEED
+                        ]
+                        _LOGGER.debug(
+                            "(%s) speed = %s",
+                            trigger.entity_id,
+                            trigger.attributes[ATTR_SPEED],
+                        )
+                    else:
+                        if ATTR_SPEED in target.attributes:
+                            target.attributes.pop(ATTR_SPEED)
+
                     target.attributes[ATTR_SOURCE] = trigger.entity_id
                     target.attributes[ATTR_REPORTED_STATE] = trigger.state
                     target.attributes[ATTR_PERSON_NAME] = string.capwords(
                         trigger.personName
                     )
+
                     target.attributes[ATTR_LOCATION_TIME] = new_location_time.strftime(
                         "%Y-%m-%d %H:%M:%S.%f"
+                    )
+                    _LOGGER.debug(
+                        "(%s) new_location_time = %s",
+                        target.entity_id,
+                        new_location_time,
                     )
 
                     # Determine the zone and the icon to be used:
@@ -505,10 +547,6 @@ def setup_process_trigger(pli):
                         reportedZone,
                         target.attributes[ATTR_ICON],
                     )
-
-                    ha_just_started = pli.attributes["startup"]
-                    if ha_just_started:
-                        _LOGGER.debug("HA just started flag is on")
 
                     if reportedZone == "home":
                         target.attributes[ATTR_LATITUDE] = pli.attributes[

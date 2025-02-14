@@ -19,7 +19,6 @@ from homeassistant.const import (
     ATTR_UNIT_OF_MEASUREMENT,
     STATE_HOME,
     STATE_NOT_HOME,
-    STATE_OFF,
     STATE_ON,
     STATE_UNKNOWN,
 )
@@ -56,7 +55,6 @@ ATTR_DIRECTION = "direction"
 ATTR_DRIVING_MILES = "driving_miles"
 ATTR_DRIVING_MINUTES = "driving_minutes"
 ATTR_GEOCODED = "geocoded"
-ATTR_ICON = "icon"
 ATTR_LAST_LOCATED = "last_located"
 ATTR_LOCATION_TIME = "location_time"
 ATTR_METERS_FROM_HOME = "meters_from_home"
@@ -64,6 +62,7 @@ ATTR_MILES_FROM_HOME = "miles_from_home"
 ATTR_PERSON_NAME = "person_name"
 ATTR_REPORTED_STATE = "reported_state"
 ATTR_SOURCE = "source"
+ATTR_SPEED = "speed"
 ATTR_ZONE = "zone"
 
 # Configuration Version:
@@ -191,7 +190,7 @@ CONFIG_SCHEMA = vol.Schema(
             }
         ),
     },
-    #    extra=vol.ALLOW_EXTRA,
+    extra=vol.ALLOW_EXTRA,
 )
 
 # Items under hass.data[DOMAIN]:
@@ -380,7 +379,7 @@ class PERSON_LOCATION_INTEGRATION:
 
         # self.hass.states.set(self.entity_id, self.state, self.attributes)
         simple_attributes = {
-            "icon": self.attributes["icon"],
+            ATTR_ICON: self.attributes[ATTR_ICON],
         }
         self.hass.states.set(self.entity_id, self.state, simple_attributes)
 
@@ -443,7 +442,7 @@ class PERSON_LOCATION_ENTITY:
             self.friendlyName = ""
             _LOGGER.debug("friendly_name attribute is missing")
 
-        if self.state.lower() == "home" or self.state.lower() == "on":
+        if self.state.lower() == STATE_HOME or self.state.lower() == STATE_ON:
             self.stateHomeAway = "Home"
             self.state = "Home"
         else:
