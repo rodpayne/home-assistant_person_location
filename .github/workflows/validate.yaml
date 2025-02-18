@@ -6,6 +6,29 @@ on:
   workflow_dispatch:
 
 jobs:
+  validate_version:
+    name: Validate version consistency
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check version consistency
+        run: |
+          # Extract version from manifest.json
+          MANIFEST_VERSION=$(jq -r '.version' custom_components/person_location/manifest.json)
+          
+          # Extract version from const.py
+          CONST_VERSION=$(grep 'VERSION = ' custom_components/person_location/const.py | head -n 1 | cut -d'"' -f2)
+          
+          # Compare versions
+          if [ "$MANIFEST_VERSION" != "$CONST_VERSION" ]; then
+            echo "Version mismatch!"
+            echo "manifest.json version: $MANIFEST_VERSION"
+            echo "consty.py version: $CONST_VERSION"
+            exit 1
+          fi
+          
+          echo "Versions match: $MANIFEST_VERSION"
   validate_hacs:
     name: HACS
     runs-on: ubuntu-latest
