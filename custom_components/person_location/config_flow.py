@@ -26,6 +26,7 @@ from .const import (
     CONF_MINUTES_JUST_LEFT,
     CONF_OSM_API_KEY,
     CONF_OUTPUT_PLATFORM,
+    CONF_RADAR_API_KEY,
     CONF_REGION,
     CONF_SHOW_ZONE_WHEN_AWAY,
     DATA_CONFIGURATION,
@@ -87,7 +88,8 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 user_input[CONF_MAPQUEST_API_KEY]
             )
             valid3 = await self._test_osm_api_key(user_input[CONF_OSM_API_KEY])
-            if valid1 and valid2 and valid3 and valid4:
+            valid5 = await self._test_radar_api_key(user_input[CONF_RADAR_API_KEY])
+            if valid1 and valid2 and valid3 and valid4 and valid5:
                 self._user_input.update(user_input)
                 return await self.async_step_sensors()
 
@@ -108,6 +110,9 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         )
         user_input[CONF_OSM_API_KEY] = self.integration_config_data.get(
             CONF_OSM_API_KEY, DEFAULT_API_KEY_NOT_SET
+        )
+        user_input[CONF_RADAR_API_KEY] = self.integration_config_data.get(
+            CONF_RADAR_API_KEY, DEFAULT_API_KEY_NOT_SET
         )
         user_input[CONF_REGION] = self.integration_config_data.get(
             CONF_REGION, DEFAULT_REGION
@@ -190,6 +195,9 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     ): str,
                     vol.Optional(
                         CONF_OSM_API_KEY, default=user_input[CONF_OSM_API_KEY]
+                    ): str,
+                    vol.Optional(
+                        CONF_RADAR_API_KEY, default=user_input[CONF_RADAR_API_KEY]
                     ): str,
                 }
             ),
@@ -452,6 +460,53 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             _LOGGER.debug("osm_api_key test exception %s: %s", type(e).__name__, str(e))
 
         self._errors[CONF_OSM_API_KEY] = "invalid_email"
+        return False
+
+    async def _test_radar_api_key(self, radar_api_key):
+        """Return true if api_key is valid."""
+
+        try:
+            if radar_api_key == DEFAULT_API_KEY_NOT_SET:
+                return True
+            latitude = self.hass.config.latitude
+            longitude = self.hass.config.longitude
+            url = (
+                "https://api.radar.io/v1/geocode/reverse?coordinates="
+                + str(latitude)
+                + ","
+                + str(longitude)
+            )
+            headers = {
+                'Authorization': radar_api_key,
+                'Content-Type': 'application/json'
+            }
+
+
+            response = None
+            try:
+                async_client = get_async_client(self.hass)
+                response = await async_client.get(url, timeout=GET_IMAGE_TIMEOUT, headers=headers)
+                response.raise_for_status()
+                # image = response.content
+                _LOGGER.debug("Success testing Radar API Access Token")
+                return True
+            except httpx.TimeoutException:
+                _LOGGER.error("Timeout testing Radar API Access Token")
+                self._errors[CONF_RADAR_API_KEY] = "invalid_key"
+                return False
+            except (httpx.RequestError, httpx.HTTPStatusError) as err:
+                _LOGGER.error("Error testing Radar API Access Token: %s", err)
+                self._errors[CONF_RADAR_API_KEY] = "invalid_key"
+                return False
+            finally:
+                if response:
+                    await response.aclose()
+
+        except Exception as e:  # pylint: disable=broad-except
+            _LOGGER.debug(
+                "Exception testing radar_api_key %s: %s", type(e).__name__, str(e)
+            )
+        self._errors[CONF_RADAR_API_KEY] = "invalid_key"
         return False
 
     # ------------------------------------------------------------------

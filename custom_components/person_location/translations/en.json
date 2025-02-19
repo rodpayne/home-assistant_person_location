@@ -10,7 +10,8 @@
                     "google_api_key": "Google API Key",
                     "mapbox_api_key": "Mapbox Access Token",
                     "mapquest_api_key": "MapQuest API Key",
-                    "osm_api_key": "OSM API Key (your eMail Address)"
+                    "osm_api_key": "OSM API Key (your eMail Address)",
+                    "radar_api_key": "Radar API Key (publishable)"
                 }
             },
             "sensors": {

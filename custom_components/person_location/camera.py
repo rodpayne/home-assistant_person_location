@@ -28,6 +28,7 @@ from .const import (
     CONF_MAPBOX_API_KEY,
     CONF_MAPQUEST_API_KEY,
     CONF_OSM_API_KEY,
+    CONF_RADAR_API_KEY,
     DATA_CONFIGURATION,
     DOMAIN,
 )
@@ -90,12 +91,14 @@ class PersonLocationCamera(Camera):
             CONF_MAPQUEST_API_KEY
         ]
         osm_api_key = self.hass.data[DOMAIN][DATA_CONFIGURATION][CONF_OSM_API_KEY]
+        radar_api_key = self.hass.data[DOMAIN][DATA_CONFIGURATION][CONF_RADAR_API_KEY]
         self._template_variables = {
             "parse_result": False,
             "google_api_key": google_api_key,
             "mapbox_api_key": mapbox_api_key,
             "mapquest_api_key": mapquest_api_key,
             "osm_api_key": osm_api_key,
+            "radar_api_key": radar_api_key,
         }
 
         self._entities = list(self._extract_entities(self._still_image_url))

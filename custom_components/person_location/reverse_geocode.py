@@ -42,6 +42,7 @@ from .const import (
     CONF_LANGUAGE,
     CONF_MAPQUEST_API_KEY,
     CONF_OSM_API_KEY,
+    CONF_RADAR_API_KEY,
     CONF_REGION,
     DEFAULT_API_KEY_NOT_SET,
     DOMAIN,
@@ -533,6 +534,89 @@ def setup_reverse_geocode(pli):
                                 "(" + entity_id + ") direction = " + direction
                             )
                             target.attributes["direction"] = direction
+
+                            if (
+                                pli.configuration[CONF_RADAR_API_KEY]
+                                != DEFAULT_API_KEY_NOT_SET
+                            ):
+                                """Call the Radar API if CONF_RADAR_API_KEY is configured"""
+                                radar_url = (
+                                    "https://api.radar.io/v1/geocode/reverse?coordinates="
+                                    + str(new_latitude)
+                                    + ","
+                                    + str(new_longitude)
+                                    + '&layer=address'
+                                )
+                                headers = {
+                                    'Authorization': pli.configuration[CONF_RADAR_API_KEY],
+                                    'Content-Type': 'application/json'
+                                }
+
+                                radar_decoded = {}
+                                radar_response = httpx.get(radar_url, headers=headers)
+                                radar_json_input = radar_response.text
+                                radar_decoded = json.loads(radar_json_input)
+
+                                if "city" in radar_decoded["addresses"][0]:
+                                    locality = radar_decoded["addresses"][0]["city"]
+                                elif "town" in radar_decoded["addresses"][0]:
+                                    locality = radar_decoded["addresses"][0]["town"]
+                                elif "villiage" in radar_decoded["addresses"][0]:
+                                    locality = radar_decoded["addresses"][0]["village"]
+                                elif "municipality" in radar_decoded["addresses"][0]:
+                                    locality = radar_decoded["addresses"][0]["municipality"]
+                                elif "county" in radar_decoded["addresses"][0]:
+                                    locality = radar_decoded["addresses"][0]["county"]
+                                elif "state" in radar_decoded["addresses"][0]:
+                                    locality = radar_decoded["addresses"][0]["state"]
+                                elif "country" in radar_decoded["addresses"][0]:
+                                    locality = radar_decoded["addresses"][0]["country"]
+                                _LOGGER.debug(
+                                    "(" + entity_id + ") Radar locality = " + locality
+                                )
+
+                                if "formattedAddress" in radar_decoded["addresses"][0]:
+                                    formatted_address = radar_decoded["addresses"][0]["formattedAddress"]
+                                elif "addressLabel" in radar_decoded["addresses"][0]:
+                                    formatted_address = radar_decoded["addresses"][0]["addressLabel"]
+                                else:
+                                    formatted_address = locality
+                                _LOGGER.debug(
+                                    "("
+                                    + entity_id
+                                    + ") RADAR formatted_address = "
+                                    + formatted_address
+                                )
+
+                                target.attributes["Radar"] = formatted_address
+
+                                radar_attribution = '"Powered by Radar"'
+                                target.attributes[ATTR_ATTRIBUTION] += (
+                                    radar_attribution + "; "
+                                )
+
+                                if (
+                                    ATTR_GEOCODED
+                                    in pli.configuration[CONF_CREATE_SENSORS]
+                                ):
+                                    target.make_template_sensor(
+                                        "Radar",
+                                        [
+                                            {ATTR_COMPASS_BEARING: compass_bearing},
+                                            ATTR_LATITUDE,
+                                            ATTR_LONGITUDE,
+                                            ATTR_SOURCE_TYPE,
+                                            ATTR_GPS_ACCURACY,
+                                            "icon",
+                                            {"locality": locality},
+                                            {
+                                                "location_time": new_location_time.strftime(
+                                                    "%Y-%m-%d %H:%M:%S"
+                                                )
+                                            },
+                                            {ATTR_ATTRIBUTION: radar_attribution},
+                                        ],
+                                    )
 
                             if (
                                 pli.configuration[CONF_OSM_API_KEY]

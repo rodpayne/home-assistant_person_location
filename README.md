@@ -72,7 +72,7 @@ When a person is detected as moving between `Home` and `Away`, instead of going 
 If `CONF_SHOW_ZONE_WHEN_AWAY`, then `<Zone>` is reported instead of `Away`.                
 
 ### **Reverse geocode the location and make distance calculations**
-The custom integration supplies a service to reverse geocode the location (making it human readable) using `Open Street Map`, `MapQuest`, or `Google Maps` and calculate the distance from home (miles and minutes) using `WazeRouteCalculator`.  
+The custom integration supplies a service to reverse geocode the location (making it human readable) using `Open Street Map`, `MapQuest`, `Google Maps`, and/or `Radar` and calculate the distance from home (miles and minutes) using `WazeRouteCalculator`.  
 
 ## Components
 
@@ -85,6 +85,7 @@ This folder contains the files that make up the Person Location custom integrati
 * [Open Street Map Geocoding](#open-street-map-geocoding)
 * [Google Maps Geocoding](#google-maps-geocoding)
 * [MapQuest Geocoding](#mapquest-geocoding)
+* [Radar Geocoding](#radar-geocoding)
 
 #### **Calculated Location Attributes**
 By default, the custom integration will set the following attribute names in the sensor.
@@ -133,6 +134,17 @@ The MapQuest Reverse Geocoding feature sets the following attribute names in the
 | friendly_name: | Rod (Rod's iPhone) is in Los Angeles | formatted location to be displayed for sensor |
 
 *Attribution:* © 2021 MapQuest, Inc.
+
+#### **Radar Geocoding**
+The Radar Geocoding feature sets the following attribute names in the sensor.
+
+| Attribute Name            | Example | Description |
+| :------------------------ | :------ | :---------- |
+| Radar: | 1313 Mockingbird Ln, Los Angeles, CA 90038, US | `formatted_address` from Radar reverse geocoding API |
+| friendly_name: | Rod (Rod's iPhone) is in Los Angeles | formatted location to be displayed for sensor |
+
+*Attribution:* powered by Radar
+
 </details>
 
 ### **File: automation_folder/person_location_detection.yaml**
@@ -274,6 +286,7 @@ The configuration can be updated in either the `Settings > Devices & services` G
 | Minutes Just Left<sup>*</sup> | `just_left`      | Yes | Number of **minutes** before changing `Just Left` into `Away`. Set to `0` to not use `Just Left` state. | `3`
 | OSM API Key (your eMail Address) | `osm_api_key`    | Yes | Contact email address to be used by the Open Street Map API. | Do not do the OSM reverse geocoding.
 | Platform for output sensor | `platform`       | Yes | Platform used for the person location "sensor". (Experimental.) | `sensor` as in `sensor.<name>_location`.
+| Radar API Key (publishable) | `radar_api_key`    | Yes | Publishable client API key obtained from the [Radar.com site](https://radar.com). | Do not do the Radar reverse geocoding.
 | Sensors to be created | `create_sensors`  | Yes | List of attributes for which individual sensors are to be created so that template sensors do not need to be configured.  Choose from this list: `altitude`, `bread_crumbs`, `direction`, `driving_miles`, `driving_minutes`, `geocoded`, `latitude`, `longitude`, `meters_from_home`, `miles_from_home`. | None
 | Show zone when away?<sup>*</sup> | `show_zone_when_away` | Yes | Show the state as the zone name when it is available, rather than just `Away`.| False |
 | Person Location Triggers<sup>*</sup> | `person_names` | Yes | List of person names and devices to be followed.  (See example in More Details.) | None
@@ -327,6 +340,14 @@ To activate the custom integration with the MapQuest Reverse Geocode feature, ad
 person_location:
     mapquest_api_key: !secret mapquest_api_key
 ```
+#### **Radar Geocoding Configuration**
+To activate the custom integration with the Radar reverse geocode feature, add a Radar API Key to `<config>/configuration.yaml`. A Radar API Key can be obtained from the [Radar.com site](https://radar.com). Use the Live Publishable (client) API key.
+```yaml
+# Example configuration.yaml entry
+person_location:
+    radar_api_key: !secret radar_api_key
+```
+
 
 #### **Friendly Name Template Variables**
 | Example Variable | Description | Sample |
@@ -657,7 +678,65 @@ camera:
         show_state: true
 ```
 </details>
- 
+
+#### **Radar**
+
+See https://radar.com/documentation/maps/static-maps for help.
+
+![camera.combined_location_radar](docs/images/camera.combined_location_radar.png)
+<details>
+  <summary>Click for Configuration Details</summary>
+
+```yaml
+# Example configuration.yaml entry
+
+camera:
+  - name: combined_location_radar
+    platform: person_location
+    still_image_url: >-
+      {%- set home_longitude = state_attr('zone.home', 'longitude') -%}
+      {%- set home_latitude = state_attr('zone.home', 'latitude') -%}
+      {%- set sec_entity = 'sensor.rod_location' -%}
+      {%- set sec_pin = 'r' -%}
+      {%- set sec_longitude = state_attr(sec_entity, 'longitude') |float(0) -%}
+      {%- set sec_latitude = state_attr(sec_entity, 'latitude') |float(0) -%}
+      {%- if (sec_longitude == 0.0) or (sec_latitude == 0.0) -%}
+        {%- set sec_longitude = home_longitude -%}
+        {%- set sec_latitude = home_latitude -%}
+      {%- endif -%}
+      {%- set pri_entity = 'sensor.pam_location' -%}
+      {%- set pri_pin = 'p' -%}
+      {%- set pri_longitude = state_attr(pri_entity, 'longitude') |float(0) -%}
+      {%- set pri_latitude = state_attr(pri_entity, 'latitude') |float(0) -%}
+      {%- if (pri_longitude == 0.0) or (pri_latitude == 0.0) -%}
+        {%- set pri_longitude = home_longitude -%}
+        {%- set pri_latitude = state_attr('zone.home', 'latitude') -%}
+      {%- endif -%}
+      {%- set style = 'radar-default-v1' -%}
+      https://api.radar.io/maps/static?width=400&height=400&style={{style}}&markers=size:small|{{home_latitude}},{{home_longitude}}|{{sec_latitude}},{{sec_longitude}}|{{pri_latitude}},{{pri_longitude}}&publishableKey={{radar_api_key}}
+    state: >-
+      {%- set pri_entity_direction = state_attr('sensor.pam_location', 'direction') -%}
+      {%- set sec_entity_direction = state_attr('sensor.rod_location', 'direction') -%}
+      {%- set combined_state = 'stationary' -%}
+      {%- if pri_entity_direction is not none and pri_entity_direction not in ['stationary', 'unknown', 'home'] -%}
+        {%- set combined_state = 'motion_detected' -%}
+      {%- elif sec_entity_direction is not none and sec_entity_direction not in ['stationary', 'unknown', 'home'] -%}
+        {%- set combined_state = 'motion_detected' -%}
+      {%- endif -%}
+      {{ combined_state }}
+```
+```yaml
+# Example ui-lovelace.yaml
+
+    cards:
+      - type: picture-entity
+        entity: camera.combined_location_radar
+        name: Radar
+        show_state: true
+        show_name: true
+```
+</details>
+
 #### **Map Card**
 
 The map card requires no knowledge of the mapping API's but is limited in how much it can be customized.

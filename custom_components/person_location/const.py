@@ -105,6 +105,7 @@ CONF_MAPBOX_API_KEY = "mapbox_api_key"
 CONF_MAPQUEST_API_KEY = "mapquest_api_key"
 CONF_NAME = "name"
 CONF_OSM_API_KEY = "osm_api_key"
+CONF_RADAR_API_KEY = "radar_api_key"
 DEFAULT_API_KEY_NOT_SET = "not used"
 
 CONF_CREATE_SENSORS = "create_sensors"
@@ -182,6 +183,9 @@ CONFIG_SCHEMA = vol.Schema(
                 ): cv.string,
                 vol.Optional(
                     CONF_GOOGLE_API_KEY, default=DEFAULT_API_KEY_NOT_SET
+                ): cv.string,
+                vol.Optional(
+                    CONF_RADAR_API_KEY, default=DEFAULT_API_KEY_NOT_SET
                 ): cv.string,
                 vol.Optional(CONF_FOLLOW_PERSON_INTEGRATION, default=False): cv.boolean,
                 vol.Optional(CONF_PERSON_NAMES, default=[]): vol.All(
@@ -285,6 +289,9 @@ class PERSON_LOCATION_INTEGRATION:
             self.configuration[CONF_OSM_API_KEY] = self.config[DOMAIN].get(
                 CONF_OSM_API_KEY, DEFAULT_API_KEY_NOT_SET
             )
+            self.configuration[CONF_RADAR_API_KEY] = self.config[DOMAIN].get(
+                CONF_RADAR_API_KEY, DEFAULT_API_KEY_NOT_SET
+            )
             self.configuration[CONF_SHOW_ZONE_WHEN_AWAY] = self.config[DOMAIN].get(
                 CONF_SHOW_ZONE_WHEN_AWAY, DEFAULT_SHOW_ZONE_WHEN_AWAY
             )
@@ -356,6 +363,7 @@ class PERSON_LOCATION_INTEGRATION:
             self.configuration[CONF_OUTPUT_PLATFORM] = DEFAULT_OUTPUT_PLATFORM
             self.configuration[CONF_MAPQUEST_API_KEY] = DEFAULT_API_KEY_NOT_SET
             self.configuration[CONF_OSM_API_KEY] = DEFAULT_API_KEY_NOT_SET
+            self.configuration[CONF_RADAR_API_KEY] = DEFAULT_API_KEY_NOT_SET
             self.configuration[CONF_REGION] = DEFAULT_REGION
             self.configuration[CONF_WAZE_REGION] = DEFAULT_REGION
             self.configuration[CONF_USE_WAZE] = True
