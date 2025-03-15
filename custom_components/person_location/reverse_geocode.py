@@ -47,7 +47,7 @@ from .const import (
     DEFAULT_API_KEY_NOT_SET,
     DOMAIN,
     FAR_AWAY_METERS,
-    IC3_STATIONARY_ZONE,
+    IC3_STATIONARY_ZONE_PREFIX,
     INTEGRATION_LOCK,
     INTEGRATION_NAME,
     METERS_PER_KM,
@@ -1021,7 +1021,8 @@ def setup_reverse_geocode(pli):
                             )
                             if (
                                 zoneStateObject is not None
-                                and IC3_STATIONARY_ZONE not in reportedZone.lower()
+                                    and 
+                                not reportedZone.startswith(IC3_STATIONARY_ZONE_PREFIX)
                             ):
                                 zoneAttributesObject = zoneStateObject.attributes.copy()
                                 if "friendly_name" in zoneAttributesObject:

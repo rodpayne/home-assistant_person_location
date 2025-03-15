@@ -32,12 +32,13 @@ DOMAIN = "person_location"
 API_STATE_OBJECT = DOMAIN + "." + DOMAIN + "_integration"
 INTEGRATION_NAME = "Person Location"
 ISSUE_URL = "https://github.com/rodpayne/home-assistant_person_location/issues"
-VERSION = "2025.02.18"
+VERSION = "2025.03.15"
 
 # Constants:
 METERS_PER_KM = 1000
 METERS_PER_MILE = 1609.34
-IC3_STATIONARY_ZONE = "statzon"
+IC3_STATIONARY_STATE_PREFIX = "StatZon"
+IC3_STATIONARY_ZONE_PREFIX = "ic3_stationary_"
 
 # Fixed parameters:
 MIN_DISTANCE_TRAVELLED_TO_GEOCODE = 5
@@ -417,7 +418,8 @@ class PERSON_LOCATION_ENTITY:
         targetStateObject = self.hass.states.get(self.entity_id)
         if targetStateObject is not None:
             self.firstTime = False
-            if (IC3_STATIONARY_ZONE in targetStateObject.state.lower()) or (
+            if (targetStateObject.state.startswith(IC3_STATIONARY_STATE_PREFIX) 
+                    or 
                 targetStateObject.state == STATE_NOT_HOME
             ):
                 self.state = "Away"

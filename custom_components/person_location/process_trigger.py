@@ -46,7 +46,7 @@ from .const import (
     CONF_MINUTES_JUST_LEFT,
     CONF_SHOW_ZONE_WHEN_AWAY,
     DOMAIN,
-    IC3_STATIONARY_ZONE,
+    IC3_STATIONARY_ZONE_PREFIX,
     PERSON_LOCATION_ENTITY,
     TARGET_LOCK,
     VERSION,
@@ -123,7 +123,8 @@ def setup_process_trigger(pli):
                         )
                         if (
                             zoneStateObject is None
-                            or IC3_STATIONARY_ZONE in reportedZone.lower()
+                                or 
+                            reportedZone.startswith(IC3_STATIONARY_ZONE_PREFIX)
                         ):
                             _LOGGER.debug(
                                 f"Skipping use of zone {reportedZone} for Away state"
@@ -532,7 +533,8 @@ def setup_process_trigger(pli):
                     icon = "mdi:help-circle"
                     if (
                         zoneStateObject is not None
-                        and IC3_STATIONARY_ZONE not in reportedZone.lower()
+                            and 
+                        not reportedZone.startswith(IC3_STATIONARY_ZONE_PREFIX)
                     ):
                         zoneAttributesObject = zoneStateObject.attributes.copy()
                         if ATTR_ICON in zoneAttributesObject:
@@ -638,7 +640,8 @@ def setup_process_trigger(pli):
                         # Get the state from the zone friendly_name:
                         if (
                             zoneStateObject is None
-                            or IC3_STATIONARY_ZONE in reportedZone.lower()
+                                or 
+                            reportedZone.startswith(IC3_STATIONARY_ZONE_PREFIX)
                         ):
                             # Skip stray zone names:
                             pass
