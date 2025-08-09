@@ -1,4 +1,11 @@
-# Home Assistant Person Location Custom Integration[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](#hacs) [![Validate](https://github.com/rodpayne/home-assistant_person_location/actions/workflows/validate.yaml/badge.svg)](https://github.com/rodpayne/home-assistant_person_location/actions/workflows/validate.yaml)
+# Home Assistant Person Location Custom Integration
+
+![HACS Default](https://img.shields.io/badge/HACS-Default%20Repository-blue?style=for-the-badge&logo=home-assistant)
+![Version](https://img.shields.io/github/v/release/rodpayne/home-assistant_person_location?style=for-the-badge)
+![Stars](https://img.shields.io/github/stars/rodpayne/home-assistant_person_location?style=for-the-badge)
+![Open Issues](https://img.shields.io/github/issues/rodpayne/home-assistant_person_location?style=for-the-badge)
+![Last Commit](https://img.shields.io/github/last-commit/rodpayne/home-assistant_person_location?style=for-the-badge)
+[![Validate](https://img.shields.io/github/actions/workflow/status/rodpayne/home-assistant_person_location/validate.yaml?label=Validate&style=for-the-badge)](https://github.com/rodpayne/home-assistant_person_location/actions/workflows/validate.yaml)
 
 ## Table of Contents
 
@@ -12,7 +19,7 @@
   * [Service: person_location/process_trigger](#service-person_locationprocess_trigger)
   * [Service: person_location/reverse_geocode](#service-person_locationreverse_geocode)
 * [Installation](#installation)   
-  * [HACS](#hacs) 
+  * [Installation via HACS](#installation-via-hacs) 
   * [Manual installation hints](#manual-installation-hints) 
   * [Configuration parameters](#configuration-parameters) 
   * [Map Configuration Examples (Optional)](#map-configuration-examples-optional)
@@ -241,21 +248,27 @@ Input:
 
 ## Installation
 
-### **HACS**
+### **Installation via HACS**
 
-This integration can be added to [HACS](https://hacs.xyz/) as a custom (non-default) repository.
+This integration is available directly through the [Home Assistant Community Store (HACS)](https://hacs.xyz/), making installation quick and easy.
 
-Assuming you have already [installed](https://hacs.xyz/docs/installation/prerequisites) and configured HACS, follow these steps:
+#### 🧰 Prerequisites
 
-1. Navigate to the HACS integrations page at `http://<your-home-assistant>:8123/hacs/integrations`.
-2. Click the 3 vertical dots menu in the top right corner.
-3. Choose "Custom repositories"
-4. Enter repository URL (`https://github.com/rodpayne/home-assistant_person_location/`) in the text field in the dialog.
-5. Choose "Integration" from the Category list in the dialog.
-6. Click "Add". The repository will now be added to your HACS.
-7. Click the "x" to close the dialog.
-8. The integration is now visible. Click "Install", and click "Install" again.
-9. Ready! Now continue with the configuration.
+- Home Assistant installed and running
+- HACS properly set up in your Home Assistant instance
+
+#### 🚀 Installation Steps
+
+1. In your Home Assistant UI, open **HACS**.
+2. Navigate to the **"Integrations"** tab.
+3. Click the **"+" (Add Integration)** button in the lower-right corner.
+4. Search for **`Person Location`**.
+5. Select the integration and click **Install**.
+6. Once installed, **restart Home Assistant** to activate the integration.
+
+#### 🛠️ Configuration
+
+After restarting, follow the integration setup instructions in the UI or refer to the [Configuration Parameters](#configuration-parameters) section for configuration details.
 
 ### **Manual Installation Hints**
 1. Copy folder `custom_components/person_location` and its contents under your `<config>` directory.
