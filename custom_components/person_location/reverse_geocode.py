@@ -561,7 +561,7 @@ def setup_reverse_geocode(pli):
                                     locality = radar_decoded["addresses"][0]["city"]
                                 elif "town" in radar_decoded["addresses"][0]:
                                     locality = radar_decoded["addresses"][0]["town"]
-                                elif "villiage" in radar_decoded["addresses"][0]:
+                                elif "village" in radar_decoded["addresses"][0]:
                                     locality = radar_decoded["addresses"][0]["village"]
                                 elif "municipality" in radar_decoded["addresses"][0]:
                                     locality = radar_decoded["addresses"][0]["municipality"]
@@ -1124,3 +1124,4 @@ def setup_reverse_geocode(pli):
 
     pli.hass.services.register(DOMAIN, "reverse_geocode", handle_reverse_geocode)
     return True
+
