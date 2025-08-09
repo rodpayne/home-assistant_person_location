@@ -259,16 +259,18 @@ This integration is available directly through the [Home Assistant Community Sto
 
 #### 🚀 Installation Steps
 
-1. In your Home Assistant UI, open **HACS**.
-2. Navigate to the **"Integrations"** tab.
-3. Click the **"+" (Add Integration)** button in the lower-right corner.
-4. Search for **`Person Location`**.
-5. Select the integration and click **Install**.
-6. Once installed, **restart Home Assistant** to activate the integration.
+1. Open **HACS** from the Home Assistant sidebar.
+2. Use the search bar to find **`Person Location Reverse Geocode`**.
+3. Click the repository, then click **Download**.
+4. Confirm the version choice by clicking **Download**.
+5. After download completes, **restart Home Assistant**.
 
 #### 🛠️ Configuration
 
-After restarting, follow the integration setup instructions in the UI or refer to the [Configuration Parameters](#configuration-parameters) section for configuration details.
+1. After restarting, go to **Settings > Devices & Services**.
+2. Click **Add Integration**.
+3. Search for brand **`Person Location`** and click **`Person Location`**.
+4. Follow the setup flow, referring to the [Configuration Parameters](#configuration-parameters) section for configuration details.
 
 ### **Manual Installation Hints**
 1. Copy folder `custom_components/person_location` and its contents under your `<config>` directory.
@@ -283,7 +285,7 @@ After restarting, follow the integration setup instructions in the UI or refer t
 
 ### **Configuration Parameters**
 
-The configuration can be updated in either the `Settings > Devices & services` GUI, or by adding parameters to `configutation.yaml`. To avoid confusion and prevent unexpected results, choose to use one or the other, not both.
+The configuration can be updated in either the `Settings > Devices & services` GUI or by adding parameters to `configutation.yaml`. To avoid confusion and prevent unexpected results, choose to use one or the other, not both.
 
 | GUI Parameter | YAML Parameter | Optional | Description | Default |
 | :------------ | :------------- | :------: | :---------- | :------ |
