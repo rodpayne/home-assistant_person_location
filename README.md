@@ -37,7 +37,7 @@ The process for deciding which triggered device trackers to pay attention to is 
   * Skip
 * `Trigger` state is `NotSet`:
   * Skip
-* `Trigger` location time is before `target` location time (previous update):
+* `Trigger` location time is before `target` location time (stale update):
   * Skip
 * First `trigger` for the `target`:
   * Accept
@@ -314,6 +314,7 @@ In this example, `sensor.rod_location` will reflect changes detected in three de
 * [Open Street Map Geocoding Configuration](#open-street-map-geocoding-configuration)
 * [Google Maps Geocoding Configuration](#google-maps-geocoding-configuration)
 * [MapQuest Geocoding Configuration](#mapquest-geocoding-configuration)
+* [Radar Geocoding Configuration](#radar-geocoding-configuration)
 * [A note about iCloud3](#a-note-about-icloud3)
 
 #### **Open Street Map Geocoding Configuration**
