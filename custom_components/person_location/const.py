@@ -32,7 +32,7 @@ DOMAIN = "person_location"
 API_STATE_OBJECT = DOMAIN + "." + DOMAIN + "_integration"
 INTEGRATION_NAME = "Person Location"
 ISSUE_URL = "https://github.com/rodpayne/home-assistant_person_location/issues"
-VERSION = "2025.08.09"
+VERSION = "2025.08.22"
 
 # Constants:
 METERS_PER_KM = 1000
@@ -158,13 +158,13 @@ CONFIG_SCHEMA = vol.Schema(
                 ),
                 vol.Optional(
                     CONF_HOURS_EXTENDED_AWAY, default=DEFAULT_HOURS_EXTENDED_AWAY
-                ): cv.string,
+                ): cv.positive_int,
                 vol.Optional(
                     CONF_MINUTES_JUST_ARRIVED, default=DEFAULT_MINUTES_JUST_ARRIVED
-                ): cv.string,
+                ): cv.positive_int,
                 vol.Optional(
                     CONF_MINUTES_JUST_LEFT, default=DEFAULT_MINUTES_JUST_LEFT
-                ): cv.string,
+                ): cv.positive_int,
                 vol.Optional(
                     CONF_SHOW_ZONE_WHEN_AWAY, default=DEFAULT_SHOW_ZONE_WHEN_AWAY
                 ): cv.boolean,
