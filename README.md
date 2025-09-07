@@ -34,7 +34,8 @@ Device trackers follow devices that the person has; the person location sensor t
 <details>
   <summary> Click for More Details</summary>
 
-For meaningful results, the device trackers should include `latitude` and `longitude` attributes, as in Mobile App, iCloud, and iCloud3 device trackers.  Most location features will be skipped for updates triggered by "device trackers" that do not know the location coordinates, but these are still useful for presence detection.  
+For meaningful results, the device trackers should include `latitude` and `longitude` attributes, as in Mobile App, iCloud, and iCloud3 device trackers.  Most location features will be skipped for updates triggered by "device trackers" that do not know the location coordinates, but these are still useful for presence detection. 
+Note that for a `binary_sensor` that indicates presence, `on` = Home and `off` = Away. 
 
 The process for deciding which triggered device trackers to pay attention to is somewhat controversial, but here is how we do it. Each update of a "device tracker" (the trigger) is examined to decide if it should be used to update the person location sensor (the target).
 

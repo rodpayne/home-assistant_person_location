@@ -999,14 +999,14 @@ def setup_reverse_geocode(pli):
 
                         if target.attributes["reported_state"].lower() in [
                             STATE_HOME,
-                            STATE_OFF,
+                            STATE_ON,
                         ]:
                             new_bread_crumb = "Home"
                             friendly_name_location = "is Home"
                         elif target.attributes["reported_state"].lower() in [
                             "away",
                             STATE_NOT_HOME,
-                            STATE_ON,
+                            STATE_OFF,
                         ]:
                             new_bread_crumb = "Away"
                             friendly_name_location = "is Away"
