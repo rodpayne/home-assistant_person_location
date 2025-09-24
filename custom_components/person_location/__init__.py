@@ -2,8 +2,8 @@
 The person_location integration.
 
 This integration supplies a service to reverse geocode the location
-using Open Street Map (Nominatim) or Google Maps or MapQuest and
-calculate the distance from home (miles and minutes) using
+using Open Street Map (Nominatim) or Google Maps or MapQuest or Radar
+and calculate the distance from home (miles and minutes) using
 WazeRouteCalculator.
 """
 

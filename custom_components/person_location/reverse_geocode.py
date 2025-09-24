@@ -21,7 +21,7 @@ from homeassistant.const import (
     STATE_OFF,
     STATE_ON,
 )
-from homeassistant.exceptions import TemplateError
+from homeassistant.exceptions import ServiceNotFound,TemplateError
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.util.location import distance
 from jinja2 import Template
@@ -57,6 +57,7 @@ from .const import (
     TARGET_LOCK,
     THROTTLE_INTERVAL,
     WAZE_MIN_METERS_FROM_HOME,
+    WAZE_REGIONS,
     ZONE_DOMAIN,
 )
 
@@ -115,18 +116,21 @@ def setup_reverse_geocode(pli):
 
         return compass_bearing
 
+    def _get_waze_region(country_code: str) -> str:
+        country_code = country_code.lower()
+        if country_code in ("us", "ca", "mx"):
+            return "us"
+        if country_code in WAZE_REGIONS:
+            return country_code
+        return "eu"
+
     def _get_waze_driving_miles_and_minutes(
         target,
         new_latitude,
         new_longitude,
+        waze_country_code,
     ):
-        """
-        Figured it out from:
-            https://github.com/home-assistant/core/blob/dev/homeassistant/components/waze_travel_time/sensor.py
-            https://github.com/kovacsbalu/WazeRouteCalculator
-            https://github.com/home-assistant/core/pull/108613/files
-            https://github.com/home-assistant/home-assistant.io/pull/32062
-
+        """ 
         Updates target.attributes:
             ATTR_DRIVING_MILES
             ATTR_DRIVING_MINUTES
@@ -139,84 +143,107 @@ def setup_reverse_geocode(pli):
         entity_id = target.entity_id
         if not pli.configuration["use_waze"]:
             return
+
+        # If we’re already “home,” skip routing
         if target.attributes[ATTR_METERS_FROM_HOME] < WAZE_MIN_METERS_FROM_HOME:
-            target.attributes[ATTR_DRIVING_MILES] = target.attributes[
-                ATTR_MILES_FROM_HOME
-            ]
+            target.attributes[ATTR_DRIVING_MILES] = target.attributes[ATTR_MILES_FROM_HOME]
             target.attributes[ATTR_DRIVING_MINUTES] = "0"
             return
 
-        try:
-            _LOGGER.debug("(" + entity_id + ") Waze calculation")
+        from_location = f"{new_latitude},{new_longitude}"
+        to_location = (
+            f"{pli.attributes['home_latitude']},"
+            f"{pli.attributes['home_longitude']}"
+        )
+        waze_region = _get_waze_region(waze_country_code)
 
-            async def async_get_waze_route(
-                from_location,
-                to_location,
-                waze_region,
-            ):
+        _LOGGER.debug("from_location: " + from_location)
+        _LOGGER.debug("to_location: " + to_location)
+        _LOGGER.debug("waze_region: " + waze_region)
+
+        # First attempt: HA-managed service
+        try:
+            if not pli.hass.services.has_service("waze_travel_time", "get_travel_times"):
+                raise ServiceNotFound("waze_travel_time", "get_travel_times")
+
+            service_coro = pli.hass.services.async_call(
+                "waze_travel_time",
+                "get_travel_times",
+                {
+                    "origin": from_location,
+                    "destination": to_location,
+                    "region": waze_region,
+                },
+                blocking=True,
+                return_response=True,
+            )
+            future = asyncio.run_coroutine_threadsafe(service_coro, pli.hass.loop)
+            data = future.result()
+            routes = data.get("routes", [])
+            if not routes:
+                raise ValueError("No routes from HA service")
+
+            # pick first or apply your street‐name filter here
+            best = routes[0]
+            duration = best["duration"]
+            distance_km = best["distance"]
+
+        except Exception as service_err:
+            _LOGGER.debug(
+                "(%s) Waze service failed (%s), falling back to pywaze",
+                entity_id,
+                type(service_err).__name__,
+            )
+            # Fallback: direct pywaze call
+            try:
+                # pywaze expects an aiohttp client session
                 client = WazeRouteCalculator(
-                    region=waze_region,
+                    region=waze_region.upper(),
                     client=get_async_client(pli.hass),
                 )
-                #               route = await client.calc_route_info(
-                routes = await client.calc_routes(
+                coro = client.calc_routes(
                     from_location,
                     to_location,
                     avoid_toll_roads=True,
+                    avoid_subscription_roads=True,
+                    avoid_ferries=True,
                 )
-                _LOGGER.debug(f"Waze route = {routes}")
+                future = asyncio.run_coroutine_threadsafe(coro, pli.hass.loop)
+                pywaze_routes = future.result()
+                if not pywaze_routes:
+                    raise ValueError("No routes from pywaze")
 
-                if len(routes) < 1:
-                    return 0, 0
+                route = pywaze_routes[0]
+                duration = route.duration
+                distance_km = route.distance
 
-                route = routes[0]
-                return route.duration, route.distance
+            except Exception as pw_err:
+                _LOGGER.error(
+                    "(%s) pywaze fallback failed %s: %s",
+                    entity_id,
+                    type(pw_err).__name__,
+                    pw_err,
+                )
+                pli.attributes["waze_error_count"] = (
+                    pli.attributes.get("waze_error_count", 0) + 1
+                )
+                target.attributes[ATTR_DRIVING_MILES] = target.attributes[ATTR_MILES_FROM_HOME]
+                return
 
-            from_location = str(new_latitude) + "," + str(new_longitude)
-            to_location = (
-                str(pli.attributes["home_latitude"])
-                + ","
-                + str(pli.attributes["home_longitude"])
-            )
-            route_time, route_distance = asyncio.run_coroutine_threadsafe(
-                async_get_waze_route(
-                    from_location,
-                    to_location,
-                    pli.configuration["waze_region"].upper(),
-                ),
-                pli.hass.loop,
-            ).result()
-            _LOGGER.debug(
-                "(" + entity_id + ") Waze route_distance " + str(route_distance)
-            )  # km
-            route_distance = route_distance * METERS_PER_KM / METERS_PER_MILE  # miles
-            if route_distance <= 0:
-                target.attributes[ATTR_DRIVING_MILES] = target.attributes[
-                    ATTR_MILES_FROM_HOME
-                ]
-            elif route_distance >= 100:
-                target.attributes[ATTR_DRIVING_MILES] = str(round(route_distance, 0))
-            elif route_distance >= 10:
-                target.attributes[ATTR_DRIVING_MILES] = str(round(route_distance, 1))
-            else:
-                target.attributes[ATTR_DRIVING_MILES] = str(round(route_distance, 2))
-            _LOGGER.debug(
-                "(" + entity_id + ") Waze route_time " + str(route_time)
-            )  # minutes
-            target.attributes[ATTR_DRIVING_MINUTES] = str(round(route_time, 1))
-            target.attributes[ATTR_ATTRIBUTION] += (
-                '"Data by Waze App. https://waze.com"; '
-            )
-        except Exception as e:
-            _LOGGER.error(
-                "(" + entity_id + ") Waze Exception " + type(e).__name__ + ": " + str(e)
-            )
-            _LOGGER.debug(traceback.format_exc())
-            pli.attributes["waze_error_count"] += 1
+        # Common post‐processing
+        miles = distance_km * METERS_PER_KM / METERS_PER_MILE
+        if miles <= 0:
+            display_miles = target.attributes[ATTR_MILES_FROM_HOME]
+        elif miles >= 100:
+            display_miles = round(miles, 0)
+        elif miles >= 10:
+            display_miles = round(miles, 1)
+        else:
+            display_miles = round(miles, 2)
 
-            target.attributes[ATTR_DRIVING_MILES] = target.attributes[
-                ATTR_MILES_FROM_HOME
-            ]
+        target.attributes[ATTR_DRIVING_MILES] = str(display_miles)
+        target.attributes[ATTR_DRIVING_MINUTES] = str(round(duration, 1))
+        target.attributes[ATTR_ATTRIBUTION] += '"Data by Waze App. https://waze.com"; '
 
     def handle_reverse_geocode(call):
         """
@@ -535,6 +562,9 @@ def setup_reverse_geocode(pli):
                             )
                             target.attributes["direction"] = direction
 
+                            # default the waze country code from waze_region config
+                            waze_country_code = pli.configuration["waze_region"].upper()
+
                             if (
                                 pli.configuration[CONF_RADAR_API_KEY]
                                 != DEFAULT_API_KEY_NOT_SET
@@ -574,6 +604,12 @@ def setup_reverse_geocode(pli):
                                 _LOGGER.debug(
                                     "(" + entity_id + ") Radar locality = " + locality
                                 )
+
+                                if "countryCode" in radar_decoded["addresses"][0]:
+                                    waze_country_code = radar_decoded["addresses"][0]["countryCode"].upper()
+                                    _LOGGER.debug(
+                                        "(" + entity_id + ") Radar waze_country_code = " + waze_country_code
+                                    )
 
                                 if "formattedAddress" in radar_decoded["addresses"][0]:
                                     formatted_address = radar_decoded["addresses"][0]["formattedAddress"]
@@ -666,6 +702,12 @@ def setup_reverse_geocode(pli):
                                 _LOGGER.debug(
                                     "(" + entity_id + ") OSM locality = " + locality
                                 )
+
+                                if "country_code" in osm_decoded["address"]:
+                                    waze_country_code = osm_decoded["address"]["country_code"].upper()
+                                    _LOGGER.debug(
+                                        "(" + entity_id + ") OSM waze_country_code = " + waze_country_code
+                                    )
 
                                 if "display_name" in osm_decoded:
                                     display_name = osm_decoded["display_name"]
@@ -784,6 +826,12 @@ def setup_reverse_geocode(pli):
                                                 in component["types"]
                                             ):  # fall back to state
                                                 locality = component["long_name"]
+
+                                            if "country" in component["types"]:
+                                                waze_country_code = component["short_name"].upper()
+                                                _LOGGER.debug(
+                                                    "(" + entity_id + ") Google waze_country_code = " + waze_country_code
+                                                )
 
                                         google_attribution = '"powered by Google"'
                                         target.attributes[ATTR_ATTRIBUTION] += (
@@ -927,6 +975,13 @@ def setup_reverse_geocode(pli):
                                                 + ") mapquest formatted_address = "
                                                 + formatted_address
                                             )
+
+                                            if ("adminArea1" in mapquest_location):
+                                                waze_country_code = mapquest_location[adminArea1]
+                                                _LOGGER.debug(
+                                                    "(" + entity_id + ") mapquest waze_country_code = " + waze_country_code
+                                                )
+
                                             target.attributes["MapQuest"] = (
                                                 formatted_address
                                             )
@@ -989,10 +1044,12 @@ def setup_reverse_geocode(pli):
                             )
 
                             # Call WazeRouteCalculator if not at Home:
+
                             _get_waze_driving_miles_and_minutes(
                                 target,
                                 new_latitude,
                                 new_longitude,
+                                waze_country_code,
                             )
 
                         # Determine friendly_name_location and new_bread_crumb:

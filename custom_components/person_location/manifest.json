@@ -19,6 +19,7 @@
   "integration_type": "service",
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/rodpayne/home-assistant_person_location/issues",
+  "loggers": ["custom_components.person_location"],
   "requirements": [],
-  "version": "2025.09.06"
+  "version": "2025.09.23"
 }

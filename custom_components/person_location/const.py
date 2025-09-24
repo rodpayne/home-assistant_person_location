@@ -32,7 +32,7 @@ DOMAIN = "person_location"
 API_STATE_OBJECT = DOMAIN + "." + DOMAIN + "_integration"
 INTEGRATION_NAME = "Person Location"
 ISSUE_URL = "https://github.com/rodpayne/home-assistant_person_location/issues"
-VERSION = "2025.09.06"
+VERSION = "2025.09.23"
 
 # Constants:
 METERS_PER_KM = 1000
@@ -310,6 +310,10 @@ class PERSON_LOCATION_INTEGRATION:
                 _LOGGER.warning(
                     "Configured Waze region (%s) is not valid",
                     self.configuration[CONF_WAZE_REGION],
+                )
+                _LOGGER.debug(
+                    "Valid Waze regions: %s",
+                    WAZE_REGIONS,
                 )
             raw_conf_create_sensors = self.config[DOMAIN].get(CONF_CREATE_SENSORS, [])
             itemType = type(raw_conf_create_sensors)
