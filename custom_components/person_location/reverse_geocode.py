@@ -47,6 +47,7 @@ from .const import (
     DEFAULT_API_KEY_NOT_SET,
     DOMAIN,
     FAR_AWAY_METERS,
+    get_waze_region,
     IC3_STATIONARY_ZONE_PREFIX,
     INTEGRATION_LOCK,
     INTEGRATION_NAME,
@@ -57,7 +58,6 @@ from .const import (
     TARGET_LOCK,
     THROTTLE_INTERVAL,
     WAZE_MIN_METERS_FROM_HOME,
-    WAZE_REGIONS,
     ZONE_DOMAIN,
 )
 
@@ -116,14 +116,6 @@ def setup_reverse_geocode(pli):
 
         return compass_bearing
 
-    def _get_waze_region(country_code: str) -> str:
-        country_code = country_code.lower()
-        if country_code in ("us", "ca", "mx"):
-            return "us"
-        if country_code in WAZE_REGIONS:
-            return country_code
-        return "eu"
-
     def _get_waze_driving_miles_and_minutes(
         target,
         new_latitude,
@@ -155,7 +147,7 @@ def setup_reverse_geocode(pli):
             f"{pli.attributes['home_latitude']},"
             f"{pli.attributes['home_longitude']}"
         )
-        waze_region = _get_waze_region(waze_country_code)
+        waze_region = get_waze_region(waze_country_code)
 
         _LOGGER.debug("from_location: " + from_location)
         _LOGGER.debug("to_location: " + to_location)
@@ -562,8 +554,8 @@ def setup_reverse_geocode(pli):
                             )
                             target.attributes["direction"] = direction
 
-                            # default the waze country code from waze_region config
-                            waze_country_code = pli.configuration["waze_region"].upper()
+                            # default the waze country code from Google region config
+                            waze_country_code = pli.configuration["region"].upper()
 
                             if (
                                 pli.configuration[CONF_RADAR_API_KEY]

@@ -32,7 +32,7 @@ DOMAIN = "person_location"
 API_STATE_OBJECT = DOMAIN + "." + DOMAIN + "_integration"
 INTEGRATION_NAME = "Person Location"
 ISSUE_URL = "https://github.com/rodpayne/home-assistant_person_location/issues"
-VERSION = "2025.09.23"
+VERSION = "2025.09.24"
 
 # Constants:
 METERS_PER_KM = 1000
@@ -213,6 +213,14 @@ TARGET_LOCK = threading.Lock()
 
 _LOGGER = logging.getLogger(__name__)
 
+def get_waze_region(country_code: str) -> str:
+    """Determine Waze region from country code or Waze region setting"""
+    country_code = country_code.lower()
+    if country_code in ("us", "ca", "mx"):
+        return "us"
+    if country_code in WAZE_REGIONS:
+        return country_code
+    return "eu"
 
 class PERSON_LOCATION_INTEGRATION:
     """Class to represent the integration itself."""
@@ -296,12 +304,11 @@ class PERSON_LOCATION_INTEGRATION:
             self.configuration[CONF_SHOW_ZONE_WHEN_AWAY] = self.config[DOMAIN].get(
                 CONF_SHOW_ZONE_WHEN_AWAY, DEFAULT_SHOW_ZONE_WHEN_AWAY
             )
-            # TODO: may need to split these up later (Google vs Waze):
             self.configuration[CONF_REGION] = self.config[DOMAIN].get(
                 CONF_REGION, DEFAULT_REGION
             )
-            self.configuration[CONF_WAZE_REGION] = (
-                self.config[DOMAIN].get(CONF_REGION, DEFAULT_REGION).lower()
+            self.configuration[CONF_WAZE_REGION] = get_waze_region(
+                self.configuration[CONF_REGION]
             )
             if self.configuration[CONF_WAZE_REGION] in WAZE_REGIONS:
                 self.configuration[CONF_USE_WAZE] = True

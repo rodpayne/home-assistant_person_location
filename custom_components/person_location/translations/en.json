@@ -6,7 +6,8 @@
                 "description": "Reverse geocoding and mapping can be done using one (or more) external services.  If you need help with the configuration or obtaining keys, have a look at More Details [**here**](https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#configuration-parameters).",
                 "data": {
                     "language": "Google Language",
-                    "region": "Google Region",
+                    "region": "Google Country Code",
+                    "waze_region": "Waze Region Code",
                     "google_api_key": "Google API Key",
                     "mapbox_api_key": "Mapbox Access Token",
                     "mapquest_api_key": "MapQuest API Key",
