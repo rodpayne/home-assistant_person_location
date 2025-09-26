@@ -1174,3 +1174,4 @@ def setup_reverse_geocode(pli):
     pli.hass.services.register(DOMAIN, "reverse_geocode", handle_reverse_geocode)
     return True
 
+
