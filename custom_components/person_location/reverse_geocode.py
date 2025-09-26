@@ -969,7 +969,7 @@ def setup_reverse_geocode(pli):
                                             )
 
                                             if ("adminArea1" in mapquest_location):
-                                                waze_country_code = mapquest_location[adminArea1]
+                                                waze_country_code = mapquest_location["adminArea1"]
                                                 _LOGGER.debug(
                                                     "(" + entity_id + ") mapquest waze_country_code = " + waze_country_code
                                                 )
@@ -1173,4 +1173,5 @@ def setup_reverse_geocode(pli):
 
     pli.hass.services.register(DOMAIN, "reverse_geocode", handle_reverse_geocode)
     return True
+
 
