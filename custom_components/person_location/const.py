@@ -32,7 +32,7 @@ DOMAIN = "person_location"
 API_STATE_OBJECT = DOMAIN + "." + DOMAIN + "_integration"
 INTEGRATION_NAME = "Person Location"
 ISSUE_URL = "https://github.com/rodpayne/home-assistant_person_location/issues"
-VERSION = "2025.09.24"
+VERSION = "2025.09.26"
 
 # Constants:
 METERS_PER_KM = 1000
@@ -41,12 +41,28 @@ IC3_STATIONARY_STATE_PREFIX = "StatZon"
 IC3_STATIONARY_ZONE_PREFIX = "ic3_stationary_"
 
 # Fixed parameters:
-MIN_DISTANCE_TRAVELLED_TO_GEOCODE = 5
+MIN_DISTANCE_TRAVELLED_TO_GEOCODE = 5  # in km?
 THROTTLE_INTERVAL = timedelta(
     seconds=1
 )  # See https://operations.osmfoundation.org/policies/nominatim/ regarding throttling.
 WAZE_MIN_METERS_FROM_HOME = 500
 FAR_AWAY_METERS = 400 * METERS_PER_KM
+
+# Parameters that we may want to be configurable in the future:
+DEFAULT_LOCALITY_PRIORITY_OSM = (
+#    "neighbourhood",       # smallest urban division (e.g. block, named area)
+    "suburb",              # named area within a city
+    "hamlet",              # very small rural settlement
+    "village",             # small rural settlement
+    "town",                # larger than village, smaller than city
+    "city_district",       # administrative district within a city
+    "municipality",        # local government unit (varies by country)
+    "city",                # major urban center
+    "county",              # regional division (e.g. Utah County)
+    "state_district",      # sub-state division (used in some countries)
+    "state",               # e.g. Utah
+    "country",             # e.g. United States
+)
 
 # Attribute names:
 ATTR_ALTITUDE = "altitude"

@@ -89,9 +89,10 @@ async def system_health_info(hass):
             ):
                 return_info[sensor] = (
                     str(entity_info[sensor]["geocode_count"])
-                    + " geolocated out of "
+                    + " geolocated for "
                     + str(entity_info[sensor]["trigger_count"])
-                    + " triggers"
+                    + " triggers, last = "
+                    + entity_info[sensor]["locality"]
                 )
 
     return return_info

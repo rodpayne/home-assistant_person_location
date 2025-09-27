@@ -51,6 +51,7 @@ from .const import (
     IC3_STATIONARY_ZONE_PREFIX,
     INTEGRATION_LOCK,
     INTEGRATION_NAME,
+    DEFAULT_LOCALITY_PRIORITY_OSM,
     METERS_PER_KM,
     METERS_PER_MILE,
     MIN_DISTANCE_TRAVELLED_TO_GEOCODE,
@@ -677,20 +678,10 @@ def setup_reverse_geocode(pli):
                                 osm_json_input = osm_response.text
                                 osm_decoded = json.loads(osm_json_input)
 
-                                if "city" in osm_decoded["address"]:
-                                    locality = osm_decoded["address"]["city"]
-                                elif "town" in osm_decoded["address"]:
-                                    locality = osm_decoded["address"]["town"]
-                                elif "villiage" in osm_decoded["address"]:
-                                    locality = osm_decoded["address"]["village"]
-                                elif "municipality" in osm_decoded["address"]:
-                                    locality = osm_decoded["address"]["municipality"]
-                                elif "county" in osm_decoded["address"]:
-                                    locality = osm_decoded["address"]["county"]
-                                elif "state" in osm_decoded["address"]:
-                                    locality = osm_decoded["address"]["state"]
-                                elif "country" in osm_decoded["address"]:
-                                    locality = osm_decoded["address"]["country"]
+                                for key in DEFAULT_LOCALITY_PRIORITY_OSM:
+                                    if key in osm_decoded["address"]:
+                                        locality = osm_decoded["address"][key]
+                                        break
                                 _LOGGER.debug(
                                     "(" + entity_id + ") OSM locality = " + locality
                                 )
@@ -1026,6 +1017,7 @@ def setup_reverse_geocode(pli):
                                                 )
 
                             target.attributes["locality"] = locality
+                            target.this_entity_info["locality"] = locality
                             target.this_entity_info["geocode_count"] += 1
                             target.this_entity_info["location_latitude"] = new_latitude
                             target.this_entity_info["location_longitude"] = (
@@ -1173,5 +1165,4 @@ def setup_reverse_geocode(pli):
 
     pli.hass.services.register(DOMAIN, "reverse_geocode", handle_reverse_geocode)
     return True
-
 
