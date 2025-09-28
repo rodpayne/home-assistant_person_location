@@ -293,8 +293,8 @@ The configuration can be updated in either the `Settings > Devices & services` G
 | Follow Person Integration? | `follow_person_integration` | Yes | Follow updates of all Person entities rather than looking at individual device trackers. | False
 | Friendly Name Template<sup>*</sup> | `friendly_name_template` | Yes | A template that specifies how the `friendly_name` of the sensor is formatted. See the note concerning template variables in More Details below. | The original format: `{{person_name}} ({{source.attributes.friendly_name}}) {{friendly_name_location}}` |
 | Google API Key | `google_api_key` | Yes | Google API Key obtained from the [Google Maps Platform](https://cloud.google.com/maps-platform#get-started). | Do not do the Google reverse geocoding.
-| Google Language | `language`       | Yes | Language parameter for the Google API. | `en`
-| Google Region | `region`         | Yes | Region parameter for the Google API. | `US`
+| Google Language | `language` | Yes | Language parameter for the Google API. | `en`
+| Google Country Code | `region` | Yes | Region parameter for the Google API. | `US`
 | Hours Extended Away<sup>*</sup> | `extended_away`  | Yes | Number of **hours** before changing `Away` into `Extended Away`. Set to `0` to not use `Extended Away` state. | `48`
 | Mapbox Access Token | `mapbox_api_key`    | Yes | Mapbox Access Token obtained from the [Mapbox Account page](https://account.mapbox.com/). (Sign up for a free "hobbyist" account.)| Do not use MapBox to generate maps.
 | MapQuest API Key | `mapquest_api_key`    | Yes | MapQuest API Key obtained from the [MapQuest Developer site](https://developer.mapquest.com/user/me/apps). | Do not do the MapQuest reverse geocoding.
