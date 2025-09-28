@@ -35,6 +35,7 @@ from .const import (
     DATA_ENTITY_INFO,
     DATA_UNDO_STATE_LISTENER,
     DATA_UNDO_UPDATE_LISTENER,
+    deep_merge_with_list_union,
     DEFAULT_FRIENDLY_NAME_TEMPLATE,
     DEFAULT_SHOW_ZONE_WHEN_AWAY,
     DOMAIN,
@@ -116,8 +117,8 @@ def setup(hass, config):
                 != pli.configuration["friendly_name_template"]
             )
         )
-        pli.configuration.update(entry.data)
-        pli.configuration.update(entry.options)
+        pli.configuration = deep_merge_with_list_union(pli.configuration,entry.data)
+        pli.configuration = deep_merge_with_list_union(pli.configuration,entry.options)
 
         hass.data[DOMAIN][DATA_CONFIGURATION] = pli.configuration
 

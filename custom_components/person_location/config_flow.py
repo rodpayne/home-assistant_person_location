@@ -4,6 +4,8 @@ import httpx
 import logging
 import re
 
+from homeassistant.config_entries import ConfigEntry, OptionsFlow
+
 import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
 from homeassistant import config_entries
@@ -518,30 +520,33 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     @staticmethod
     @callback
-    def async_get_options_flow(config_entry):
-        return PersonLocationOptionsFlowHandler(config_entry)
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        return PersonLocationOptionsFlowHandler()
 
 
 class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
     """Person Location options flow handler."""
 
-    def __init__(self, config_entry):
+    def __init__(self):
         """Initialize options flow."""
 
         self._errors = {}  # error messages for the data entry flow
 
         self._user_input = {}  # validated user_input to be saved
-        self.config_entry = config_entry
-        self.config_entry_data = {**config_entry.data}
-        self.config_entry_options = {**config_entry.options}
+        self.config_entry_data = {}
+        self.config_entry_options = {}
 
-    async def async_step_init(self, user_input=None):  # pylint: disable=unused-argument
+
+    async def async_step_init(self, user_input=None):
         """Handle option flow initiated by the user."""
+
+        if not self.config_entry_data:
+            self.config_entry_data = {**self.config_entry.data}
+            self.config_entry_options = {**self.config_entry.options}
 
         if user_input is not None:
             self.config_entry_options.update(user_input)
             self._user_input.update(user_input)
-
             return await self.async_step_triggers()
 
         return self.async_show_form(

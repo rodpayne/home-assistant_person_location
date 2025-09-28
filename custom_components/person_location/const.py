@@ -32,7 +32,7 @@ DOMAIN = "person_location"
 API_STATE_OBJECT = DOMAIN + "." + DOMAIN + "_integration"
 INTEGRATION_NAME = "Person Location"
 ISSUE_URL = "https://github.com/rodpayne/home-assistant_person_location/issues"
-VERSION = "2025.09.26"
+VERSION = "2025.09.27"
 
 # Constants:
 METERS_PER_KM = 1000
@@ -228,6 +228,16 @@ INTEGRATION_LOCK = threading.Lock()
 TARGET_LOCK = threading.Lock()
 
 _LOGGER = logging.getLogger(__name__)
+
+def deep_merge_with_list_union(dest: dict, src: dict) -> dict:
+    for key, val in src.items():
+        if key in dest and isinstance(dest[key], dict) and isinstance(val, dict):
+            deep_merge_with_list_union(dest[key], val)
+        elif key in dest and isinstance(dest[key], list) and isinstance(val, list):
+            dest[key] = list(set(dest[key]) | set(val))
+        else:
+            dest[key] = val
+    return dest
 
 def get_waze_region(country_code: str) -> str:
     """Determine Waze region from country code or Waze region setting"""
