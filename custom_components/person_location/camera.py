@@ -1,132 +1,117 @@
-"""Support for map as a camera."""
+"""Support for map as a camera (hybrid config)."""
 
 import asyncio
 import logging
-
 import httpx
-import voluptuous as vol
-from homeassistant.components.camera import (
-    DEFAULT_CONTENT_TYPE,
-    PLATFORM_SCHEMA,
-    Camera,
-)
-from homeassistant.const import (
-    CONF_NAME,
-    CONF_STATE,
-    CONF_VERIFY_SSL,
-    STATE_IDLE,
-    STATE_PROBLEM,
-    STATE_UNKNOWN,
-)
+
+from homeassistant.components.camera import Camera
+from homeassistant.const import STATE_PROBLEM, STATE_UNKNOWN
 from homeassistant.exceptions import TemplateError
-from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.httpx_client import get_async_client
-from homeassistant.helpers.reload import async_setup_reload_service
+from homeassistant.util import slugify
+from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.template import Template
 
 from .const import (
+    DOMAIN,
+    DATA_CONFIGURATION,
+    CONF_PROVIDERS,
+    CONF_NAME,
+    CONF_STATE,
+    CONF_STILL_IMAGE_URL,
+    CONF_CONTENT_TYPE,
+    CONF_VERIFY_SSL,
     CONF_GOOGLE_API_KEY,
     CONF_MAPBOX_API_KEY,
     CONF_MAPQUEST_API_KEY,
     CONF_OSM_API_KEY,
     CONF_RADAR_API_KEY,
-    DATA_CONFIGURATION,
-    DOMAIN,
 )
-
-PLATFORMS = ["camera"]
 
 _LOGGER = logging.getLogger(__name__)
-
-CONF_CONTENT_TYPE = "content_type"
-CONF_STILL_IMAGE_URL = "still_image_url"
-
-DEFAULT_NAME = "Location Camera"
 GET_IMAGE_TIMEOUT = 10
 
-PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
-    {
-        vol.Required(CONF_STILL_IMAGE_URL): cv.template,
-        vol.Optional(CONF_STATE, default=STATE_IDLE): cv.template,
-        vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
-        vol.Optional(CONF_CONTENT_TYPE, default=DEFAULT_CONTENT_TYPE): cv.string,
-        vol.Optional(CONF_VERIFY_SSL, default=True): cv.boolean,
-    }
+CAMERA_PARENT_DEVICE = DeviceInfo(
+    identifiers={(DOMAIN, "map_cameras")},
+    name="Map Cameras",
+    manufacturer="rodpayne",
+    model="Map Camera Group",
 )
 
+def normalize_provider(hass, provider: dict) -> dict:
+    """Ensure provider dict has Template objects and defaults."""
+
+    def _as_template(value):
+        if isinstance(value, Template):
+            tpl = value
+        else:
+            tpl = Template(str(value), hass)
+        tpl.hass = hass
+        return tpl
+
+    return {
+        CONF_NAME: provider[CONF_NAME],
+        CONF_STILL_IMAGE_URL: _as_template(provider[CONF_STILL_IMAGE_URL]),
+        CONF_STATE: _as_template(provider[CONF_STATE]),
+        CONF_CONTENT_TYPE: provider.get(CONF_CONTENT_TYPE, "image/jpeg"),
+        CONF_VERIFY_SSL: provider.get(CONF_VERIFY_SSL, True),
+    }
 
 async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
-    """Set up a location IP Camera."""
+    """Set up cameras from YAML config."""
 
-    await async_setup_reload_service(hass, DOMAIN, PLATFORMS)
+    _LOGGER.debug("async_setup_platform: config = %s", config)
+    async_add_entities([PersonLocationCamera(hass, normalize_provider(hass, config))])
 
-    async_add_entities([PersonLocationCamera(hass, config)])
+async def async_setup_entry(hass, entry, async_add_entities):
+    """Set up cameras from config entry providers."""
 
+    _LOGGER.debug("async_setup_entry: entry = %s", entry)
+    providers = entry.data.get(CONF_PROVIDERS, [])
+    entities = [PersonLocationCamera(hass, normalize_provider(hass, p)) for p in providers]
+    async_add_entities(entities, update_before_add=True)
 
 class PersonLocationCamera(Camera):
-    """A person_location implementation of an IP camera."""
+    """A person_location implementation of a map camera."""
 
-    def __init__(self, hass, device_info):
-        """Initialize a person_location camera."""
+    def __init__(self, hass, provider):
         super().__init__()
         self.hass = hass
-        self._name = device_info.get(CONF_NAME)
-        self._still_image_url = device_info[CONF_STILL_IMAGE_URL]
+        self._name = provider[CONF_NAME]
+        self._attr_unique_id = f"map_camera_{slugify(self._name)}"
+        self._still_image_url = provider[CONF_STILL_IMAGE_URL]
         self._still_image_url.hass = self.hass
-        self._state_template = device_info[CONF_STATE]
+        self._state_template = provider[CONF_STATE]
         self._state_template.hass = self.hass
-        self._limit_refetch = True
-        self._frame_interval = 1 / 2
-        self._supported_features = 0
-        self.content_type = device_info[CONF_CONTENT_TYPE]
-        self.verify_ssl = device_info[CONF_VERIFY_SSL]
+        self.content_type = provider.get(CONF_CONTENT_TYPE, "image/jpeg")
+        self.verify_ssl = provider.get(CONF_VERIFY_SSL, True)
         self._auth = None
         self._state = STATE_UNKNOWN
-
+        self._attr_icon = "mdi:map-outline"
         self._last_url = None
         self._last_image = None
+        self._attr_device_info = CAMERA_PARENT_DEVICE
 
-        google_api_key = self.hass.data[DOMAIN][DATA_CONFIGURATION][CONF_GOOGLE_API_KEY]
-        mapbox_api_key = self.hass.data[DOMAIN][DATA_CONFIGURATION][CONF_MAPBOX_API_KEY]
-        mapquest_api_key = self.hass.data[DOMAIN][DATA_CONFIGURATION][
-            CONF_MAPQUEST_API_KEY
-        ]
-        osm_api_key = self.hass.data[DOMAIN][DATA_CONFIGURATION][CONF_OSM_API_KEY]
-        radar_api_key = self.hass.data[DOMAIN][DATA_CONFIGURATION][CONF_RADAR_API_KEY]
+        cfg = self.hass.data[DOMAIN][DATA_CONFIGURATION]
         self._template_variables = {
             "parse_result": False,
-            "google_api_key": google_api_key,
-            "mapbox_api_key": mapbox_api_key,
-            "mapquest_api_key": mapquest_api_key,
-            "osm_api_key": osm_api_key,
-            "radar_api_key": radar_api_key,
+            "google_api_key": cfg[CONF_GOOGLE_API_KEY],
+            "mapbox_api_key": cfg[CONF_MAPBOX_API_KEY],
+            "mapquest_api_key": cfg[CONF_MAPQUEST_API_KEY],
+            "osm_api_key": cfg[CONF_OSM_API_KEY],
+            "radar_api_key": cfg[CONF_RADAR_API_KEY],
         }
 
-        self._entities = list(self._extract_entities(self._still_image_url))
-        for entity in list(self._extract_entities(self._state_template)):
-            if entity not in self._entities:
-                self._entities.append(entity)
-        _LOGGER.debug("(%s) entities = %s", self._name, self._entities)
-        # TODO: set up a Track State Change to do update when
-        #   template entities change?
-        # https://developers.home-assistant.io/docs/core/entity/
-        # (It currently checks every ten seconds.)
+    @property
+    def name(self):
+        return self._name
 
-    def _extract_entities(self, template):
-        info = template.async_render_to_info(**self._template_variables)
-        return info.entities
+    @property
+    def state(self):
+        return self._state
 
-    def camera_image(self):
+    async def async_camera_image(self, width=None, height=None):
         """Return bytes of camera image."""
-        return asyncio.run_coroutine_threadsafe(
-            self.async_camera_image(), self.hass.loop
-        ).result()
-
-    async def async_camera_image(
-        self, width: int | None = None, height: int | None = None
-    ):
-        """Wrap _async_camera_image with an asyncio.shield."""
-        # Shield the request because of https://github.com/encode/httpx/issues/1461
-        # Include width & height https://github.com/home-assistant/core/pull/68039
         try:
             self._last_url, self._last_image = await asyncio.shield(
                 self._async_camera_image()
@@ -140,38 +125,30 @@ class PersonLocationCamera(Camera):
         """Return a still image response from the camera."""
         if not self.enabled:
             return self._last_url, self._last_image
-        new_state = self._state
+
         try:
             url = self._still_image_url.async_render(**self._template_variables)
         except TemplateError as err:
-            _LOGGER.error(
-                "Error parsing url template %s: %s", self._still_image_url, err
-            )
+            _LOGGER.error("Error parsing url template %s: %s", self._still_image_url, err)
             return self._last_url, self._last_image
 
         try:
-            new_state = self._state_template.async_render(
-                parse_result=False,
-            )
+            new_state = self._state_template.async_render(parse_result=False)
         except TemplateError as err:
-            _LOGGER.error(
-                "Error parsing state template %s: %s", self._state_template, err
-            )
+            _LOGGER.error("Error parsing state template %s: %s", self._state_template, err)
             new_state = STATE_PROBLEM
+
         if new_state != self._state:
-            _LOGGER.debug("State template %s returned state: %s", self._name, new_state)
             self._state = new_state
             self.async_schedule_update_ha_state()
 
-        if (url == self._last_url and self._limit_refetch) or url == "None":
+        if (url == self._last_url) or url == "None":
             return self._last_url, self._last_image
 
         response = None
         try:
             async_client = get_async_client(self.hass, verify_ssl=self.verify_ssl)
-            response = await async_client.get(
-                url, auth=self._auth, timeout=GET_IMAGE_TIMEOUT
-            )
+            response = await async_client.get(url, auth=self._auth, timeout=GET_IMAGE_TIMEOUT)
             response.raise_for_status()
             image = response.content
         except httpx.TimeoutException:
@@ -187,13 +164,4 @@ class PersonLocationCamera(Camera):
                 await response.aclose()
 
         return url, image
-
-    @property
-    def name(self):
-        """Return the name of this device."""
-        return self._name
-
-    @property
-    def state(self):
-        """Return the camera state."""
-        return self._state
+    

@@ -1,6 +1,7 @@
 """Constants and Classes for person_location integration."""
 
 import logging
+import pprint
 import threading
 from datetime import datetime, timedelta
 
@@ -32,7 +33,7 @@ DOMAIN = "person_location"
 API_STATE_OBJECT = DOMAIN + "." + DOMAIN + "_integration"
 INTEGRATION_NAME = "Person Location"
 ISSUE_URL = "https://github.com/rodpayne/home-assistant_person_location/issues"
-VERSION = "2025.09.27"
+VERSION = "2025.10.25"
 
 # Constants:
 METERS_PER_KM = 1000
@@ -81,10 +82,6 @@ ATTR_REPORTED_STATE = "reported_state"
 ATTR_SOURCE = "source"
 ATTR_SPEED = "speed"
 ATTR_ZONE = "zone"
-
-# Configuration Version:
-CONF_VERSION = 1
-CONF_MINOR_VERSION = 2
 
 # Configuration Parameters:
 CONF_LANGUAGE = "language"
@@ -145,6 +142,23 @@ CONF_DEVICES = "devices"
 VALID_ENTITY_DOMAINS = ("binary_sensor", "device_tracker", "person", "sensor")
 
 CONF_FROM_YAML = "configuration_from_yaml"
+
+# Camera provider fields
+
+CONF_STATE = "state"
+CONF_STILL_IMAGE_URL = "still_image_url"
+CONF_CONTENT_TYPE = "content_type"
+CONF_VERIFY_SSL = "verify_ssl"
+
+# Camera provider management (OptionsFlow + config entry)
+
+CONF_PROVIDERS = "providers"
+CONF_REMOVE_PROVIDERS = "remove_providers"
+CONF_NEW_PROVIDER_NAME = "new_provider_name"
+CONF_NEW_PROVIDER_URL = "new_provider_url"
+CONF_NEW_PROVIDER_STATE = "new_provider_state"
+CONF_EDIT_PROVIDER = "edit_provider"
+CONF_DONE = "done"
 
 STARTUP_VERSION = """
 -------------------------------------------------------------------
@@ -229,6 +243,7 @@ TARGET_LOCK = threading.Lock()
 
 _LOGGER = logging.getLogger(__name__)
 
+'''
 def deep_merge_with_list_union(dest: dict, src: dict) -> dict:
     for key, val in src.items():
         if key in dest and isinstance(dest[key], dict) and isinstance(val, dict):
@@ -238,6 +253,45 @@ def deep_merge_with_list_union(dest: dict, src: dict) -> dict:
         else:
             dest[key] = val
     return dest
+'''
+'''
+def deep_merge_with_list_union(dest: dict, src: dict) -> dict:
+    _LOGGER.debug("deep_merge_with_list_union")
+    _LOGGER.debug("dest = \n%s", pprint.pformat(dest))
+    _LOGGER.debug("src = \n%s", pprint.pformat(src))
+
+    for key, val in src.items():
+        if key in dest and isinstance(dest[key], dict) and isinstance(val, dict):
+            deep_merge_with_list_union(dest[key], val)
+
+        elif key in dest and isinstance(dest[key], list) and isinstance(val, list):
+            # Smart merge for list of dicts with 'name' keys
+            if all(isinstance(item, dict) and "name" in item for item in dest[key] + val):
+                merged = {item["name"]: item for item in dest[key]}
+                for item in val:
+                    merged[item["name"]] = item  # overwrite or add
+                dest[key] = list(merged.values())
+            else:
+                # Fallback: deduplicate by content
+                combined = dest[key] + val
+                seen = set()
+                deduped = []
+                for item in combined:
+                    try:
+                        marker = frozenset(item.items()) if isinstance(item, dict) else item
+                    except Exception:
+                        marker = repr(item)
+                    if marker not in seen:
+                        seen.add(marker)
+                        deduped.append(item)
+                dest[key] = deduped
+
+        else:
+            dest[key] = val
+
+    _LOGGER.debug("merge = \n%s", pprint.pformat(dest))
+    return dest
+'''
 
 def get_waze_region(country_code: str) -> str:
     """Determine Waze region from country code or Waze region setting"""

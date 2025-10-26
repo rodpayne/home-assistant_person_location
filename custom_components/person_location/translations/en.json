@@ -1,13 +1,19 @@
 {
     "config": {
         "step": {
-            "user": {
-                "title": "(1 of 3) Person Location Geocode",
+            "menu": {
+                "title": "Person Location Configuration Menu",
+                "description": "You can come back to update the configuration later by clicking ` ⋮ → Reconfigure`. If you need help with the configuration, have a look [**here**](https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#configuration-parameters).",
+                "data": {
+                    "menu_selection": "Step through or choose a configuration section:"
+                }
+            },
+            "geocode": {
+                "title": "Person Location Geocode Configuration",
                 "description": "Reverse geocoding and mapping can be done using one (or more) external services.  If you need help with the configuration or obtaining keys, have a look at More Details [**here**](https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#configuration-parameters).",
                 "data": {
                     "language": "Google Language",
                     "region": "Google Country Code",
-                    "waze_region": "Waze Region Code",
                     "google_api_key": "Google API Key",
                     "mapbox_api_key": "Mapbox Access Token",
                     "mapquest_api_key": "MapQuest API Key",
@@ -16,23 +22,65 @@
                 }
             },
             "sensors": {
-                "title": "(2 of 3) Person Location Sensors",
+                "title": "Person Location Sensor Configuration",
                 "description": "We can create individual sensors so that template sensors do not need to be manually configured. Choose from this list: altitude, bread_crumbs, direction, driving_miles, driving_minutes, geocoded, latitude, longitude, meters_from_home, miles_from_home.  If you need help with the configuration, have a look [**here**](https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#configuration-parameters).",
                 "data": {
-                    "create_sensors": "Sensors to be created",
+                    "create_sensors": "Sensors to be created (comma separated)",
                     "platform": "Platform for output sensor (experimental)"
                 }
             },
             "triggers": {
-                "title": "(3 of 3) Person Location Triggers",
-                "description": "You can follow updates of all Person entities rather than configuring individual Triggers. The individual Triggers may be specified by clicking CONFIGURE for the integration. If you need help with the configuration, have a look [**here**](https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#configuration-parameters).",
+                "title": "Person Location Trigger Configuration",
+                "description": "You can choose to follow updates of all Person entities rather than configuring individual trigger devices. Individual triggers may be added or edited below. If you need help with the configuration, have a look [**here**](https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#configuration-parameters).",
                 "data": {
-                    "follow_person_integration": "Follow Person Integration"
+                    "follow_person_integration": "Follow Person Integration?",
+                    "new_device_entity": "Trigger Entity (device) to add",
+                    "new_person_name": "Person Name for entity",
+                    "device_choice": "Choose a trigger to edit, or return to menu:"
+                }
+            },
+            "trigger_edit": {
+                "title": "Person Location Edit Trigger",
+                "description": "If you need help with the configuration, have a look [**here**](https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#configuration-parameters).",
+                "data": {
+                    "edit_action": "Action to be taken on {device}:",
+                    "new_device_entity": "Trigger Entity (device)",
+                    "new_person_name": "Person Name for entity"
+                }
+            },
+            "providers": {
+                "title": "Person Location Map Camera Configuration",
+                "description": "The integration provides a camera platform that can be used to provide a dynamic map image. Some knowledge of the 3rd-party mapping API is necessary to adjust these maps, so get into it only if you enjoy coding and figuring things out.\n\nMap camera providers may be selected below. If you need help with the configuration, have a look [**here**](https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#configuration-parameters).",
+                "data": {
+                    "provider_choice": "Choose the provider to edit, add a new one, or return to menu:"
+                }
+            },
+            "provider_add": {
+                "title": "Person Location Add Map Camera",
+                "description": "The integration provides a camera platform that can be used to provide a dynamic map image. Some knowledge of the 3rd-party mapping API is necessary to adjust these maps, so get into it only if you enjoy coding and figuring things out.\n\nAdd information for a new Map Camera. You will probably find it helpful to copy/paste the templates from an editor (like Developer tools > Template). If you need help with the configuration, have a look [**here**](https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#configuration-parameters).",
+                "data": {
+                    "name": "Map Camera Name",
+                    "state": "Map Camera State Template",
+                    "still_image_url": "Map Camera URL Template"
+                }
+            },
+            "provider_edit": {
+                "title": "Person Location Edit Map Camera",
+                "description": "Some knowledge of the 3rd-party mapping API is necessary to adjust these maps, so get into it only if you enjoy coding and figuring things out.\n\nYou will probably find it helpful to copy/paste the templates from an editor (like Developer tools > Template). If you need help with the configuration, have a look [**here**](https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#configuration-parameters).",
+                "data": {
+                    "edit_action": "Action to be taken on map camera {provider}:",
+                    "state": "Map Camera State Template",
+                    "still_image_url": "Map Camera URL Template"
                 }
             }
         },
         "error": {
             "sensor_invalid": "Invalid sensor entered.",
+            "duplicate_device": "Trigger Entity is already used.",
+            "duplicate_name": "Name is already used",
+            "missing_person": "Person Name must also be specified.",
+            "missing_device": "Trigger Entity must also be specified.",
+            "missing_three": "All three must be specified.",
             "invalid_key": "API key not accepted.",
             "invalid_email": "eMail address is not valid.",
             "nothing_was_changed": "No changes were entered for the configuration."
@@ -44,26 +92,47 @@
     },
     "options": {
         "step": {
-            "init": {
-                "title": "(1 of 2) Person Location Options",
+            "general": {
+                "title": "Person Location Options",
                 "description": "If you need help with the configuration, have a look [**here**](https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#configuration-parameters).",
                 "data": {
                     "extended_away": "Hours Extended Away",
                     "just_arrived": "Minutes Just Arrived",
                     "just_left": "Minutes Just Left",
                     "friendly_name_template": "Friendly Name Template",
-                    "show_zone_when_away": "Show zone when away?",
-                    "create_sensors": "Sensors to be created"
+                    "show_zone_when_away": "Show zone in state when away?",
+                    "create_sensors": "Additional sensors to be created"
                 }
             },
-            "triggers": {
-                "title": "(2 of 2) Person Location Triggers",
-                "description": "If you need help with the configuration, have a look [**here**](https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#configuration-parameters).",
+            "cameras": {
+                "title": "Person Location Map Camera Providers",
+                "description": "Select providers to remove, or continue to edit/add.",
                 "data": {
-                    "follow_person_integration": "Follow Person Integration - rather than looking at individual device trackers?",
-                    "devices": "Trigger Entities (uncheck to remove)",
-                    "new_device": "Trigger Entity to add",
-                    "new_person_name": "Person Name for entity"
+                "remove_providers": "Select providers to remove:"
+                }
+            },
+            "choose_provider": {
+                "title": "Choose Provider to Edit",
+                "description": "Select a provider to edit, or continue to add a new one.",
+                "data": {
+                "edit_provider": "Provider to edit:"
+                }
+            },
+            "add_provider": {
+                "title": "Add Map Camera Provider",
+                "description": "Enter details for the new provider. (It will probably be easiest to copy and paste from an editor.)",
+                "data": {
+                "new_provider_name": "Provider name",
+                "new_provider_url": "Still image URL template",
+                "new_provider_state": "State template"
+                }
+            },
+            "edit_provider": {
+                "title": "Edit Map Camera Provider",
+                "description": "Update details for the selected provider. (It will probably be easiest to copy and paste from an editor.)",
+                "data": {
+                "new_provider_url": "Still image URL template",
+                "new_provider_state": "State template"
                 }
             }
         },
@@ -71,8 +140,16 @@
             "device_and_name_required": "Both entity and person name are required to add a new trigger.",
             "new_device_not_found": "The new entity does not exist.",
             "new_device_wrong_domain": "The new entity is not in an allowed domain.",
-            "nothing_was_changed": "No changes were entered for the configuration."
+            "nothing_was_changed": "No changes were entered for the configuration.",
+            "incomplete_fields": "Not all required fields are filled in. Please complete all fields or leave them blank to cancel.",
+            "duplicate_name": "A provider with this name already exists. Please choose another.",
+            "invalid_url": "The URL template is invalid or empty.",
+            "invalid_state": "The state template is invalid."
+        },
+        "abort": {
+            "normal_exit": "Configuration finished."
         }
+
     },
     "services": {
         "reverse_geocode": {

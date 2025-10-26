@@ -8,6 +8,7 @@ WazeRouteCalculator.
 """
 
 import logging
+import pprint
 from datetime import datetime, timedelta
 from functools import partial
 
@@ -35,19 +36,14 @@ from .const import (
     DATA_ENTITY_INFO,
     DATA_UNDO_STATE_LISTENER,
     DATA_UNDO_UPDATE_LISTENER,
-    deep_merge_with_list_union,
     DEFAULT_FRIENDLY_NAME_TEMPLATE,
     DEFAULT_SHOW_ZONE_WHEN_AWAY,
     DOMAIN,
     INTEGRATION_LOCK,
     PERSON_LOCATION_INTEGRATION,
+    VERSION,
 )
-from .const import (
-    CONF_MINOR_VERSION as new_configuration_minor_version,
-)
-from .const import (
-    CONF_VERSION as new_configuration_version,
-)
+
 from .process_trigger import setup_process_trigger
 from .reverse_geocode import setup_reverse_geocode
 
@@ -117,8 +113,16 @@ def setup(hass, config):
                 != pli.configuration["friendly_name_template"]
             )
         )
-        pli.configuration = deep_merge_with_list_union(pli.configuration,entry.data)
-        pli.configuration = deep_merge_with_list_union(pli.configuration,entry.options)
+        _LOGGER.debug("[_async_setup_entry] pli.configuration merge")
+        _LOGGER.debug("[_async_setup_entry] pli.configuration = \n%s", pprint.pformat(pli.configuration))
+        _LOGGER.debug("[_async_setup_entry] entry.data = \n%s", pprint.pformat(entry.data))
+    #    pli.configuration.update(entry.data)
+        _LOGGER.debug("[_async_setup_entry] entry.options = \n%s", pprint.pformat(entry.options))
+    #    pli.configuration.update(entry.options)
+    
+        pli.configuration = {**(pli.configuration or {}), **(entry.data or {}), **(entry.options or {})}
+
+        _LOGGER.debug("[_async_setup_entry] pli.configuration = \n%s", pprint.pformat(pli.configuration))
 
         hass.data[DOMAIN][DATA_CONFIGURATION] = pli.configuration
 
@@ -307,12 +311,13 @@ async def async_unload_entry(hass, entry):
 async def async_migrate_entry(hass, config_entry: ConfigEntry):
     """Migrate old configuration entry."""
     _LOGGER.debug(
-        "Migrating configuration from version %s.%s",
+        "[async_migrate_entry] Migrating configuration %s from version %s.%s",
+        config_entry.entry_id,
         config_entry.version,
         config_entry.minor_version,
     )
 
-    if config_entry.version > new_configuration_version:
+    if str(config_entry.version) > VERSION:
         _LOGGER.error(
             "Component has been downgraded without restoring configuration from backup"
         )
@@ -321,12 +326,8 @@ async def async_migrate_entry(hass, config_entry: ConfigEntry):
     new_data = {**config_entry.data}
     new_options = {**config_entry.options}
 
-    if config_entry.version == 1:
-        if config_entry.minor_version < 2:
-            #    # merge "options" into "data" to simplify reconfiguration flows:
-            #    new_data = {**new_data, **new_options}
-            #    new_options = {}
-
+    if str(config_entry.version) == "1":
+        if str(config_entry.minor_version) < "2":
             # Add two new settings:
             if CONF_FRIENDLY_NAME_TEMPLATE not in new_options:
                 _LOGGER.debug(f"Adding { CONF_FRIENDLY_NAME_TEMPLATE }")
@@ -344,13 +345,13 @@ async def async_migrate_entry(hass, config_entry: ConfigEntry):
         config_entry,
         data=new_data,
         options=new_options,
-        minor_version=new_configuration_minor_version,
-        version=new_configuration_version,
-        title="Person Locations",
+        minor_version="1",
+        version=VERSION,
+        title="Person Location Config",
     )
 
     _LOGGER.debug(
-        "Migration to configuration version %s.%s successful",
+        "[async_migrate_entry] Migration to configuration version %s.%s complete",
         config_entry.version,
         config_entry.minor_version,
     )
