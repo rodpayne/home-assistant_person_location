@@ -44,6 +44,10 @@ from .const import (
     VERSION,
 )
 
+# Platforms provided by this integration
+from homeassistant.const import Platform
+PLATFORMS: list[Platform] = [Platform.CAMERA]
+
 from .process_trigger import setup_process_trigger
 from .reverse_geocode import setup_reverse_geocode
 
@@ -276,13 +280,21 @@ def setup(hass, config):
 
 async def async_setup_entry(hass, entry):
     """Accept conf_flow configuration."""
+    # from homeassistant.helpers import platform_forward
 
+    _LOGGER.debug("[async_setup_entry] Setting up entry: %s", entry.entry_id)
+
+    if DOMAIN not in hass.data:
+        hass.data[DOMAIN] = {}
     hass.data[DOMAIN][DATA_CONFIG_ENTRY] = entry
 
     if DATA_UNDO_UPDATE_LISTENER not in hass.data[DOMAIN]:
         hass.data[DOMAIN][DATA_UNDO_UPDATE_LISTENER] = entry.add_update_listener(
             async_options_update_listener
         )
+
+    # Forward the setup to the camera platform
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return await hass.data[DOMAIN][DATA_ASYNC_SETUP_ENTRY](hass, entry)
 
@@ -296,13 +308,15 @@ async def async_options_update_listener(hass, entry):
 async def async_unload_entry(hass, entry):
     """Unload a config entry."""
 
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
     if DATA_UNDO_UPDATE_LISTENER in hass.data[DOMAIN]:
         hass.data[DOMAIN][DATA_UNDO_UPDATE_LISTENER]()
 
     hass.data[DOMAIN].pop(DATA_UNDO_UPDATE_LISTENER)
     hass.data[DOMAIN].pop(DATA_CONFIG_ENTRY)
 
-    return True
+    return unload_ok
 
 
 # ------------------------------------------------------------------

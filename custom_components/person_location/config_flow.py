@@ -1,19 +1,14 @@
 """Config flow for Person Location integration."""
 
 import logging
-import re
-#import httpx
 import voluptuous as vol
 import homeassistant.helpers.config_validation as cv
 
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry, OptionsFlow
 from homeassistant.core import callback
-from homeassistant.helpers.aiohttp_client import async_create_clientsession
-from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.selector import selector
 
-from .api import PersonLocation_aiohttp_Client
 from .const import (
     DOMAIN,
     DATA_CONFIGURATION,
@@ -121,8 +116,6 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 return await self.async_step_triggers()
             if choice == "providers":
                 return await self.async_step_providers()
-        #    if choice == "triggers":
-        #        return await self.async_step_triggers()
             if choice == "done":
                 return await self._async_save__integration_config_data()
             
@@ -175,6 +168,26 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         }
         return await self._async_show_config_geocode_form(user_input)
 
+    async def _async_show_config_geocode_form(self, user_input):
+        """Show the initial form for API keys and geocoding settings."""
+        return self.async_show_form(
+            step_id="geocode",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(CONF_LANGUAGE, default=user_input[CONF_LANGUAGE]): str,
+                    vol.Optional(CONF_REGION, default=user_input[CONF_REGION]): str,
+                    vol.Optional(CONF_GOOGLE_API_KEY, default=user_input[CONF_GOOGLE_API_KEY]): str,
+                    vol.Optional(CONF_MAPBOX_API_KEY, default=user_input[CONF_MAPBOX_API_KEY]): str,
+                    vol.Optional(CONF_MAPQUEST_API_KEY, default=user_input[CONF_MAPQUEST_API_KEY]): str,
+                    vol.Optional(CONF_OSM_API_KEY, default=user_input[CONF_OSM_API_KEY]): str,
+                    vol.Optional(CONF_RADAR_API_KEY, default=user_input[CONF_RADAR_API_KEY]): str,
+                }
+            ),
+            errors=self._errors,
+        )
+
+    # ----------------- Sensors to be created -----------------
+
     async def async_step_sensors(self, user_input=None):
         """Step: Collect sensor creation and output platform."""
         if user_input is not None:
@@ -200,6 +213,19 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             CONF_OUTPUT_PLATFORM: self.integration_config_data.get(CONF_OUTPUT_PLATFORM, DEFAULT_OUTPUT_PLATFORM),
         }
         return await self._show_config_sensors_form(user_input)
+
+    async def _show_config_sensors_form(self, user_input):
+        """Show the form for sensor creation and output platform."""
+        return self.async_show_form(
+            step_id="sensors",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(CONF_CREATE_SENSORS, default=user_input[CONF_CREATE_SENSORS]): str,
+                    vol.Optional(CONF_OUTPUT_PLATFORM, default=user_input[CONF_OUTPUT_PLATFORM]): vol.In(VALID_OUTPUT_PLATFORM),
+                }
+            ),
+            errors=self._errors,
+        )
 
     # ----------------- Triggers: Manage triggers/devices -----------------
 
@@ -406,6 +432,8 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_provider_add(self, user_input=None):
         """Add a new provider."""
+        from homeassistant.helpers import selector
+
         _LOGGER.debug("[async_step_provider_add] user_input = %s", user_input)
 
         self._errors = {}
@@ -419,11 +447,14 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             new_provider_url = ""
         else:
             new_provider_name = user_input.get(CONF_NAME,"").strip()
-            new_provider_state = user_input.get(CONF_STATE,"").strip()
-            new_provider_url = user_input.get(CONF_STILL_IMAGE_URL,"").strip()
-
             _LOGGER.debug("[async_step_provider_add] new_provider_name = %s", new_provider_name)
+
+            raw_provider_state = user_input.get(CONF_STATE, "")
+            new_provider_state = self.normalize_template(raw_provider_state)
             _LOGGER.debug("[async_step_provider_add] new_provider_state = %s", new_provider_state)
+            
+            raw_provider_url = user_input.get(CONF_STILL_IMAGE_URL, "")
+            new_provider_url = self.normalize_template(raw_provider_url)
             _LOGGER.debug("[async_step_provider_add] new_provider_url = %s", new_provider_url)
 
             if (new_provider_name or new_provider_state or new_provider_url):
@@ -449,18 +480,22 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="provider_add",
-            data_schema=vol.Schema(
-                {
-                    vol.Optional(CONF_NAME,default=new_provider_name): str,
-                    vol.Optional(CONF_STATE,default=new_provider_state): str,
-                    vol.Optional(CONF_STILL_IMAGE_URL,default=new_provider_url): str,
-                }
-            ),
+            data_schema=vol.Schema({
+                vol.Optional(CONF_NAME, default=new_provider_name): str,
+                vol.Optional(CONF_STATE, default=new_provider_state): selector.TextSelector(
+                        selector.TextSelectorConfig(multiline=True)
+                ),
+                vol.Optional(CONF_STILL_IMAGE_URL, default=new_provider_url): selector.TextSelector(
+                    selector.TextSelectorConfig(multiline=True)
+                ),
+            }),
             errors=self._errors,
         )
 
     async def async_step_provider_edit(self, user_input=None):
         """Edit an existing map provider (update/remove)."""
+        from homeassistant.helpers import selector
+        
         _LOGGER.debug("[async_step_provider_edit] user_input = %s", user_input)
 
         # note: providers = list of dicts with keys name, state, url
@@ -479,8 +514,11 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             }
 
         else:
-            new_state = user_input.get(CONF_STATE, "").strip()
-            new_still_image_url = user_input.get(CONF_STILL_IMAGE_URL, "").strip()
+            raw_state = user_input.get(CONF_STATE, "")
+            new_state = self.normalize_template(raw_state)
+
+            raw_still_image_url = user_input.get(CONF_STILL_IMAGE_URL, "")
+            new_still_image_url = self.normalize_template(raw_still_image_url)
 
             action = user_input.get("edit_action")
             if action == removeLabel:
@@ -503,11 +541,15 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Optional(
                         CONF_STATE,
                         default=provider.get(CONF_STATE, "")
-                    ): str,
+                    ): selector.TextSelector(
+                        selector.TextSelectorConfig(multiline=True)
+                    ),
                     vol.Optional(
                         CONF_STILL_IMAGE_URL,
                         default=provider.get(CONF_STILL_IMAGE_URL, "")
-                    ): str,
+                    ): selector.TextSelector(
+                        selector.TextSelectorConfig(multiline=True)
+                    ),
                 }
             ),
             description_placeholders={"provider": self._provider_to_edit},
@@ -533,7 +575,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             _LOGGER.debug(
                 "[_load_previous_integration_config_data] empty configuration, " \
                 "self.source = %s",
-                 self.source
+                self.source
             )
             self._source_create = True
             self.config_entry = None
@@ -560,6 +602,8 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             )
             # Reload so changes take effect immediately
             await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+            # could use with same effect? await self.hass.config_entries.async_reload_entry(self.config_entry)
+
             return self.async_abort(reason="Configuration successfully saved.")
         else:
             _LOGGER.debug(
@@ -570,40 +614,25 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             # First-time setup
             return self.async_create_entry(title="Person Location Config", data=self._user_input)
 
-    async def _async_show_config_geocode_form(self, user_input):
-        """Show the initial form for API keys and geocoding settings."""
-        return self.async_show_form(
-            step_id="geocode",
-            data_schema=vol.Schema(
-                {
-                    vol.Optional(CONF_LANGUAGE, default=user_input[CONF_LANGUAGE]): str,
-                    vol.Optional(CONF_REGION, default=user_input[CONF_REGION]): str,
-                    vol.Optional(CONF_GOOGLE_API_KEY, default=user_input[CONF_GOOGLE_API_KEY]): str,
-                    vol.Optional(CONF_MAPBOX_API_KEY, default=user_input[CONF_MAPBOX_API_KEY]): str,
-                    vol.Optional(CONF_MAPQUEST_API_KEY, default=user_input[CONF_MAPQUEST_API_KEY]): str,
-                    vol.Optional(CONF_OSM_API_KEY, default=user_input[CONF_OSM_API_KEY]): str,
-                    vol.Optional(CONF_RADAR_API_KEY, default=user_input[CONF_RADAR_API_KEY]): str,
-                }
-            ),
-            errors=self._errors,
-        )
+    def normalize_template(self, s: str) -> str:
+        import re
 
-    async def _show_config_sensors_form(self, user_input):
-        """Show the form for sensor creation and output platform."""
-        return self.async_show_form(
-            step_id="sensors",
-            data_schema=vol.Schema(
-                {
-                    vol.Optional(CONF_CREATE_SENSORS, default=user_input[CONF_CREATE_SENSORS]): str,
-                    vol.Optional(CONF_OUTPUT_PLATFORM, default=user_input[CONF_OUTPUT_PLATFORM]): vol.In(VALID_OUTPUT_PLATFORM),
-                }
-            ),
-            errors=self._errors,
-        )
+        if not isinstance(s, str):
+            return s
+        # Replace literal backslash-n first (one or more in a row)
+        s = re.sub(r'(\\n)+', ' ', s)
+        # Replace real newlines of any flavor
+        s = re.sub(r'[\r\n]+', ' ', s)
+        # Collapse runs of whitespace
+        s = re.sub(r'\s{2,}', ' ', s)
+        return s.strip()
 
     # ----------------- API Key Tests -----------------
 
     async def _test_google_api_key(self, key):
+        from .api import PersonLocation_aiohttp_Client
+        from homeassistant.helpers.aiohttp_client import async_create_clientsession
+
         if key == DEFAULT_API_KEY_NOT_SET:
             return True
         try:
@@ -620,6 +649,8 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         return False
 
     async def _test_mapbox_api_key(self, key):
+        from homeassistant.helpers.httpx_client import get_async_client
+
         if key == DEFAULT_API_KEY_NOT_SET:
             return True
         try:
@@ -637,6 +668,9 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         return False
 
     async def _test_mapquest_api_key(self, key):
+        from .api import PersonLocation_aiohttp_Client
+        from homeassistant.helpers.aiohttp_client import async_create_clientsession
+
         if key == DEFAULT_API_KEY_NOT_SET:
             return True
         try:
@@ -653,6 +687,8 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         return False
 
     async def _test_osm_api_key(self, key):
+        import re
+
         if key == DEFAULT_API_KEY_NOT_SET:
             return True
         try:
@@ -665,6 +701,8 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         return False
 
     async def _test_radar_api_key(self, key):
+        from homeassistant.helpers.httpx_client import get_async_client
+
         if key == DEFAULT_API_KEY_NOT_SET:
             return True
         try:
@@ -682,11 +720,12 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         self._errors[CONF_RADAR_API_KEY] = "invalid_key"
         return False
 
+# --------------------------- Options Factory ---------------------------
+
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
-        return PersonLocationOptionsFlowHandler(config_entry)
-
+        return PersonLocationOptionsFlowHandler()
 
 # ============================================================
 # OptionsFlow — handles OPTIONS (runtime behavior)
@@ -697,8 +736,7 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
 
     # ----------------- Entry Points from Home Assistant -----------------
 
-    def __init__(self, config_entry: ConfigEntry):
-        self.config_entry = config_entry
+    def __init__(self):
         self._errors = {}
 
     async def async_step_init(self, user_input=None):
@@ -711,8 +749,30 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
 
     async def async_step_general(self, user_input=None):
         """General runtime options (thresholds, templates, UX toggles)."""
-        if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+
+        conf_preview_friendly_name = "_preview_friendly_name"
+
+        if user_input is None:
+
+            user_input = {
+                conf_preview_friendly_name: False,
+            }
+
+        else:
+
+            if not self._errors and user_input[conf_preview_friendly_name] == False:
+                remove_preview_friendly_name = user_input.pop(conf_preview_friendly_name)
+                return self.async_create_entry(title="", data=user_input)
+
+        if user_input.get(conf_preview_friendly_name):
+            template_str = user_input.get(CONF_FRIENDLY_NAME_TEMPLATE, "")
+            if template_str:
+                test_friendly_name = await self._test_friendly_name_template(template_str)
+                friendly_preview = "Preview: " + test_friendly_name
+            else:
+                friendly_preview = "No template provided yet"
+        else:
+            friendly_preview = "Preview after submit?"
 
         return self.async_show_form(
             step_id="general",
@@ -748,9 +808,106 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
                             CONF_FRIENDLY_NAME_TEMPLATE, DEFAULT_FRIENDLY_NAME_TEMPLATE
                         ),
                     ): str,
+                    vol.Optional(
+                        conf_preview_friendly_name,
+                        default=user_input[conf_preview_friendly_name]
+                    ): cv.boolean,
                 }
             ),
+            description_placeholders={"friendly_preview": friendly_preview},
             errors=self._errors,
         )
-    
- 
+
+
+    # ----------------- Friendly Name Template Test -----------------
+
+    async def _test_friendly_name_template(self, template_str: str) -> str:
+        '''Render a preview of friendly_name for the supplied template_str'''
+
+        from homeassistant.core import State
+        from homeassistant.helpers.template import Template as HATemplate
+        from homeassistant.exceptions import TemplateError
+
+        _LOGGER.debug("HATemplate type = %s", type(HATemplate))
+        
+        if not isinstance(template_str, str) or not template_str.strip():
+            return "Template is not available."
+
+        # This rendering is using the following example states.
+        # TODO: we could use actual live state after triggers are configured (if we could decide which one to show).
+
+        friendly_name_location = "is in Spanish Fork"
+
+        target = State(
+            "sensor.rod_location",          # entity_id
+            "Just Left",                    # state
+            {
+                "source_type": "gps",
+                "latitude": 40.12703438635704,
+                "longitude": -111.63607706862837,
+                "gps_accuracy": 6,
+                "altitude": 1434,
+                "vertical_accuracy": 30,
+                "entity_picture": "/local/rod-phone.png",
+                "source": "device_tracker.rod_iphone_16",
+                "reported_state": "Away",
+                "person_name": "Rod",
+                "location_time": "2025-10-26 18:31:21.062200",
+                "icon": "mdi:help-circle",
+                "zone": "away",
+                "bread_crumbs": "Home> Spanish Fork",
+                "compass_bearing": 246.6,
+                "direction": "away from home",
+                "version": "person_location 2025.10.25",
+                "attribution": '"Powered by Radar"; "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright"; "powered by Google"; "Data by Waze App. https://waze.com"; ',
+                "meters_from_home": 2641.1,
+                "miles_from_home": 1.6,
+                "Radar": "1386 N Canyon Creek Pkwy, Spanish Fork, UT 84660 US",
+                "Open_Street_Map": "North Marketplace Drive Spanish Fork Utah County Utah 84660 United States of America",
+                "Google_Maps": "1386 N Cyn Crk Pkwy, Spanish Fork, UT 84660, USA",
+                "locality": "Spanish Fork",
+                "driving_miles": "2.52",
+                "driving_minutes": "5.2",
+                "friendly_name": "Rod (Rod-iPhone-16) is in Spanish Fork",
+                "speed": 1.0,
+            }
+        )
+
+        sourceObject = State(
+            "device_tracker.rod_iphone_16",
+            "not_home",
+            {
+                "source_type": "gps",
+                "battery_level": 85,
+                "latitude": 40.12703438635704,
+                "longitude": -111.63607706862837,
+                "gps_accuracy": 6,
+                "altitude": 1433.783642578125,
+                "vertical_accuracy": 30,
+                "friendly_name": "Rod-iPhone-16",
+                "person_name": "rod",
+                "entity_picture": "/local/rod-phone.png",
+            }
+        )
+
+        friendly_name_variables = {
+            "friendly_name_location": friendly_name_location,
+            "person_name": target.attributes["person_name"],
+            "source": sourceObject,
+            "target": target,
+        }
+        _LOGGER.debug(f"friendly_name_variables = {friendly_name_variables}")
+
+        try:
+            myTemplate = HATemplate(template_str, self.hass)
+            rendered = myTemplate.async_render(
+                friendly_name_variables,
+                parse_result=False,
+            )
+            return "`" + " ".join(rendered.replace("()", "").split()) + "`"
+
+        except TemplateError as err:
+            _LOGGER.warning("Template render failed: %s", err)
+            return f"⚠️ Template error: {err}"
+
+
