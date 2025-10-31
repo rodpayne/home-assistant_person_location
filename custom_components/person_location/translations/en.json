@@ -56,7 +56,7 @@
                 }
             },
             "provider_add": {
-                "title": "Person Location Add Map Camera",
+                "title": "Person Location Map Camera Add",
                 "description": "The integration provides a camera platform that can be used to provide a dynamic map image. Some knowledge of the 3rd-party mapping API is necessary to adjust these maps, so get into it only if you enjoy coding and figuring things out.\n\nAdd information for a new Map Camera. You may find it helpful to copy/paste the templates from an editor (like Developer tools > Template). If you need help with the configuration, have a look [**here**](https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#configuration-parameters). Templating is explained [**here**](https://www.home-assistant.io/docs/configuration/templating/).",
                 "data": {
                     "name": "Map Camera Name",
@@ -65,10 +65,19 @@
                 }
             },
             "provider_edit": {
-                "title": "Person Location Edit Map Camera",
+                "title": "Person Location Map Camera Edit",
                 "description": "Some knowledge of the 3rd-party mapping API is necessary to adjust these maps, so get into it only if you enjoy coding and figuring things out.\n\nYou may find it helpful to copy/paste the templates from an editor (like Developer tools > Template). If you need help with the configuration, have a look [**here**](https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#configuration-parameters). Templating is explained [**here**](https://www.home-assistant.io/docs/configuration/templating/).",
                 "data": {
                     "edit_action": "Action to be taken on map camera {provider}:",
+                    "state": "Map Camera State Template",
+                    "still_image_url": "Map Camera URL Template"
+                }
+            },
+            "provider_preview": {
+                "title": "Person Location Map Camera Preview",
+                "description": "**Map Camera Name:** `camera.{provider_name}`\n\n **Map Camera State Preview:** `{provider_state_preview}` \n{state_missing_entities} \n\n**Map Camera URL Preview:** `{provider_url_preview}` \n{url_missing_entities} ",
+                "data": {
+                    "next_action": "Action to be taken on Submit:",
                     "state": "Map Camera State Template",
                     "still_image_url": "Map Camera URL Template"
                 }
@@ -81,6 +90,8 @@
             "missing_person": "Person Name must also be specified.",
             "missing_device": "Trigger Entity must also be specified.",
             "missing_three": "All three must be specified if any are.",
+            "invalid_state_template": "Invalid State template. [{state_error}]",
+            "invalid_url_template": "Invalid URL template. [{url_error}]",
             "invalid_key": "API key not accepted.",
             "invalid_email": "eMail address is not valid.",
             "nothing_was_changed": "No changes were entered for the configuration."

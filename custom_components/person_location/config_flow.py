@@ -1,13 +1,27 @@
 """Config flow for Person Location integration."""
 
 import logging
+import inspect
 import voluptuous as vol
-import homeassistant.helpers.config_validation as cv
 
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry, OptionsFlow
 from homeassistant.core import callback
-from homeassistant.helpers.selector import selector
+from homeassistant.core import State
+from homeassistant.exceptions import TemplateError
+from homeassistant.helpers.aiohttp_client import async_create_clientsession
+import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers.httpx_client import get_async_client
+#from homeassistant.helpers.selector import selector
+from homeassistant.helpers import selector
+from homeassistant.helpers.template import Template as HATemplate
+from urllib.parse import urlparse
+
+from .api import PersonLocation_aiohttp_Client
+from .helpers.template import normalize_template
+from .helpers.template import validate_template
+
+from typing import Any, Dict, Optional
 
 from .const import (
     DOMAIN,
@@ -343,7 +357,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             return await self.async_step_triggers()
 
         updateLabel = "Update"
-        removeLabel = "Remove"
+        removeLabel = "❌ Remove"
 
         if user_input is None:
             user_input = {
@@ -401,6 +415,16 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         _LOGGER.debug("[async_step_providers] providers = %s", providers)
         _LOGGER.debug("[async_step_providers] existing_names = %s", existing_names)
 
+        cfg = self.hass.data[DOMAIN][DATA_CONFIGURATION]
+        self._camera_template_variables = {
+            "parse_result": False,      # TODO: Investigate whether parse_result belongs here.
+            "google_api_key": cfg[CONF_GOOGLE_API_KEY],
+            "mapbox_api_key": cfg[CONF_MAPBOX_API_KEY],
+            "mapquest_api_key": cfg[CONF_MAPQUEST_API_KEY],
+            "osm_api_key": cfg[CONF_OSM_API_KEY],
+            "radar_api_key": cfg[CONF_RADAR_API_KEY],
+        }
+
         if not existing_names:
             return await self.async_step_provider_add()
 
@@ -432,69 +456,101 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_provider_add(self, user_input=None):
         """Add a new provider."""
-        from homeassistant.helpers import selector
+        # from homeassistant.helpers import selector
 
         _LOGGER.debug("[async_step_provider_add] user_input = %s", user_input)
 
-        self._errors = {}
+        errors = {}
+        placeholders = {}
 
         # note: providers = list of dicts with keys name, state, url
         providers = self._user_input.get(CONF_PROVIDERS, self.integration_config_data.get(CONF_PROVIDERS, []))
 
         if user_input is None:
-            new_provider_name = ""
-            new_provider_state = ""
-            new_provider_url = ""
+            user_input = {
+                CONF_NAME: "",
+                CONF_STATE: "",
+                CONF_STILL_IMAGE_URL: "",
+            }
         else:
             new_provider_name = user_input.get(CONF_NAME,"").strip()
-            _LOGGER.debug("[async_step_provider_add] new_provider_name = %s", new_provider_name)
 
             raw_provider_state = user_input.get(CONF_STATE, "")
-            new_provider_state = self.normalize_template(raw_provider_state)
-            _LOGGER.debug("[async_step_provider_add] new_provider_state = %s", new_provider_state)
+            new_provider_state = normalize_template(raw_provider_state)
             
             raw_provider_url = user_input.get(CONF_STILL_IMAGE_URL, "")
-            new_provider_url = self.normalize_template(raw_provider_url)
-            _LOGGER.debug("[async_step_provider_add] new_provider_url = %s", new_provider_url)
+            new_provider_url = normalize_template(raw_provider_url)
 
             if (new_provider_name or new_provider_state or new_provider_url):
                 if not new_provider_name:
-                    self._errors[CONF_NAME] = "missing_three"
+                    errors[CONF_NAME] = "missing_three"
                 elif any(p["name"].lower() == new_provider_name.lower() for p in providers):
-                    self._errors[CONF_NAME] = "duplicate_name"
+                    errors[CONF_NAME] = "duplicate_name"
                 if not new_provider_state:
-                    self._errors[CONF_STATE] = "missing_three"
+                    errors[CONF_STATE] = "missing_three"
                 if not new_provider_url:
-                    self._errors[CONF_STILL_IMAGE_URL] = "missing_three"
-                if not self._errors:
-                    new_provider = {
-                        "name": user_input[CONF_NAME],
-                        CONF_STATE: user_input[CONF_STATE],
-                        CONF_STILL_IMAGE_URL: user_input[CONF_STILL_IMAGE_URL],
-                    }
-                    providers.append(new_provider)
-                    self._user_input[CONF_PROVIDERS] = providers
-                    return await self.async_step_providers()
+                    errors[CONF_STILL_IMAGE_URL] = "missing_three"
+                
+                if not errors:
+                    # Validate 'state' template
+                    v1 = await validate_template(self.hass,new_provider_state,self._camera_template_variables, expected="text")
+                    if not v1["ok"]:
+                        errors[CONF_STATE] = "invalid_state_template"
+                        placeholders["state_error"] = v1["error"]
+                    elif v1["missing_entities"]:
+                        # Not fatal, but useful feedback
+                        placeholders["state_missing"] = ", ".join(v1["missing_entities"])
+
+                    # Validate 'still_image_url' template as a URL
+                    v2 = await validate_template(self.hass,new_provider_url,self._camera_template_variables, expected="url")
+                    if not v2["ok"]:
+                        errors[CONF_STILL_IMAGE_URL] = "invalid_url_template"
+                        placeholders["url_error"] = v2["error"]
+
+                    if not errors:
+                    
+                        self._provider_to_edit = new_provider_name
+                        new_provider = {
+                            CONF_NAME: user_input[CONF_NAME],
+                            CONF_STATE: user_input[CONF_STATE],
+                            CONF_STILL_IMAGE_URL: user_input[CONF_STILL_IMAGE_URL],
+                        }
+                        providers.append(new_provider)
+                        self._user_input[CONF_PROVIDERS] = providers
+                        return await self.async_step_providers()
             else:
                 return await self.async_step_providers()
+
+        _LOGGER.debug(
+            "[async_step_provider_add] errors=%s, placeholders=%s",
+            errors,
+            placeholders,
+        )
 
         return self.async_show_form(
             step_id="provider_add",
             data_schema=vol.Schema({
-                vol.Optional(CONF_NAME, default=new_provider_name): str,
-                vol.Optional(CONF_STATE, default=new_provider_state): selector.TextSelector(
-                        selector.TextSelectorConfig(multiline=True)
+                vol.Optional(CONF_NAME,
+                    default=user_input.get(CONF_NAME, "")
+                ): str,
+                vol.Optional(CONF_STATE,
+                    default=user_input.get(CONF_STATE, "")
+                ): selector.TextSelector(
+                    selector.TextSelectorConfig(multiline=True)
                 ),
-                vol.Optional(CONF_STILL_IMAGE_URL, default=new_provider_url): selector.TextSelector(
+                vol.Optional(CONF_STILL_IMAGE_URL,
+                    default=user_input.get(CONF_STILL_IMAGE_URL, "")
+                ): selector.TextSelector(
                     selector.TextSelectorConfig(multiline=True)
                 ),
             }),
-            errors=self._errors,
+            description_placeholders=placeholders,
+            errors=errors,
         )
 
     async def async_step_provider_edit(self, user_input=None):
         """Edit an existing map provider (update/remove)."""
-        from homeassistant.helpers import selector
+        # from homeassistant.helpers import selector
         
         _LOGGER.debug("[async_step_provider_edit] user_input = %s", user_input)
 
@@ -504,31 +560,64 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         if not provider:
             return await self.async_step_providers()
 
-        updateLabel = "Update"
-        removeLabel = "Remove"
+        errors = {}
+        placeholders = {"provider": self._provider_to_edit}
+
+        updateLabel = "Update and preview result"
+        removeLabel = "❌ Remove"
 
         if user_input is None:
             user_input = {
                 CONF_STATE: provider.get(CONF_STATE, ""),
                 CONF_STILL_IMAGE_URL: provider.get(CONF_STILL_IMAGE_URL, ""),
             }
+            action = updateLabel
 
         else:
             raw_state = user_input.get(CONF_STATE, "")
-            new_state = self.normalize_template(raw_state)
+            new_state = normalize_template(raw_state)
 
             raw_still_image_url = user_input.get(CONF_STILL_IMAGE_URL, "")
-            new_still_image_url = self.normalize_template(raw_still_image_url)
+            new_still_image_url = normalize_template(raw_still_image_url)
 
             action = user_input.get("edit_action")
             if action == removeLabel:
                 providers.remove(provider)
             elif action == updateLabel:
-                provider[CONF_STATE] = user_input[CONF_STATE]
-                provider[CONF_STILL_IMAGE_URL] = user_input[CONF_STILL_IMAGE_URL]
 
-            self._user_input[CONF_PROVIDERS] = providers
-            return await self.async_step_providers()
+                # Validate 'state' template
+                v1 = await validate_template(self.hass,new_state,self._camera_template_variables, expected="text")
+                if not v1["ok"]:
+                    errors[CONF_STATE] = "invalid_state_template"
+                    placeholders["state_error"] = v1["error"]
+                elif v1["missing_entities"]:
+                    # Not fatal, but useful feedback
+                    placeholders["state_missing"] = ", ".join(v1["missing_entities"])
+
+                # Validate 'still_image_url' template as a URL
+                v2 = await validate_template(self.hass,new_still_image_url,self._camera_template_variables, expected="url")
+                if not v2["ok"]:
+                    errors[CONF_STILL_IMAGE_URL] = "invalid_url_template"
+                    placeholders["url_error"] = v2["error"]
+                elif v2["missing_entities"]:
+                    # Not fatal, but useful feedback
+                    placeholders["url_missing"] = ", ".join(v2["missing_entities"])
+
+                if not errors:
+
+                    provider[CONF_STATE] = user_input[CONF_STATE]
+                    provider[CONF_STILL_IMAGE_URL] = user_input[CONF_STILL_IMAGE_URL]
+
+            if not errors:
+
+                self._user_input[CONF_PROVIDERS] = providers
+                return await self.async_step_provider_preview()
+
+        _LOGGER.debug(
+            "[async_step_provider_edit] errors=%s, placeholders=%s",
+            errors,
+            placeholders,
+        )
 
         return self.async_show_form(
             step_id="provider_edit",
@@ -536,24 +625,139 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 {
                     vol.Required(
                         "edit_action",
-                        default=updateLabel
+                        default=action
                     ): vol.In([updateLabel, removeLabel]),
                     vol.Optional(
                         CONF_STATE,
-                        default=provider.get(CONF_STATE, "")
+                        default=user_input.get(CONF_STATE, "")
                     ): selector.TextSelector(
                         selector.TextSelectorConfig(multiline=True)
                     ),
                     vol.Optional(
                         CONF_STILL_IMAGE_URL,
-                        default=provider.get(CONF_STILL_IMAGE_URL, "")
+                        default=user_input.get(CONF_STILL_IMAGE_URL, "")
                     ): selector.TextSelector(
                         selector.TextSelectorConfig(multiline=True)
                     ),
                 }
             ),
-            description_placeholders={"provider": self._provider_to_edit},
-            errors=self._errors,
+            description_placeholders=placeholders,
+            errors=errors,
+        )
+
+    async def async_step_provider_preview(self, user_input=None):
+        """Preview an existing map provider."""
+        
+        _LOGGER.debug("[async_step_provider_prieview] user_input = %s", user_input)
+
+        # note: providers = list of dicts with keys name, state, url
+        providers = self._user_input.get(CONF_PROVIDERS, self.integration_config_data.get(CONF_PROVIDERS, []))
+        provider = next((p for p in providers if p["name"] == self._provider_to_edit), None)
+        if not provider:
+            return await self.async_step_providers()
+
+        provider_name = provider.get(CONF_NAME,""),
+
+        raw_state = provider.get(CONF_STATE, "")
+        provider_state = normalize_template(raw_state)
+
+        raw_still_image_url = provider.get(CONF_STILL_IMAGE_URL, "")
+        provider_url = normalize_template(raw_still_image_url)
+
+        _LOGGER.debug(
+            "[async_step_provider_preview] provider_name=%s, provider_state=%s, provider_url=%s",
+            provider_name,
+            provider_state,
+            provider_url,
+        )
+
+        errors = {}
+        placeholders = {
+            "provider_name": self._provider_to_edit,
+            "provider_state_preview": "",
+            "state_missing_entities": "",
+            "provider_url_preview": "",
+            "url_missing_entities": "",
+        }
+        edit_this_provider = "__edit__"
+        edit_this_provider_choice = "🖊️ Edit this provider"
+        
+        add_new_provider = "__add__"
+        add_new_provider_choice = "➕ Add new provider"
+
+        return_to_menu = "__return__"
+        return_to_menu_choice = "🔙 Return to Map Camera List"
+        
+        return_to_main_menu = "__main__"
+        return_to_main_menu_choice = "🔙 🔙 Return to Configuration Menu"
+        
+        choices = {
+            edit_this_provider: edit_this_provider_choice,
+            add_new_provider: add_new_provider_choice,
+            return_to_menu: return_to_menu_choice,
+            return_to_main_menu: return_to_main_menu_choice,
+        }
+
+        # Validate 'state' template
+        v1 = await validate_template(self.hass,provider_state,self._camera_template_variables, expected="text")
+        if not v1["ok"]:
+            errors[CONF_STATE] = "invalid_state_template"
+            placeholders["provider_state_preview"] = v1["error"]
+        else:
+            placeholders["provider_state_preview"] = v1["rendered"]
+            if v1["missing_entities"]:
+                # Not fatal, but useful feedback
+                placeholders["state_missing_entities"] = "⚠ Missing entities: " + ", ".join(v1["missing_entities"])
+
+        # Validate 'still_image_url' template as a URL
+        v2 = await validate_template(self.hass,provider_url,self._camera_template_variables, expected="url")
+        if not v2["ok"]:
+            errors[CONF_STILL_IMAGE_URL] = "invalid_url_template"
+            placeholders["provider_url_preview"] = v2["error"]
+        else:
+            placeholders["provider_url_preview"] = v2["rendered"]
+            if v2["missing_entities"]:
+                # Not fatal, but useful feedback
+                placeholders["url_missing_entities"] = "⚠ Missing entities: " + ", ".join(v2["missing_entities"])
+
+        if user_input is None:
+            user_input = {
+                CONF_STATE: provider_state,
+                CONF_STILL_IMAGE_URL: provider_url,
+            }
+            action = edit_this_provider
+        else:
+            if not errors:
+                action = user_input.get("next_action")
+                if action == edit_this_provider:
+                    return await self.async_step_provider_edit()
+                if action == add_new_provider:
+                    return await self.async_step_provider_add()
+                if action == return_to_menu:
+                    return await self.async_step_providers()
+                if action == return_to_main_menu:
+                    return await self.async_step_menu()
+            
+
+        _LOGGER.debug(
+            "[async_step_provider_preview] user_input=%s, errors=%s, placeholders=%s",
+            user_input,
+            errors,
+            placeholders,
+        )
+
+        return self.async_show_form(
+            step_id="provider_preview",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        "next_action",
+                        default=action
+                    ): vol.In(choices),
+                }
+            ),
+            description_placeholders=placeholders,
+            errors=errors,
         )
 
     # ----------------- Helpers -----------------
@@ -613,25 +817,112 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             )
             # First-time setup
             return self.async_create_entry(title="Person Location Config", data=self._user_input)
+    '''
+    async def _validate_template(
+        self,
+        template_str: str,
+        *,
+        expected: str = "text",                 # "text" or "url"
+        variables: Optional[Dict[str, Any]] = None,
+        check_entities: bool = True,
+        strict: bool = True,
+    ) -> Dict[str, Any]:
+        """Validate a Jinja template in HA.
 
-    def normalize_template(self, s: str) -> str:
-        import re
+            Returns:
+                {
+                "ok": bool,
+                "error": Optional[str],
+                "rendered": Optional[str],
+                "entities": set[str],
+                "domains": set[str],
+                "all_states": bool,
+                "missing_entities": list[str]
+                }
+        """
+        #from homeassistant.helpers.template import Template
+        #from homeassistant.exceptions import TemplateError
+        #import inspect
+        #from urllib.parse import urlparse
 
-        if not isinstance(s, str):
-            return s
-        # Replace literal backslash-n first (one or more in a row)
-        s = re.sub(r'(\\n)+', ' ', s)
-        # Replace real newlines of any flavor
-        s = re.sub(r'[\r\n]+', ' ', s)
-        # Collapse runs of whitespace
-        s = re.sub(r'\s{2,}', ' ', s)
-        return s.strip()
+        result: Dict[str, Any] = {
+            "ok": False,
+            "error": None,
+            "rendered": None,
+            "entities": set(),
+            "domains": set(),
+            "all_states": False,
+            "missing_entities": []
+        }
 
+        tpl_text = normalize_template(template_str)
+        tpl = Template(tpl_text, self.hass)  # HA's sandboxed Template class [1](https://deepwiki.com/home-assistant/core/2.3-event-system-and-templating)
+        try:
+            # Get both the render result and dependency info in one go
+    #        info = await tpl.async_render_to_info(variables=variables or {}, strict=strict)
+    #        rendered = info.result  if hasattr(info, "result") else getattr(info, "_result", None)
+
+            # Call once; if it's awaitable, await it; otherwise use it directly.
+            maybe = tpl.async_render_to_info(variables=self._camera_template_variables or {}, strict=strict)
+            info = await maybe if inspect.isawaitable(maybe) else maybe
+
+            # If the engine captured an exception, treat as failure
+            exc = getattr(info, "exception", None)
+            if exc:
+                result["error"] = f"{exc.__class__.__name__}: {exc}"
+                return result
+
+            # Result can be a method or an attribute depending on HA version
+            rendered_attr = getattr(info, "result", None)
+            if callable(rendered_attr):
+                rendered = rendered_attr()                       # result() method
+            elif rendered_attr is not None:
+                rendered = rendered_attr                         # result attribute
+            else:
+                rendered = getattr(info, "_result", None)        # legacy fallback
+            if isinstance(rendered, str):
+                rendered = rendered.strip()
+        
+            result.update(
+                rendered=rendered,
+                entities=set(getattr(info, "entities", set())),
+                domains=set(getattr(info, "domains", set())),
+                all_states=bool(getattr(info, "all_states", False)),
+            )
+
+            # Optional type checks
+            if expected == "url":
+                if not isinstance(rendered, str) or not rendered:
+                    raise ValueError("Rendered value is empty or not a string")
+                u = urlparse(rendered)
+                if u.scheme not in ("http", "https") or not u.netloc:
+                    raise ValueError(f"Rendered value is not a valid URL: {rendered!r}")
+
+            # Optional entity existence check
+            if check_entities and not result["all_states"]:
+                missing = [e for e in result["entities"] if self.hass.states.get(e) is None]
+                result["missing_entities"] = missing
+
+            result["ok"] = True
+            _LOGGER.debug("[validate_template] result=%s",result)
+            return result
+
+        except TemplateError as te:
+            # Jinja/HA template errors (syntax, undefined vars) bubble up as TemplateError
+            first_line = str(te).splitlines()[0]
+            result["error"] = f"TemplateError: {first_line}"
+            _LOGGER.debug("[validate_template] TemplateError result=%s",result)
+            return result
+        except Exception as ex:
+            result["error"] = f"{type(ex).__name__}: {ex}"
+            _LOGGER.debug("[validate_template] Exception result=%s",result)
+            return result
+    '''
     # ----------------- API Key Tests -----------------
 
     async def _test_google_api_key(self, key):
-        from .api import PersonLocation_aiohttp_Client
-        from homeassistant.helpers.aiohttp_client import async_create_clientsession
+        # from .api import PersonLocation_aiohttp_Client
+        # from homeassistant.helpers.aiohttp_client import async_create_clientsession
 
         if key == DEFAULT_API_KEY_NOT_SET:
             return True
@@ -649,7 +940,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         return False
 
     async def _test_mapbox_api_key(self, key):
-        from homeassistant.helpers.httpx_client import get_async_client
+        # from homeassistant.helpers.httpx_client import get_async_client
 
         if key == DEFAULT_API_KEY_NOT_SET:
             return True
@@ -668,8 +959,8 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         return False
 
     async def _test_mapquest_api_key(self, key):
-        from .api import PersonLocation_aiohttp_Client
-        from homeassistant.helpers.aiohttp_client import async_create_clientsession
+        # from .api import PersonLocation_aiohttp_Client
+        # from homeassistant.helpers.aiohttp_client import async_create_clientsession
 
         if key == DEFAULT_API_KEY_NOT_SET:
             return True
@@ -701,7 +992,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         return False
 
     async def _test_radar_api_key(self, key):
-        from homeassistant.helpers.httpx_client import get_async_client
+        # from homeassistant.helpers.httpx_client import get_async_client
 
         if key == DEFAULT_API_KEY_NOT_SET:
             return True
@@ -824,9 +1115,9 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
     async def _test_friendly_name_template(self, template_str: str) -> str:
         '''Render a preview of friendly_name for the supplied template_str'''
 
-        from homeassistant.core import State
-        from homeassistant.helpers.template import Template as HATemplate
-        from homeassistant.exceptions import TemplateError
+        # from homeassistant.core import State
+        # from homeassistant.helpers.template import Template as HATemplate
+        # from homeassistant.exceptions import TemplateError
 
         _LOGGER.debug("HATemplate type = %s", type(HATemplate))
         

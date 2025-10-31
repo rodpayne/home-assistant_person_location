@@ -78,6 +78,7 @@ class PersonLocationCamera(Camera):
         super().__init__()
         self.hass = hass
         self._name = provider[CONF_NAME]
+        _LOGGER.debug("PersonLocationCamera: creating name = %s", self._name)
         self._attr_unique_id = f"map_camera_{slugify(self._name)}"
         self._still_image_url = provider[CONF_STILL_IMAGE_URL]
         self._still_image_url.hass = self.hass
