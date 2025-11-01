@@ -40,7 +40,7 @@
                 }
             },
             "trigger_edit": {
-                "title": "Person Location Edit Trigger",
+                "title": "Person Location Trigger Edit",
                 "description": "If you need help with the configuration, have a look [**here**](https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#configuration-parameters).",
                 "data": {
                     "edit_action": "Action to be taken on {device}:",
@@ -75,7 +75,7 @@
             },
             "provider_preview": {
                 "title": "Person Location Map Camera Preview",
-                "description": "**Map Camera Name:** `camera.{provider_name}`\n\n **Map Camera State Preview:** `{provider_state_preview}` \n{state_missing_entities} \n\n**Map Camera URL Preview:** `{provider_url_preview}` \n{url_missing_entities} ",
+                "description": "**Map Camera Name:** `camera.{provider_name}`\n\n **Map Camera State Preview:** `{provider_state_preview}` \n{state_missing_entities} \n\n**Map Camera URL Preview:** `{provider_url_preview}` \n{url_missing_entities}",
                 "data": {
                     "next_action": "Action to be taken on Submit:",
                     "state": "Map Camera State Template",
@@ -117,14 +117,8 @@
             }
         },
         "error": {
-            "device_and_name_required": "Both entity and person name are required to add a new trigger.",
-            "new_device_not_found": "The new entity does not exist.",
-            "new_device_wrong_domain": "The new entity is not in an allowed domain.",
             "nothing_was_changed": "No changes were entered for the configuration.",
-            "incomplete_fields": "Not all required fields are filled in. Please complete all fields or leave them blank to cancel.",
-            "duplicate_name": "A provider with this name already exists. Please choose another.",
-            "invalid_url": "The URL template is invalid or empty.",
-            "invalid_state": "The state template is invalid."
+            "template_required": "Template required."
         },
         "abort": {
             "normal_exit": "Configuration finished."

@@ -1,14 +1,11 @@
 """Config flow for Person Location integration."""
 
 import logging
-import inspect
 import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry, OptionsFlow
 from homeassistant.core import callback
-from homeassistant.core import State
-from homeassistant.exceptions import TemplateError
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.httpx_client import get_async_client
@@ -131,7 +128,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             if choice == "providers":
                 return await self.async_step_providers()
             if choice == "done":
-                return await self._async_save__integration_config_data()
+                return await self._async_save_integration_config_data()
             
         default_choice = "geocode"
         if self._last_step in self._step_order:
@@ -249,6 +246,8 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
         self._errors = {}
 
+        skip_add_device_choice = "— None to be added —"
+
         return_to_menu = "__return__"
         return_to_menu_choice = "🔙 Return to menu"
 
@@ -258,14 +257,16 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is None:
 
-            self._valid_device_entities = [return_to_menu_choice,""]
+            self._valid_device_entities = [skip_add_device_choice]
             self._valid_device_entities.extend(sorted(self.hass.states.async_entity_ids("device_tracker")))
             self._valid_device_entities.extend(sorted(self.hass.states.async_entity_ids("binary_sensor")))
             self._valid_device_entities.extend(sorted(self.hass.states.async_entity_ids("person")))
+            # add "" to the list so that clicking "X" to clear a choice does not result in a long, long error message
+            self._valid_device_entities.extend("")
 
             user_input = {
                 CONF_FOLLOW_PERSON_INTEGRATION: self.integration_config_data.get(CONF_FOLLOW_PERSON_INTEGRATION, False),
-                CONF_NEW_DEVICE: "",
+                CONF_NEW_DEVICE: skip_add_device_choice,
                 CONF_NEW_PERSON_NAME: ""
             }
 
@@ -278,7 +279,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             new_device = user_input.get(CONF_NEW_DEVICE, "").strip()
             new_person = user_input.get(CONF_NEW_PERSON_NAME, "").strip()
             
-            if CONF_NEW_DEVICE in user_input and new_device and new_device != return_to_menu_choice:
+            if CONF_NEW_DEVICE in user_input and new_device and new_device != skip_add_device_choice:
                 if new_device in devices.keys():
                     self._errors[CONF_NEW_DEVICE] = "duplicate_device"
                 elif not new_person:
@@ -375,7 +376,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 old_device_entry = devices.pop(device)
                 _LOGGER.debug("[async_step_trigger_edit] devices after remove = %s", devices)
             elif action == updateLabel:
-                old_device_entry = devices.pop(device)
+                x = devices.pop(device)
                 devices[new_device_name] = new_person_name
                 _LOGGER.debug("[async_step_trigger_edit] devices after update = %s", devices)
             self._user_input[CONF_DEVICES] = devices
@@ -493,7 +494,12 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 
                 if not errors:
                     # Validate 'state' template
-                    v1 = await validate_template(self.hass,new_provider_state,self._camera_template_variables, expected="text")
+                    v1 = await validate_template(
+                        self.hass,
+                        new_provider_state,
+                        self._camera_template_variables,
+                        expected="text",
+                    )
                     if not v1["ok"]:
                         errors[CONF_STATE] = "invalid_state_template"
                         placeholders["state_error"] = v1["error"]
@@ -502,7 +508,12 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                         placeholders["state_missing"] = ", ".join(v1["missing_entities"])
 
                     # Validate 'still_image_url' template as a URL
-                    v2 = await validate_template(self.hass,new_provider_url,self._camera_template_variables, expected="url")
+                    v2 = await validate_template(
+                        self.hass,
+                        new_provider_url,
+                        self._camera_template_variables,
+                        expected="url",
+                    )
                     if not v2["ok"]:
                         errors[CONF_STILL_IMAGE_URL] = "invalid_url_template"
                         placeholders["url_error"] = v2["error"]
@@ -656,7 +667,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         if not provider:
             return await self.async_step_providers()
 
-        provider_name = provider.get(CONF_NAME,""),
+        provider_name = provider.get(CONF_NAME,"")
 
         raw_state = provider.get(CONF_STATE, "")
         provider_state = normalize_template(raw_state)
@@ -787,7 +798,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             self.config_entry_options = {}
         self.integration_config_data = self.hass.data.get(DOMAIN, {}).get(DATA_CONFIGURATION, {})
 
-    async def _async_save__integration_config_data(self):
+    async def _async_save_integration_config_data(self):
         """Save collected user_input into the config entry.
 
         - On first install: create a new entry
@@ -795,7 +806,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         """
         if not self._source_create and self.config_entry:
             _LOGGER.debug(
-                "[_async_save__integration_config_data] updating existing entry, " \
+                "[_async_save_integration_config_data] updating existing entry, " \
                 "self.source = %s",
                 self.source
             )
@@ -811,113 +822,13 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="Configuration successfully saved.")
         else:
             _LOGGER.debug(
-                "[_async_save__integration_config_data] creating entry, " \
+                "[_async_save_integration_config_data] creating entry, " \
                 "self.source = %s",
                 self.source
             )
             # First-time setup
             return self.async_create_entry(title="Person Location Config", data=self._user_input)
-    '''
-    async def _validate_template(
-        self,
-        template_str: str,
-        *,
-        expected: str = "text",                 # "text" or "url"
-        variables: Optional[Dict[str, Any]] = None,
-        check_entities: bool = True,
-        strict: bool = True,
-    ) -> Dict[str, Any]:
-        """Validate a Jinja template in HA.
 
-            Returns:
-                {
-                "ok": bool,
-                "error": Optional[str],
-                "rendered": Optional[str],
-                "entities": set[str],
-                "domains": set[str],
-                "all_states": bool,
-                "missing_entities": list[str]
-                }
-        """
-        #from homeassistant.helpers.template import Template
-        #from homeassistant.exceptions import TemplateError
-        #import inspect
-        #from urllib.parse import urlparse
-
-        result: Dict[str, Any] = {
-            "ok": False,
-            "error": None,
-            "rendered": None,
-            "entities": set(),
-            "domains": set(),
-            "all_states": False,
-            "missing_entities": []
-        }
-
-        tpl_text = normalize_template(template_str)
-        tpl = Template(tpl_text, self.hass)  # HA's sandboxed Template class [1](https://deepwiki.com/home-assistant/core/2.3-event-system-and-templating)
-        try:
-            # Get both the render result and dependency info in one go
-    #        info = await tpl.async_render_to_info(variables=variables or {}, strict=strict)
-    #        rendered = info.result  if hasattr(info, "result") else getattr(info, "_result", None)
-
-            # Call once; if it's awaitable, await it; otherwise use it directly.
-            maybe = tpl.async_render_to_info(variables=self._camera_template_variables or {}, strict=strict)
-            info = await maybe if inspect.isawaitable(maybe) else maybe
-
-            # If the engine captured an exception, treat as failure
-            exc = getattr(info, "exception", None)
-            if exc:
-                result["error"] = f"{exc.__class__.__name__}: {exc}"
-                return result
-
-            # Result can be a method or an attribute depending on HA version
-            rendered_attr = getattr(info, "result", None)
-            if callable(rendered_attr):
-                rendered = rendered_attr()                       # result() method
-            elif rendered_attr is not None:
-                rendered = rendered_attr                         # result attribute
-            else:
-                rendered = getattr(info, "_result", None)        # legacy fallback
-            if isinstance(rendered, str):
-                rendered = rendered.strip()
-        
-            result.update(
-                rendered=rendered,
-                entities=set(getattr(info, "entities", set())),
-                domains=set(getattr(info, "domains", set())),
-                all_states=bool(getattr(info, "all_states", False)),
-            )
-
-            # Optional type checks
-            if expected == "url":
-                if not isinstance(rendered, str) or not rendered:
-                    raise ValueError("Rendered value is empty or not a string")
-                u = urlparse(rendered)
-                if u.scheme not in ("http", "https") or not u.netloc:
-                    raise ValueError(f"Rendered value is not a valid URL: {rendered!r}")
-
-            # Optional entity existence check
-            if check_entities and not result["all_states"]:
-                missing = [e for e in result["entities"] if self.hass.states.get(e) is None]
-                result["missing_entities"] = missing
-
-            result["ok"] = True
-            _LOGGER.debug("[validate_template] result=%s",result)
-            return result
-
-        except TemplateError as te:
-            # Jinja/HA template errors (syntax, undefined vars) bubble up as TemplateError
-            first_line = str(te).splitlines()[0]
-            result["error"] = f"TemplateError: {first_line}"
-            _LOGGER.debug("[validate_template] TemplateError result=%s",result)
-            return result
-        except Exception as ex:
-            result["error"] = f"{type(ex).__name__}: {ex}"
-            _LOGGER.debug("[validate_template] Exception result=%s",result)
-            return result
-    '''
     # ----------------- API Key Tests -----------------
 
     async def _test_google_api_key(self, key):
@@ -1041,29 +952,62 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_general(self, user_input=None):
         """General runtime options (thresholds, templates, UX toggles)."""
 
+        from .helpers.template import test_friendly_name_template
+
         conf_preview_friendly_name = "_preview_friendly_name"
+
+        errors = {}
+        friendly_preview = "Preview after submit?"
 
         if user_input is None:
 
             user_input = {
+                CONF_HOURS_EXTENDED_AWAY: self.config_entry.options.get(
+                    CONF_HOURS_EXTENDED_AWAY,
+                    DEFAULT_HOURS_EXTENDED_AWAY
+                ),
+                CONF_MINUTES_JUST_ARRIVED: self.config_entry.options.get(
+                    CONF_MINUTES_JUST_ARRIVED,
+                    DEFAULT_MINUTES_JUST_ARRIVED
+                ),
+                CONF_MINUTES_JUST_LEFT: self.config_entry.options.get(
+                    CONF_MINUTES_JUST_LEFT,
+                    DEFAULT_MINUTES_JUST_LEFT
+                ),
+                CONF_SHOW_ZONE_WHEN_AWAY: self.config_entry.options.get(
+                    CONF_SHOW_ZONE_WHEN_AWAY,
+                    DEFAULT_SHOW_ZONE_WHEN_AWAY
+                ),
+                CONF_FRIENDLY_NAME_TEMPLATE: self.config_entry.options.get(
+                    CONF_FRIENDLY_NAME_TEMPLATE,
+                    DEFAULT_FRIENDLY_NAME_TEMPLATE
+                ),
                 conf_preview_friendly_name: False,
             }
 
         else:
 
-            if not self._errors and user_input[conf_preview_friendly_name] == False:
-                remove_preview_friendly_name = user_input.pop(conf_preview_friendly_name)
-                return self.async_create_entry(title="", data=user_input)
-
-        if user_input.get(conf_preview_friendly_name):
+            # Validate the friendly name template.
             template_str = user_input.get(CONF_FRIENDLY_NAME_TEMPLATE, "")
-            if template_str:
-                test_friendly_name = await self._test_friendly_name_template(template_str)
-                friendly_preview = "Preview: " + test_friendly_name
+            if not template_str:
+                errors[CONF_FRIENDLY_NAME_TEMPLATE] = "template_required"
             else:
-                friendly_preview = "No template provided yet"
-        else:
-            friendly_preview = "Preview after submit?"
+                result = await test_friendly_name_template(
+                    self.hass,
+                    template_str)
+                if result is None:
+                    errors[CONF_FRIENDLY_NAME_TEMPLATE] = "template_required"
+                elif not result["ok"]:
+                    errors[CONF_FRIENDLY_NAME_TEMPLATE] = result["error"]
+                else:
+                    # Provide a preview of the friendly name template.
+                    if user_input.get(conf_preview_friendly_name):
+                        if result["ok"]:
+                            friendly_preview = "Preview: `" + result["rendered"] + "`"
+
+            if not errors and not user_input[conf_preview_friendly_name]:
+                x = user_input.pop(conf_preview_friendly_name)
+                return self.async_create_entry(title="", data=user_input)
 
         return self.async_show_form(
             step_id="general",
@@ -1071,31 +1015,31 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
                 {
                     vol.Optional(
                         CONF_HOURS_EXTENDED_AWAY,
-                        default=self.config_entry.options.get(
+                        default=user_input.get(
                             CONF_HOURS_EXTENDED_AWAY, DEFAULT_HOURS_EXTENDED_AWAY
                         ),
                     ): int,
                     vol.Optional(
                         CONF_MINUTES_JUST_ARRIVED,
-                        default=self.config_entry.options.get(
+                        default=user_input.get(
                             CONF_MINUTES_JUST_ARRIVED, DEFAULT_MINUTES_JUST_ARRIVED
                         ),
                     ): int,
                     vol.Optional(
                         CONF_MINUTES_JUST_LEFT,
-                        default=self.config_entry.options.get(
+                        default=user_input.get(
                             CONF_MINUTES_JUST_LEFT, DEFAULT_MINUTES_JUST_LEFT
                         ),
                     ): int,
                     vol.Optional(
                         CONF_SHOW_ZONE_WHEN_AWAY,
-                        default=self.config_entry.options.get(
+                        default=user_input.get(
                             CONF_SHOW_ZONE_WHEN_AWAY, DEFAULT_SHOW_ZONE_WHEN_AWAY
                         ),
                     ): cv.boolean,
                     vol.Optional(
                         CONF_FRIENDLY_NAME_TEMPLATE,
-                        default=self.config_entry.options.get(
+                        default=user_input.get(
                             CONF_FRIENDLY_NAME_TEMPLATE, DEFAULT_FRIENDLY_NAME_TEMPLATE
                         ),
                     ): str,
@@ -1106,99 +1050,5 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
                 }
             ),
             description_placeholders={"friendly_preview": friendly_preview},
-            errors=self._errors,
+            errors=errors,
         )
-
-
-    # ----------------- Friendly Name Template Test -----------------
-
-    async def _test_friendly_name_template(self, template_str: str) -> str:
-        '''Render a preview of friendly_name for the supplied template_str'''
-
-        # from homeassistant.core import State
-        # from homeassistant.helpers.template import Template as HATemplate
-        # from homeassistant.exceptions import TemplateError
-
-        _LOGGER.debug("HATemplate type = %s", type(HATemplate))
-        
-        if not isinstance(template_str, str) or not template_str.strip():
-            return "Template is not available."
-
-        # This rendering is using the following example states.
-        # TODO: we could use actual live state after triggers are configured (if we could decide which one to show).
-
-        friendly_name_location = "is in Spanish Fork"
-
-        target = State(
-            "sensor.rod_location",          # entity_id
-            "Just Left",                    # state
-            {
-                "source_type": "gps",
-                "latitude": 40.12703438635704,
-                "longitude": -111.63607706862837,
-                "gps_accuracy": 6,
-                "altitude": 1434,
-                "vertical_accuracy": 30,
-                "entity_picture": "/local/rod-phone.png",
-                "source": "device_tracker.rod_iphone_16",
-                "reported_state": "Away",
-                "person_name": "Rod",
-                "location_time": "2025-10-26 18:31:21.062200",
-                "icon": "mdi:help-circle",
-                "zone": "away",
-                "bread_crumbs": "Home> Spanish Fork",
-                "compass_bearing": 246.6,
-                "direction": "away from home",
-                "version": "person_location 2025.10.25",
-                "attribution": '"Powered by Radar"; "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright"; "powered by Google"; "Data by Waze App. https://waze.com"; ',
-                "meters_from_home": 2641.1,
-                "miles_from_home": 1.6,
-                "Radar": "1386 N Canyon Creek Pkwy, Spanish Fork, UT 84660 US",
-                "Open_Street_Map": "North Marketplace Drive Spanish Fork Utah County Utah 84660 United States of America",
-                "Google_Maps": "1386 N Cyn Crk Pkwy, Spanish Fork, UT 84660, USA",
-                "locality": "Spanish Fork",
-                "driving_miles": "2.52",
-                "driving_minutes": "5.2",
-                "friendly_name": "Rod (Rod-iPhone-16) is in Spanish Fork",
-                "speed": 1.0,
-            }
-        )
-
-        sourceObject = State(
-            "device_tracker.rod_iphone_16",
-            "not_home",
-            {
-                "source_type": "gps",
-                "battery_level": 85,
-                "latitude": 40.12703438635704,
-                "longitude": -111.63607706862837,
-                "gps_accuracy": 6,
-                "altitude": 1433.783642578125,
-                "vertical_accuracy": 30,
-                "friendly_name": "Rod-iPhone-16",
-                "person_name": "rod",
-                "entity_picture": "/local/rod-phone.png",
-            }
-        )
-
-        friendly_name_variables = {
-            "friendly_name_location": friendly_name_location,
-            "person_name": target.attributes["person_name"],
-            "source": sourceObject,
-            "target": target,
-        }
-        _LOGGER.debug(f"friendly_name_variables = {friendly_name_variables}")
-
-        try:
-            myTemplate = HATemplate(template_str, self.hass)
-            rendered = myTemplate.async_render(
-                friendly_name_variables,
-                parse_result=False,
-            )
-            return "`" + " ".join(rendered.replace("()", "").split()) + "`"
-
-        except TemplateError as err:
-            _LOGGER.warning("Template render failed: %s", err)
-            return f"⚠️ Template error: {err}"
-
-

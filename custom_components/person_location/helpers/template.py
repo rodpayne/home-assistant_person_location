@@ -5,6 +5,8 @@ from typing import Any, Dict, Optional
 
 _LOGGER = logging.getLogger(__name__)
 
+# ----------------- normalize_template -----------------
+
 def normalize_template(s: str) -> str:
     import re
 
@@ -17,6 +19,8 @@ def normalize_template(s: str) -> str:
     # Collapse runs of whitespace
     s = re.sub(r'\s{2,}', ' ', s)
     return s.strip()
+
+# ----------------- validate_template -----------------
 
 async def validate_template(
     hass,
@@ -55,6 +59,8 @@ async def validate_template(
         "all_states": False,
         "missing_entities": []
     }
+
+    # Note: always set `error` if returning `ok` False
 
     tpl_text = normalize_template(template_str)
     tpl = Template(tpl_text, hass)  # HA's sandboxed Template class [1](https://deepwiki.com/home-assistant/core/2.3-event-system-and-templating)
@@ -107,7 +113,7 @@ async def validate_template(
     except TemplateError as te:
         # Jinja/HA template errors (syntax, undefined vars) bubble up as TemplateError
         first_line = str(te).splitlines()[0]
-        result["error"] = f"TemplateError: {first_line}"
+        result["error"] = f"{first_line}"
         _LOGGER.debug("[validate_template] TemplateError result=%s",result)
         return result
     except Exception as ex:
@@ -117,7 +123,7 @@ async def validate_template(
 
 # ----------------- Friendly Name Template Test -----------------
 
-async def test_friendly_name_template(hass, template_str: str) -> str:
+async def test_friendly_name_template(hass, template_str: str) -> dict:
     '''Render a preview of friendly_name for the supplied template_str'''
 
     from homeassistant.core import State
@@ -127,7 +133,7 @@ async def test_friendly_name_template(hass, template_str: str) -> str:
     _LOGGER.debug("HATemplate type = %s", type(HATemplate))
     
     if not isinstance(template_str, str) or not template_str.strip():
-        return "Template is not available."
+        return None
 
     # This rendering is using the following example states.
     # TODO: we could use actual live state after triggers are configured (if we could decide which one to show).
@@ -194,15 +200,11 @@ async def test_friendly_name_template(hass, template_str: str) -> str:
     }
     _LOGGER.debug(f"friendly_name_variables = {friendly_name_variables}")
 
-    try:
-        myTemplate = HATemplate(template_str, hass)
-        rendered = myTemplate.async_render(
-            friendly_name_variables,
-            parse_result=False,
-        )
-        return "`" + " ".join(rendered.replace("()", "").split()) + "`"
+    result = await validate_template(
+        hass,
+        template_str,
+        friendly_name_variables,
+        expected="text",
+    )
 
-    except TemplateError as err:
-        _LOGGER.warning("Template render failed: %s", err)
-        return f"⚠️ Template error: {err}"
-
+    return result
