@@ -27,7 +27,7 @@
                 "data": {
                     "create_sensors": "Sensors to be created (comma separated)",
                     "altitude": "altitude -",
-                    "bread_crumbs": "bread_crumbs- ",
+                    "bread_crumbs": "bread_crumbs -",
                     "direction": "direction -",
                     "driving_miles": "driving_miles -",
                     "driving_minutes": "driving_minutes -",
