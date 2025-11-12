@@ -1,5 +1,6 @@
 """Config flow for Person Location integration."""
 
+import copy
 import logging
 import voluptuous as vol
 
@@ -8,6 +9,7 @@ from homeassistant.config_entries import ConfigEntry, OptionsFlow
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.httpx_client import get_async_client
 #from homeassistant.helpers.selector import selector
 from homeassistant.helpers import selector
@@ -56,6 +58,10 @@ from .const import (
     DEFAULT_MINUTES_JUST_LEFT,
     DEFAULT_SHOW_ZONE_WHEN_AWAY,
     DEFAULT_FRIENDLY_NAME_TEMPLATE,
+    TITLE_IMPORTED_YAML_CONFIG,
+    TITLE_PERSON_LOCATION_CONFIG,
+    CONFIG_SCHEMA,
+    ALLOWED_OPTIONS_KEYS,
 )
 
 CONF_NEW_DEVICE = "new_device_entity"
@@ -64,6 +70,12 @@ CONF_NEW_PERSON_NAME = "new_person_name"
 _LOGGER = logging.getLogger(__name__)
 GET_IMAGE_TIMEOUT = 10
 
+def _split_conf_data_and_options(conf: dict) -> tuple[dict, dict]:
+    _LOGGER.debug("[_split_conf_data_and_options] conf: %s", conf)
+    return (
+        {k: v for k, v in conf.items() if k not in ALLOWED_OPTIONS_KEYS},
+        {k: v for k, v in conf.items() if k in ALLOWED_OPTIONS_KEYS},
+    )
 
 # ============================================================
 # ConfigFlow — handles DATA (structural configuration)
@@ -95,7 +107,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         return await self.async_step_menu(user_input)
 
     async def async_step_reconfigure(self, user_input=None):
-        """Handle reconfigure initiated from the three‑dot menu."""
+        """Handle reconfigure initiated from the three-dot menu."""
         _LOGGER.debug("[async_step_reconfigure] user_input = %s", user_input)
 
         # Load the existing entry’s data into _user_input so edits persist
@@ -105,6 +117,46 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         # Jump straight to the menu so the user can pick what to edit
         return await self.async_step_menu(user_input)
 
+    async def async_step_import(self, conf: dict):
+        """Handle configuration from __init__.py async_setup:
+
+            hass.config_entries.flow.async_init(
+                DOMAIN,
+                context={"source": "import"},
+                data=conf,
+            )
+        """
+        _LOGGER.debug("[async_step_import] conf = %s", conf)
+
+        title = TITLE_IMPORTED_YAML_CONFIG
+
+        # Check for duplicates by title
+        for entry in self._async_current_entries():
+            if entry.title == title:
+                _LOGGER.debug("[async_step_import] Skipping duplicate with matching title: %s", title)
+                return self.async_abort(reason="already_configured")
+
+        #split data and options
+        #conf_options = {
+        #    key: value for key, value in conf.items() if key in ALLOWED_OPTIONS_KEYS
+        #}
+        #_LOGGER.debug("[async_setup] Parsed conf_options: %s", conf_options)
+        #
+        #conf_data = {
+        #    key: value for key, value in conf.items() if key not in ALLOWED_OPTIONS_KEYS
+        #}
+        #_LOGGER.debug("[async_setup] Parsed conf_data: %s", conf_data)
+    
+        conf_data, conf_options = _split_conf_data_and_options(conf)
+
+        # Create config entry
+        _LOGGER.debug("[async_step_import] Creating entry with title: %s", title)
+        return self.async_create_entry(
+            title=title, 
+            data=conf_data,
+            options=conf_options,
+        )
+    
     # ----------------- Menu for Configuration Steps -----------------
 
     async def async_step_menu(self, user_input=None):
@@ -112,8 +164,12 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         _LOGGER.debug("[async_step_menu] user_input = %s", user_input)
 
         if not self.config_entry_data:
-            self.config_entry_data = {**self.config_entry.data}
-            self.config_entry_options = {**self.config_entry.options}
+            if self.config_entry:
+                self.config_entry_data = {**self.config_entry.data}
+                self.config_entry_options = {**self.config_entry.options}
+            else:
+                self.config_entry_data = {}
+                self.config_entry_options = {}
 
         if user_input is not None:
             choice = user_input.get("menu_selection")
@@ -155,6 +211,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_geocode(self, user_input=None):
         """Step: Collect API keys, region, language."""
+        _LOGGER.debug("[async_step_geocode] user_input = %s", user_input)
 
         if user_input is not None:
             valid1 = await self._test_google_api_key(user_input[CONF_GOOGLE_API_KEY])
@@ -198,7 +255,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     # ----------------- Sensors to be created -----------------
-
+    '''
     async def async_step_sensors(self, user_input=None):
         """Step: Collect sensor creation and output platform."""
         if user_input is not None:
@@ -237,6 +294,94 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             ),
             errors=self._errors,
         )
+    '''
+    async def async_step_sensors(self, user_input=None):
+        """Step: Collect sensor creation and output platform, with cleanup support."""
+        _LOGGER.debug("[async_step_sensors] user_input = %s", user_input)
+
+        if user_input is not None:
+            # ┌───────────────────────────────────────────────┐
+            # │ 1. Collect toggles: each sensor is a bool     │
+            # │    True → include, False → exclude            │
+            # └───────────────────────────────────────────────┘
+            create_sensors_list = [
+                sensor for sensor in VALID_CREATE_SENSORS if user_input.get(sensor)
+            ]
+
+            # ┌───────────────────────────────────────────────┐
+            # │ 2. Persist values (even if empty list)        │
+            # │    Ensures clearing sensors is saved          │
+            # └───────────────────────────────────────────────┘
+            self._user_input[CONF_CREATE_SENSORS] = create_sensors_list
+            self._user_input[CONF_OUTPUT_PLATFORM] = user_input.get(
+                CONF_OUTPUT_PLATFORM, DEFAULT_OUTPUT_PLATFORM
+            )
+
+            # ┌───────────────────────────────────────────────┐
+            # │ 3. Cleanup orphaned *template* entities       │
+            # │    Only prune sensors ending in "_template"   │
+            # └───────────────────────────────────────────────┘
+
+            # TODO: look at doing this in _async_save_integration_config_data when 
+            # committed to making the update? Only remove for the ones that were
+            # removed from the create_sensors list?
+
+            if not create_sensors_list:
+                registry = er.async_get(self.hass)
+                for entity_id, entry in list(registry.entities.items()):
+                    if (
+                        entry.platform == DOMAIN
+                        and entry.unique_id.endswith("_template")
+                    ):
+                        _LOGGER.debug("Removing orphaned template sensor entity: %s", entity_id)
+                        registry.async_remove(entity_id)
+
+            return await self.async_step_menu()
+
+        # ┌───────────────────────────────────────────────┐
+        # │ Initial form population                       │
+        # │ Prefer self._user_input if present            │
+        # │ Fall back to integration_config_data only     │
+        # │ on very first render                          │
+        # └───────────────────────────────────────────────┘
+        if CONF_CREATE_SENSORS in self._user_input:
+            existing_sensors = set(self._user_input[CONF_CREATE_SENSORS])
+        else:
+            existing_sensors = set(self.integration_config_data.get(CONF_CREATE_SENSORS, []))
+
+        user_input = {
+            CONF_OUTPUT_PLATFORM: self._user_input.get(
+                CONF_OUTPUT_PLATFORM,
+                self.integration_config_data.get(CONF_OUTPUT_PLATFORM, DEFAULT_OUTPUT_PLATFORM),
+            ),
+            **{sensor: sensor in existing_sensors for sensor in VALID_CREATE_SENSORS},
+        }
+        return await self._show_config_sensors_form(user_input)
+
+
+    async def _show_config_sensors_form(self, user_input):
+        """Show the form for sensor creation and output platform."""
+        # ┌───────────────────────────────────────────────┐
+        # │ Form schema                                   │
+        # │ - Each sensor: toggle (bool)                  │
+        # │ - Platform: optional, with safe default       │
+        # └───────────────────────────────────────────────┘
+        data_schema = {
+            #vol.Optional(
+            #    CONF_OUTPUT_PLATFORM,
+            #    default=user_input.get(CONF_OUTPUT_PLATFORM, DEFAULT_OUTPUT_PLATFORM),
+            #): vol.In(VALID_OUTPUT_PLATFORM),
+        }
+
+        # Add a boolean toggle for each valid sensor
+        for sensor in VALID_CREATE_SENSORS:
+            data_schema[vol.Optional(sensor, default=user_input.get(sensor, False))] = bool
+
+        return self.async_show_form(
+            step_id="sensors",
+            data_schema=vol.Schema(data_schema),
+            errors=self._errors,
+        )
 
     # ----------------- Triggers: Manage triggers/devices -----------------
 
@@ -253,6 +398,8 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
         # Note: devices = dict of {entity_id: person_name}
         devices = self._user_input.get(CONF_DEVICES, self.integration_config_data.get(CONF_DEVICES, []))
+        if not devices:
+            devices = {}
         _LOGGER.debug("[async_step_triggers] devices = %s", devices)
 
         if user_input is None:
@@ -530,7 +677,13 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                         self._user_input[CONF_PROVIDERS] = providers
                         return await self.async_step_providers()
             else:
-                return await self.async_step_providers()
+                # nothing added
+                if providers:
+                    # go back and choose a provider action
+                    return await self.async_step_providers()
+                else:
+                    # nothing to see until one is added
+                    return await self.async_step_menu()
 
         _LOGGER.debug(
             "[async_step_provider_add] errors=%s, placeholders=%s",
@@ -784,19 +937,37 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             )
             self._source_create = False
             self.config_entry = entries[0]
-            self.config_entry_data = {**self.config_entry.data}
-            self.config_entry_options = {**self.config_entry.options}
+            self.config_entry_data = copy.deepcopy(dict(self.config_entry.data))
+            self.config_entry_options = copy.deepcopy(dict(self.config_entry.options))
         else:
             _LOGGER.debug(
-                "[_load_previous_integration_config_data] empty configuration, " \
+                "[_load_previous_integration_config_data] No previous configuration, " \
                 "self.source = %s",
                 self.source
             )
             self._source_create = True
             self.config_entry = None
-            self.config_entry_data = {}
-            self.config_entry_options = {}
-        self.integration_config_data = self.hass.data.get(DOMAIN, {}).get(DATA_CONFIGURATION, {})
+
+            # get YAML conf defaults
+            default_conf = CONFIG_SCHEMA({DOMAIN: {} })[DOMAIN]
+
+            # split data and options
+            #self.config_entry_options = {
+            #    key: value for key, value in default_conf.items() if key in ALLOWED_OPTIONS_KEYS
+            #}
+            #_LOGGER.debug("[_load_previous_integration_config_data] Default conf_options: %s", self.config_entry_options)
+            #
+            #self.config_entry_data = {
+            #    key: value for key, value in default_conf.items() if key not in ALLOWED_OPTIONS_KEYS
+            #}
+            #_LOGGER.debug("[_load_previous_integration_config_data] Default conf_data: %s", self.config_entry_data)
+
+            self.config_entry_data, self.config_entry_options = _split_conf_data_and_options(default_conf)
+
+        if self.hass:
+            self.integration_config_data = self.hass.data.get(DOMAIN, {}).get(DATA_CONFIGURATION, {})
+        else:
+            self.integration_config_data = {}
 
     async def _async_save_integration_config_data(self):
         """Save collected user_input into the config entry.
@@ -804,31 +975,37 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         - On first install: create a new entry
         - On reconfigure: update the existing entry
         """
-        if not self._source_create and self.config_entry:
+        if not self._source_create and self.config_entry and self.config_entry.title == TITLE_PERSON_LOCATION_CONFIG:
             _LOGGER.debug(
-                "[_async_save_integration_config_data] updating existing entry, " \
-                "self.source = %s",
-                self.source
+                "[_async_save_integration_config_data] updating existing entry, source=%s, entry_id=%s, data=%s",
+                self.source,
+                self.config_entry.entry_id,
+                self._user_input,
             )
             # Update the existing entry in place
             self.hass.config_entries.async_update_entry(
                 self.config_entry,
                 data=self._user_input,
             )
+
             # Reload so changes take effect immediately
             await self.hass.config_entries.async_reload(self.config_entry.entry_id)
-            # could use with same effect? await self.hass.config_entries.async_reload_entry(self.config_entry)
 
-            return self.async_abort(reason="Configuration successfully saved.")
+            # End the flow cleanly (no new entry created)
+            return self.async_abort(reason="reconfigure_successful")
+
         else:
             _LOGGER.debug(
-                "[_async_save_integration_config_data] creating entry, " \
-                "self.source = %s",
-                self.source
+                "[_async_save_integration_config_data] creating entry, source=%s, data=%s",
+                self.source,
+                self._user_input,
             )
             # First-time setup
-            return self.async_create_entry(title="Person Location Config", data=self._user_input)
-
+            return self.async_create_entry(
+                title=TITLE_PERSON_LOCATION_CONFIG,
+                data=self._user_input,
+            )
+    
     # ----------------- API Key Tests -----------------
 
     async def _test_google_api_key(self, key):

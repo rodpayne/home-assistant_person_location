@@ -45,35 +45,22 @@ from .const import (
     CONF_MINUTES_JUST_ARRIVED,
     CONF_MINUTES_JUST_LEFT,
     CONF_SHOW_ZONE_WHEN_AWAY,
+    DEFAULT_FRIENDLY_NAME_TEMPLATE,
     DOMAIN,
     IC3_STATIONARY_ZONE_PREFIX,
-    PERSON_LOCATION_ENTITY,
+    # PERSON_LOCATION_TARGET,
+    PERSON_LOCATION_TRIGGER,
     TARGET_LOCK,
-    VERSION,
     ZONE_DOMAIN,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
+def get_target_entity(pli, entity_id):
+    return pli.hass.data.get(DOMAIN, {}).get("entities", {}).get(entity_id)
 
 def setup_process_trigger(pli):
     """Initialize process_trigger service."""
-
-    def call_rest_command_service(personName, newState):
-        """(Optionally) notify HomeSeer of the state change."""
-
-    #    rest_command = ""
-    #    rest_command = (
-    #        "homeseer_" + personName.lower() + "_" + newState.lower().replace(" ", "_")
-    #    )
-    #    try:
-    #        pli.hass.services.call("rest_command", rest_command)
-    #    except Exception as e:
-    #        _LOGGER.debug(
-    #            "call_rest_command_service Exception %s = %s",
-    #            type(e).__name__,
-    #            str(e),
-    #        )
 
     def handle_delayed_state_change(
         now, *, entity_id=None, from_state=None, to_state=None, minutes=3
@@ -89,18 +76,24 @@ def setup_process_trigger(pli):
         with TARGET_LOCK:
             """Lock while updating the target(entity_id)."""
             _LOGGER.debug("[handle_delayed_state_change]" + " TARGET_LOCK obtained")
-            target = PERSON_LOCATION_ENTITY(entity_id, pli)
+            # Look up the existing entity from hass.data
+            #entities = pli.hass.data[DOMAIN]["entities"]
+            #target = entities.get(entity_id)
+            target = get_target_entity(pli, entity_id)
+            if not target:
+                _LOGGER.warning("[handle_delayed_state_change] no target sensor found for %s", entity_id)
+                return False
 
             elapsed_timespan = datetime.now(timezone.utc) - target.last_changed
             elapsed_minutes = (
                 elapsed_timespan.total_seconds() + 1
             ) / 60  # fudge factor of one second
 
-            if target.state != from_state:
+            if target._attr_native_value != from_state:
                 _LOGGER.debug(
                     "[handle_delayed_state_change]"
                     + " Skip update: state %s is no longer %s"
-                    % (target.state, from_state)
+                    % (target._attr_native_value, from_state)
                 )
             elif elapsed_minutes < minutes:
                 _LOGGER.debug(
@@ -109,15 +102,15 @@ def setup_process_trigger(pli):
                     % (elapsed_minutes, minutes)
                 )
             else:
-                target.state = to_state
+                target._attr_native_value = to_state
 
                 if to_state == "Home":
-                    target.attributes[ATTR_BREAD_CRUMBS] = to_state
-                    target.attributes[ATTR_COMPASS_BEARING] = 0
-                    target.attributes[ATTR_DIRECTION] = "home"
+                    target._attr_extra_state_attributes[ATTR_BREAD_CRUMBS] = to_state
+                    target._attr_extra_state_attributes[ATTR_COMPASS_BEARING] = 0
+                    target._attr_extra_state_attributes[ATTR_DIRECTION] = "home"
                 elif to_state == "Away":
                     if pli.configuration[CONF_SHOW_ZONE_WHEN_AWAY]:
-                        reportedZone = target.attributes[ATTR_ZONE]
+                        reportedZone = target._attr_extra_state_attributes[ATTR_ZONE]
                         zoneStateObject = pli.hass.states.get(
                             ZONE_DOMAIN + "." + reportedZone
                         )
@@ -133,11 +126,11 @@ def setup_process_trigger(pli):
                         else:
                             zoneAttributesObject = zoneStateObject.attributes.copy()
                             if "friendly_name" in zoneAttributesObject:
-                                target.state = zoneAttributesObject["friendly_name"]
+                                target._attr_native_value = zoneAttributesObject["friendly_name"]
                     if pli.configuration[CONF_HOURS_EXTENDED_AWAY] != 0:
                         change_state_later(
                             target.entity_id,
-                            target.state,
+                            target._attr_native_value,
                             "Extended Away",
                             (pli.configuration[CONF_HOURS_EXTENDED_AWAY] * 60),
                         )
@@ -145,7 +138,6 @@ def setup_process_trigger(pli):
                 elif to_state == "Extended Away":
                     pass
 
-                call_rest_command_service(target.personName, to_state)
                 target.set_state()
         _LOGGER.debug(
             "[handle_delayed_state_change]" + " (%s) === Return ===" % (entity_id)
@@ -196,7 +188,7 @@ def setup_process_trigger(pli):
                 Attributes:
                 - selected attributes from the triggered device tracker
                 - state: "Just Arrived", "Home", "Just Left", "Away", or "Extended Away"
-                  If CONF_SHOW_ZONE_WHEN_AWAY, then the <Zone> is reported instead of "Away".
+                If CONF_SHOW_ZONE_WHEN_AWAY, then the <Zone> is reported instead of "Away".
                 - person_name: <personName>
                 - source: entity_id of the device tracker that triggered the automation
                 - reported_state: the state reported by device tracker = "Home", "Away", or <zone>
@@ -214,7 +206,7 @@ def setup_process_trigger(pli):
         if entity_id == "NONE":
             {
                 _LOGGER.warning(
-                    "%s is required in call of %s.process_trigger service."
+                    "[handle_process_trigger] %s is required in call of %s.process_trigger service."
                     % (CONF_ENTITY_ID, DOMAIN)
                 )
             }
@@ -224,7 +216,7 @@ def setup_process_trigger(pli):
         if ha_just_started:
             _LOGGER.debug("HA just started flag is on")
 
-        trigger = PERSON_LOCATION_ENTITY(entity_id, pli)
+        trigger = PERSON_LOCATION_TRIGGER(entity_id, pli)
 
         _LOGGER.debug(
             "(%s) === Start === from_state = %s; to_state = %s",
@@ -288,7 +280,14 @@ def setup_process_trigger(pli):
                     "(%s) TARGET_LOCK obtained",
                     trigger.targetName,
                 )
-                target = PERSON_LOCATION_ENTITY(trigger.targetName, pli)
+                # target = PERSON_LOCATION_TARGET(trigger.targetName, pli)
+                # Look up the existing entity from hass.data
+                #entities = pli.hass.data[DOMAIN]["entities"]
+                #target = entities.get(trigger.targetName)
+                target = get_target_entity(pli, trigger.targetName)
+                if not target:
+                    _LOGGER.warning("No target sensor found for %s", trigger.targetName)
+                    return False
 
                 target.this_entity_info["trigger_count"] += 1
 
@@ -298,18 +297,18 @@ def setup_process_trigger(pli):
                         trigger.entity_id,
                         triggerTo,
                     )
-                    if ATTR_SOURCE in target.attributes and target.attributes[ATTR_SOURCE] == trigger.entity_id:
+                    if ATTR_SOURCE in target._attr_extra_state_attributes and target._attr_extra_state_attributes[ATTR_SOURCE] == trigger.entity_id:
                         _LOGGER.debug(
                             "(%s) Removing from target's source",
                             trigger.entity_id,
                         )
-                        target.attributes.pop(ATTR_SOURCE)
+                        target._attr_extra_state_attributes.pop(ATTR_SOURCE)
                         target.set_state()
                     return True
 
-                if ATTR_LOCATION_TIME in target.attributes:
+                if ATTR_LOCATION_TIME in target._attr_extra_state_attributes:
                     old_location_time = datetime.strptime(
-                        str(target.attributes[ATTR_LOCATION_TIME]),
+                        str(target._attr_extra_state_attributes[ATTR_LOCATION_TIME]),
                         "%Y-%m-%d %H:%M:%S.%f",
                     )
                 else:
@@ -324,16 +323,16 @@ def setup_process_trigger(pli):
                         new_location_time,
                         old_location_time,
                     )
-                elif target.firstTime:
-                    saveThisUpdate = True
-                    _LOGGER.debug(
-                        "(%s) Decision: target %s does not yet exist (normal at startup)",
-                        trigger.entity_id,
-                        target.entity_id,
-                    )
-                    oldTargetState = "none"
+                # elif target.firstTime:
+                #     saveThisUpdate = True
+                #     _LOGGER.debug(
+                #         "(%s) Decision: target %s does not yet exist (normal at startup)",
+                #         trigger.entity_id,
+                #         target.entity_id,
+                #     )
+                #     oldTargetState = "none"
                 else:
-                    oldTargetState = target.state.lower()
+                    oldTargetState = target._attr_native_value.lower()
                     if oldTargetState == STATE_UNKNOWN:
                         saveThisUpdate = True
                         _LOGGER.debug(
@@ -350,9 +349,9 @@ def setup_process_trigger(pli):
                             )
                         else:
                             if (
-                                ATTR_SOURCE not in target.attributes
-                                or target.attributes[ATTR_SOURCE] == trigger.entity_id
-                                or "reported_state" not in target.attributes
+                                ATTR_SOURCE not in target._attr_extra_state_attributes
+                                or target._attr_extra_state_attributes[ATTR_SOURCE] == trigger.entity_id
+                                or "reported_state" not in target._attr_extra_state_attributes
                             ):  # same entity as we are following, if any?
                                 saveThisUpdate = True
                                 _LOGGER.debug(
@@ -362,8 +361,8 @@ def setup_process_trigger(pli):
                             elif (
                                 ATTR_LATITUDE in trigger.attributes
                                 and ATTR_LONGITUDE in trigger.attributes
-                                and ATTR_LATITUDE not in target.attributes
-                                and ATTR_LONGITUDE not in target.attributes
+                                and ATTR_LATITUDE not in target._attr_extra_state_attributes
+                                and ATTR_LONGITUDE not in target._attr_extra_state_attributes
                             ):
                                 saveThisUpdate = True
                                 _LOGGER.debug(
@@ -371,33 +370,33 @@ def setup_process_trigger(pli):
                                     trigger.entity_id,
                                 )
                             elif (
-                                trigger.state == target.attributes[ATTR_REPORTED_STATE]
+                                trigger.state == target._attr_extra_state_attributes[ATTR_REPORTED_STATE]
                             ):  # same status as the one we are following?
                                 #if ATTR_VERTICAL_ACCURACY in trigger.attributes:
                                 #    if (
-                                #        ATTR_VERTICAL_ACCURACY not in target.attributes
+                                #        ATTR_VERTICAL_ACCURACY not in target._attr_extra_state_attributes
                                 #    ) or (
                                 #        trigger.attributes[ATTR_VERTICAL_ACCURACY] > 0
-                                #        and target.attributes[ATTR_VERTICAL_ACCURACY]
+                                #        and target._attr_extra_state_attributes[ATTR_VERTICAL_ACCURACY]
                                 #        == 0
                                 #    ):  # better choice based on accuracy?
                                 #        saveThisUpdate = True
                                 #        _LOGGER.debug(
                                 #            "(%s) Decision: vertical_accuracy is better than %s",
                                 #            trigger.entity_id,
-                                #            target.attributes[ATTR_SOURCE],
+                                #            target._attr_extra_state_attributes[ATTR_SOURCE],
                                 #        )
                                 if (
                                     ATTR_GPS_ACCURACY in trigger.attributes
-                                    and (ATTR_GPS_ACCURACY not in target.attributes
+                                    and (ATTR_GPS_ACCURACY not in target._attr_extra_state_attributes
                                     or trigger.attributes[ATTR_GPS_ACCURACY]
-                                    < target.attributes[ATTR_GPS_ACCURACY])
+                                    < target._attr_extra_state_attributes[ATTR_GPS_ACCURACY])
                                 ):  # better choice based on accuracy?
                                     saveThisUpdate = True
                                     _LOGGER.debug(
                                         "(%s) Decision: gps_accuracy is better than %s",
                                         trigger.entity_id,
-                                        target.attributes[ATTR_SOURCE],
+                                        target._attr_extra_state_attributes[ATTR_SOURCE],
                                     )
                             elif (
                                 ha_just_started
@@ -436,63 +435,63 @@ def setup_process_trigger(pli):
                     # Carry over selected attributes from trigger to target:
 
                     if ATTR_SOURCE_TYPE in trigger.attributes:
-                        target.attributes[ATTR_SOURCE_TYPE] = trigger.attributes[
+                        target._attr_extra_state_attributes[ATTR_SOURCE_TYPE] = trigger.attributes[
                             ATTR_SOURCE_TYPE
                         ]
                     else:
-                        if ATTR_SOURCE_TYPE in target.attributes:
-                            target.attributes.pop(ATTR_SOURCE_TYPE)
+                        if ATTR_SOURCE_TYPE in target._attr_extra_state_attributes:
+                            target._attr_extra_state_attributes.pop(ATTR_SOURCE_TYPE)
 
                     if (
                         ATTR_LATITUDE in trigger.attributes
                         and ATTR_LONGITUDE in trigger.attributes
                     ):
-                        target.attributes[ATTR_LATITUDE] = trigger.attributes[
+                        target._attr_extra_state_attributes[ATTR_LATITUDE] = trigger.attributes[
                             ATTR_LATITUDE
                         ]
-                        target.attributes[ATTR_LONGITUDE] = trigger.attributes[
+                        target._attr_extra_state_attributes[ATTR_LONGITUDE] = trigger.attributes[
                             ATTR_LONGITUDE
                         ]
                     else:
-                        if ATTR_LATITUDE in target.attributes:
-                            target.attributes.pop(ATTR_LATITUDE)
-                        if ATTR_LONGITUDE in target.attributes:
-                            target.attributes.pop(ATTR_LONGITUDE)
+                        if ATTR_LATITUDE in target._attr_extra_state_attributes:
+                            target._attr_extra_state_attributes.pop(ATTR_LATITUDE)
+                        if ATTR_LONGITUDE in target._attr_extra_state_attributes:
+                            target._attr_extra_state_attributes.pop(ATTR_LONGITUDE)
 
                     if ATTR_GPS_ACCURACY in trigger.attributes:
-                        target.attributes[ATTR_GPS_ACCURACY] = trigger.attributes[
+                        target._attr_extra_state_attributes[ATTR_GPS_ACCURACY] = trigger.attributes[
                             ATTR_GPS_ACCURACY
                         ]
                     else:
-                        if ATTR_GPS_ACCURACY in target.attributes:
-                            target.attributes.pop(ATTR_GPS_ACCURACY)
+                        if ATTR_GPS_ACCURACY in target._attr_extra_state_attributes:
+                            target._attr_extra_state_attributes.pop(ATTR_GPS_ACCURACY)
 
                     if ATTR_ALTITUDE in trigger.attributes:
-                        target.attributes[ATTR_ALTITUDE] = round(
+                        target._attr_extra_state_attributes[ATTR_ALTITUDE] = round(
                             trigger.attributes[ATTR_ALTITUDE]
                         )
                     else:
-                        if ATTR_ALTITUDE in target.attributes:
-                            target.attributes.pop(ATTR_ALTITUDE)
+                        if ATTR_ALTITUDE in target._attr_extra_state_attributes:
+                            target._attr_extra_state_attributes.pop(ATTR_ALTITUDE)
 
                     if ATTR_VERTICAL_ACCURACY in trigger.attributes:
-                        target.attributes[ATTR_VERTICAL_ACCURACY] = trigger.attributes[
+                        target._attr_extra_state_attributes[ATTR_VERTICAL_ACCURACY] = trigger.attributes[
                             ATTR_VERTICAL_ACCURACY
                         ]
                     else:
-                        if ATTR_VERTICAL_ACCURACY in target.attributes:
-                            target.attributes.pop(ATTR_VERTICAL_ACCURACY)
+                        if ATTR_VERTICAL_ACCURACY in target._attr_extra_state_attributes:
+                            target._attr_extra_state_attributes.pop(ATTR_VERTICAL_ACCURACY)
 
                     if ATTR_ENTITY_PICTURE in trigger.attributes:
-                        target.attributes[ATTR_ENTITY_PICTURE] = trigger.attributes[
+                        target._attr_extra_state_attributes[ATTR_ENTITY_PICTURE] = trigger.attributes[
                             ATTR_ENTITY_PICTURE
                         ]
                     else:
-                        if ATTR_ENTITY_PICTURE in target.attributes:
-                            target.attributes.pop(ATTR_ENTITY_PICTURE)
+                        if ATTR_ENTITY_PICTURE in target._attr_extra_state_attributes:
+                            target._attr_extra_state_attributes.pop(ATTR_ENTITY_PICTURE)
 
                     if ATTR_SPEED in trigger.attributes:
-                        target.attributes[ATTR_SPEED] = trigger.attributes[
+                        target._attr_extra_state_attributes[ATTR_SPEED] = trigger.attributes[
                             ATTR_SPEED
                         ]
                         _LOGGER.debug(
@@ -501,16 +500,16 @@ def setup_process_trigger(pli):
                             trigger.attributes[ATTR_SPEED],
                         )
                     else:
-                        if ATTR_SPEED in target.attributes:
-                            target.attributes.pop(ATTR_SPEED)
+                        if ATTR_SPEED in target._attr_extra_state_attributes:
+                            target._attr_extra_state_attributes.pop(ATTR_SPEED)
 
-                    target.attributes[ATTR_SOURCE] = trigger.entity_id
-                    target.attributes[ATTR_REPORTED_STATE] = trigger.state
-                    target.attributes[ATTR_PERSON_NAME] = string.capwords(
+                    target._attr_extra_state_attributes[ATTR_SOURCE] = trigger.entity_id
+                    target._attr_extra_state_attributes[ATTR_REPORTED_STATE] = trigger.state
+                    target._attr_extra_state_attributes[ATTR_PERSON_NAME] = string.capwords(
                         trigger.personName
                     )
 
-                    target.attributes[ATTR_LOCATION_TIME] = new_location_time.strftime(
+                    target._attr_extra_state_attributes[ATTR_LOCATION_TIME] = new_location_time.strftime(
                         "%Y-%m-%d %H:%M:%S.%f"
                     )
                     _LOGGER.debug(
@@ -540,21 +539,21 @@ def setup_process_trigger(pli):
                         if ATTR_ICON in zoneAttributesObject:
                             icon = zoneAttributesObject[ATTR_ICON]
 
-                    target.attributes[ATTR_ICON] = icon
-                    target.attributes[ATTR_ZONE] = reportedZone
+                    target._attr_extra_state_attributes[ATTR_ICON] = icon
+                    target._attr_extra_state_attributes[ATTR_ZONE] = reportedZone
 
                     _LOGGER.debug(
                         "(%s) zone = %s; icon = %s",
                         trigger.entity_id,
                         reportedZone,
-                        target.attributes[ATTR_ICON],
+                        target._attr_extra_state_attributes[ATTR_ICON],
                     )
 
                     if reportedZone == "home":
-                        target.attributes[ATTR_LATITUDE] = pli.attributes[
+                        target._attr_extra_state_attributes[ATTR_LATITUDE] = pli.attributes[
                             "home_latitude"
                         ]
-                        target.attributes[ATTR_LONGITUDE] = pli.attributes[
+                        target._attr_extra_state_attributes[ATTR_LONGITUDE] = pli.attributes[
                             "home_longitude"
                         ]
 
@@ -562,6 +561,7 @@ def setup_process_trigger(pli):
                     # https://github.com/rodpayne/home-assistant_person_location?tab=readme-ov-file#make-presence-detection-not-so-binary
                     # If Home Assistant just started, just go with Home or Away as the initial state.
 
+                    _LOGGER.debug(f"Presence detection not-so-binary: stateHomeAway = {trigger.stateHomeAway}, oldTargetState = {oldTargetState}")
                     if trigger.stateHomeAway == "Home":
                         # State is changing to Home.
                         if (
@@ -574,13 +574,10 @@ def setup_process_trigger(pli):
                             # Anything else goes straight to Home if Just Arrived is not an option.
                             newTargetState = "Home"
 
-                            target.attributes[ATTR_BREAD_CRUMBS] = newTargetState
-                            target.attributes[ATTR_COMPASS_BEARING] = 0
-                            target.attributes[ATTR_DIRECTION] = "home"
+                            target._attr_extra_state_attributes[ATTR_BREAD_CRUMBS] = newTargetState
+                            target._attr_extra_state_attributes[ATTR_COMPASS_BEARING] = 0
+                            target._attr_extra_state_attributes[ATTR_DIRECTION] = "home"
 
-                            call_rest_command_service(
-                                trigger.personName, newTargetState
-                            )
                         elif oldTargetState == "home":
                             newTargetState = "Home"
                         elif oldTargetState == "just arrived":
@@ -592,9 +589,6 @@ def setup_process_trigger(pli):
                                 newTargetState,
                                 "Home",
                                 pli.configuration[CONF_MINUTES_JUST_ARRIVED],
-                            )
-                            call_rest_command_service(
-                                trigger.personName, newTargetState
                             )
                     else:
                         # State is changing to not Home.
@@ -612,9 +606,6 @@ def setup_process_trigger(pli):
                                     "Extended Away",
                                     (pli.configuration[CONF_HOURS_EXTENDED_AWAY] * 60),
                                 )
-                            call_rest_command_service(
-                                trigger.personName, newTargetState
-                            )
                         elif oldTargetState in ["just left", "just arrived"]:
                             newTargetState = "Just Left"
                         elif oldTargetState == "extended away":
@@ -626,9 +617,6 @@ def setup_process_trigger(pli):
                                 newTargetState,
                                 "Away",
                                 pli.configuration[CONF_MINUTES_JUST_LEFT],
-                            )
-                            call_rest_command_service(
-                                trigger.personName, newTargetState
                             )
                         else:
                             # oldTargetState is either "away" or a Zone
@@ -650,12 +638,14 @@ def setup_process_trigger(pli):
                             if "friendly_name" in zoneAttributesObject:
                                 newTargetState = zoneAttributesObject["friendly_name"]
 
-                    target.state = newTargetState
+                    target._attr_native_value = newTargetState
+
+                    _LOGGER.debug(f"Presence detection not-so-binary: newTargetState = {newTargetState}")
 
                     if ha_just_started:
-                        target.attributes[ATTR_BREAD_CRUMBS] = newTargetState
+                        target._attr_extra_state_attributes[ATTR_BREAD_CRUMBS] = newTargetState
 
-                    target.attributes["version"] = f"{DOMAIN} {VERSION}"
+                    # target._attr_extra_state_attributes["version"] = f"{DOMAIN} {VERSION}"
 
                     target.set_state()
 
@@ -671,9 +661,10 @@ def setup_process_trigger(pli):
 
                     service_data = {
                         "entity_id": target.entity_id,
-                        "friendly_name_template": pli.configuration[
-                            CONF_FRIENDLY_NAME_TEMPLATE
-                        ],
+                        "friendly_name_template": pli.configuration.get(
+                            CONF_FRIENDLY_NAME_TEMPLATE,
+                            DEFAULT_FRIENDLY_NAME_TEMPLATE,    
+                        ),
                         "force_update": force_update,
                     }
                     pli.hass.services.call(
@@ -689,5 +680,5 @@ def setup_process_trigger(pli):
             trigger.entity_id,
         )
 
-    pli.hass.services.register(DOMAIN, "process_trigger", handle_process_trigger)
+    pli.hass.services.async_register(DOMAIN, "process_trigger", handle_process_trigger)
     return True

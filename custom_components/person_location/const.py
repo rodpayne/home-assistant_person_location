@@ -1,7 +1,6 @@
 """Constants and Classes for person_location integration."""
 
 import logging
-import pprint
 import threading
 from datetime import datetime, timedelta
 
@@ -33,7 +32,12 @@ DOMAIN = "person_location"
 API_STATE_OBJECT = DOMAIN + "." + DOMAIN + "_integration"
 INTEGRATION_NAME = "Person Location"
 ISSUE_URL = "https://github.com/rodpayne/home-assistant_person_location/issues"
-VERSION = "2025.11.01"
+VERSION = "2025.10.28"
+
+# Titles for the config entries:
+#TITLE_IMPORTED_YAML_CONFIG = "Imported YAML Config"
+TITLE_IMPORTED_YAML_CONFIG = "Person Location Config"
+TITLE_PERSON_LOCATION_CONFIG = "Person Location Config"
 
 # Constants:
 METERS_PER_KM = 1000
@@ -222,11 +226,26 @@ CONFIG_SCHEMA = vol.Schema(
                 vol.Optional(CONF_PERSON_NAMES, default=[]): vol.All(
                     cv.ensure_list, [PERSON_SCHEMA]
                 ),
-            }
+            },
+            extra=vol.ALLOW_EXTRA,
         ),
     },
-    extra=vol.ALLOW_EXTRA,
+    extra=vol.ALLOW_EXTRA,   
 )
+
+ALLOWED_OPTIONS_KEYS = {
+    CONF_HOURS_EXTENDED_AWAY,
+    CONF_MINUTES_JUST_ARRIVED,
+    CONF_MINUTES_JUST_LEFT,
+    CONF_SHOW_ZONE_WHEN_AWAY,
+    CONF_LANGUAGE,
+    CONF_REGION,
+    CONF_MAPBOX_API_KEY,
+    CONF_MAPQUEST_API_KEY,
+    CONF_OSM_API_KEY,
+    CONF_GOOGLE_API_KEY,
+    CONF_RADAR_API_KEY,
+}
 
 # Items under hass.data[DOMAIN]:
 DATA_STATE = "state"
@@ -242,56 +261,6 @@ INTEGRATION_LOCK = threading.Lock()
 TARGET_LOCK = threading.Lock()
 
 _LOGGER = logging.getLogger(__name__)
-
-'''
-def deep_merge_with_list_union(dest: dict, src: dict) -> dict:
-    for key, val in src.items():
-        if key in dest and isinstance(dest[key], dict) and isinstance(val, dict):
-            deep_merge_with_list_union(dest[key], val)
-        elif key in dest and isinstance(dest[key], list) and isinstance(val, list):
-            dest[key] = list(set(dest[key]) | set(val))
-        else:
-            dest[key] = val
-    return dest
-'''
-'''
-def deep_merge_with_list_union(dest: dict, src: dict) -> dict:
-    _LOGGER.debug("deep_merge_with_list_union")
-    _LOGGER.debug("dest = \n%s", pprint.pformat(dest))
-    _LOGGER.debug("src = \n%s", pprint.pformat(src))
-
-    for key, val in src.items():
-        if key in dest and isinstance(dest[key], dict) and isinstance(val, dict):
-            deep_merge_with_list_union(dest[key], val)
-
-        elif key in dest and isinstance(dest[key], list) and isinstance(val, list):
-            # Smart merge for list of dicts with 'name' keys
-            if all(isinstance(item, dict) and "name" in item for item in dest[key] + val):
-                merged = {item["name"]: item for item in dest[key]}
-                for item in val:
-                    merged[item["name"]] = item  # overwrite or add
-                dest[key] = list(merged.values())
-            else:
-                # Fallback: deduplicate by content
-                combined = dest[key] + val
-                seen = set()
-                deduped = []
-                for item in combined:
-                    try:
-                        marker = frozenset(item.items()) if isinstance(item, dict) else item
-                    except Exception:
-                        marker = repr(item)
-                    if marker not in seen:
-                        seen.add(marker)
-                        deduped.append(item)
-                dest[key] = deduped
-
-        else:
-            dest[key] = val
-
-    _LOGGER.debug("merge = \n%s", pprint.pformat(dest))
-    return dest
-'''
 
 def get_waze_region(country_code: str) -> str:
     """Determine Waze region from country code or Waze region setting"""
@@ -322,6 +291,8 @@ class PERSON_LOCATION_INTEGRATION:
 
         self.configuration = {}
         self.entity_info = {}
+        self._target_sensors_restored = []
+
 
         home_zone = "zone.home"
         self.attributes[ATTR_FRIENDLY_NAME] = f"{INTEGRATION_NAME} Service"
@@ -436,7 +407,7 @@ class PERSON_LOCATION_INTEGRATION:
                 person_name = person_name_config[CONF_NAME]
                 _LOGGER.debug("person_name_config name = %s", person_name)
                 devices = person_name_config[CONF_DEVICES]
-                if (type(devices) == str) or (type(devices) == NodeStrClass):
+                if (devices is str) or (devices is NodeStrClass):
                     devices = [devices]
                 for device in devices:
                     _LOGGER.debug("person_name_config device = %s", device)
@@ -463,9 +434,16 @@ class PERSON_LOCATION_INTEGRATION:
             self.configuration[CONF_FOLLOW_PERSON_INTEGRATION] = False
             self.configuration[CONF_DEVICES] = {}
 
-        self.set_state()
+        # ❌ self.set_state()
 
     def set_state(self):
+        """Schedule async_set_state safely from a thread or sync context."""
+        self.hass.loop.call_soon_threadsafe(
+            lambda: self.hass.async_create_task(self.async_set_state())
+        )
+
+    async def async_set_state(self):
+        """Async-safe state setter."""
         integration_state_data = {
             DATA_STATE: self.state,
             DATA_ATTRIBUTES: self.attributes,
@@ -477,28 +455,24 @@ class PERSON_LOCATION_INTEGRATION:
         else:
             self.hass.data[DOMAIN] = integration_state_data
 
-        # self.hass.states.set(self.entity_id, self.state, self.attributes)
-        simple_attributes = {
-            ATTR_ICON: self.attributes[ATTR_ICON],
-        }
-        self.hass.states.set(self.entity_id, self.state, simple_attributes)
+        simple_attributes = {ATTR_ICON: self.attributes[ATTR_ICON]}
+        self.hass.states.async_set(self.entity_id, self.state, simple_attributes)
 
         _LOGGER.debug(
-            "(%s.set_state) -state: %s -attributes: %s -data: %s",
+            "(%s.async_set_state) -state: %s -attributes: %s",
             self.entity_id,
             self.state,
             self.attributes,
-            self.hass.data[DOMAIN],
+            #self.hass.data[DOMAIN],
         )
-
-
-class PERSON_LOCATION_ENTITY:
-    """Class to represent device trackers and our person location sensors."""
+        
+class PERSON_LOCATION_TRIGGER:
+    """Class to represent device trackers that trigger us."""
 
     def __init__(self, _entity_id, _pli):
         """Initialize the entity instance."""
 
-        _LOGGER.debug("[PERSON_LOCATION_ENTITY] (%s) === __init__ ===", _entity_id)
+        _LOGGER.debug("[PERSON_LOCATION_TRIGGER] (%s) === __init__ ===", _entity_id)
 
         self.entity_id = _entity_id
         self.pli = _pli
@@ -526,16 +500,16 @@ class PERSON_LOCATION_ENTITY:
             self.last_updated = datetime(2020, 3, 14, 15, 9, 26, 535897)
             self.attributes = {}
 
-        if self.entity_id in self.hass.data[DOMAIN][DATA_ENTITY_INFO]:
-            self.this_entity_info = self.hass.data[DOMAIN][DATA_ENTITY_INFO][
-                self.entity_id
-            ].copy()
-        else:
-            self.this_entity_info = {
-                "geocode_count": 0,
-                "locality": "?",
-                "trigger_count": 0,
-            }
+#        if self.entity_id in self.hass.data[DOMAIN][DATA_ENTITY_INFO]:
+#            self.this_entity_info = self.hass.data[DOMAIN][DATA_ENTITY_INFO][
+#                self.entity_id
+#            ].copy()
+#        else:
+#            self.this_entity_info = {
+#                "geocode_count": 0,
+#                "locality": "?",
+#                "trigger_count": 0,
+#            }
 
         if "friendly_name" in self.attributes:
             self.friendlyName = self.attributes["friendly_name"]
@@ -573,6 +547,7 @@ class PERSON_LOCATION_ENTITY:
         # It is tempting to make the output a device_tracker instead of sensor,
         # so that it can be input into the Person built-in integration,
         # but if you do, be very careful not to trigger a loop.
+        # The state and other attributes will also need to be adjusted.
 
         self.targetName = (
             self.configuration[CONF_OUTPUT_PLATFORM]
@@ -580,152 +555,3 @@ class PERSON_LOCATION_ENTITY:
             + self.personName.lower()
             + "_location"
         )
-
-    def make_template_sensor(self, attributeName, supplementalAttributeArray):
-        """Make an additional sensor that will be used instead of making a template sensor."""
-
-        _LOGGER.debug("[make_template_sensor] === Start === %s", attributeName)
-
-        if type(attributeName) is str:
-            if attributeName in self.attributes:
-                templateSuffix = attributeName
-                templateState = self.attributes[attributeName]
-            else:
-                return
-        elif type(attributeName) is dict:
-            for templateSuffix in attributeName:
-                templateState = attributeName[templateSuffix]
-
-        templateAttributes = {}
-        for supplementalAttribute in supplementalAttributeArray:
-            if type(supplementalAttribute) is str:
-                if supplementalAttribute in self.attributes:
-                    templateAttributes[supplementalAttribute] = self.attributes[
-                        supplementalAttribute
-                    ]
-            elif type(supplementalAttribute) is dict:
-                for supplementalAttributeKey in supplementalAttribute:
-                    templateAttributes[supplementalAttributeKey] = (
-                        supplementalAttribute[supplementalAttributeKey]
-                    )
-            else:
-                _LOGGER.debug(
-                    "supplementalAttribute %s %s",
-                    supplementalAttribute,
-                    type(supplementalAttribute),
-                )
-
-        self.hass.states.set(
-            "sensor." + self.personName.lower() + "_location_" + templateSuffix.lower(),
-            templateState,
-            templateAttributes,
-        )
-        _LOGGER.debug("[make_template_sensor] === Return === %s", attributeName)
-
-    def set_state(self):
-        """Save changed target sensor information as a unit."""
-
-        _LOGGER.debug(
-            "(%s.set_state) -state: %s -attributes: %s -entity_info: %s",
-            self.entity_id,
-            self.state,
-            self.attributes,
-            self.this_entity_info,
-        )
-        self.hass.states.set(self.entity_id, self.state, self.attributes)
-        self.hass.data[DOMAIN][DATA_ENTITY_INFO][self.entity_id] = self.this_entity_info
-
-    def make_template_sensors(self):
-        """Make the additional sensors if they are requested."""
-
-        _LOGGER.debug(
-            "[make_template_sensors] === Start === configuration = %s",
-            self.configuration[CONF_CREATE_SENSORS],
-        )
-
-        for attributeName in self.configuration[CONF_CREATE_SENSORS]:
-            if (
-                attributeName == ATTR_ALTITUDE
-                and ATTR_ALTITUDE in self.attributes
-                and self.attributes[ATTR_ALTITUDE] != 0
-                and ATTR_VERTICAL_ACCURACY in self.attributes
-                and self.attributes[ATTR_VERTICAL_ACCURACY] != 0
-            ):
-                self.make_template_sensor(
-                    ATTR_ALTITUDE,
-                    [
-                        ATTR_VERTICAL_ACCURACY,
-                        ATTR_ICON,
-                        {ATTR_UNIT_OF_MEASUREMENT: "m"},
-                    ],
-                )
-
-            elif attributeName == ATTR_BREAD_CRUMBS:
-                self.make_template_sensor(ATTR_BREAD_CRUMBS, [ATTR_ICON])
-
-            elif attributeName == ATTR_DIRECTION:
-                self.make_template_sensor(ATTR_DIRECTION, [ATTR_ICON])
-
-            elif attributeName == ATTR_DRIVING_MILES:
-                self.make_template_sensor(
-                    ATTR_DRIVING_MILES,
-                    [
-                        ATTR_DRIVING_MINUTES,
-                        ATTR_METERS_FROM_HOME,
-                        ATTR_MILES_FROM_HOME,
-                        {ATTR_UNIT_OF_MEASUREMENT: "mi"},
-                        ATTR_ICON,
-                    ],
-                )
-
-            elif attributeName == ATTR_DRIVING_MINUTES:
-                self.make_template_sensor(
-                    ATTR_DRIVING_MINUTES,
-                    [
-                        ATTR_DRIVING_MILES,
-                        ATTR_METERS_FROM_HOME,
-                        ATTR_MILES_FROM_HOME,
-                        {ATTR_UNIT_OF_MEASUREMENT: "min"},
-                        ATTR_ICON,
-                    ],
-                )
-
-            elif attributeName == ATTR_GEOCODED:
-                pass
-
-            elif attributeName == ATTR_LATITUDE:
-                self.make_template_sensor(ATTR_LATITUDE, [ATTR_GPS_ACCURACY, ATTR_ICON])
-
-            elif attributeName == ATTR_LONGITUDE:
-                self.make_template_sensor(
-                    ATTR_LONGITUDE, [ATTR_GPS_ACCURACY, ATTR_ICON]
-                )
-
-            elif attributeName == ATTR_METERS_FROM_HOME:
-                self.make_template_sensor(
-                    ATTR_METERS_FROM_HOME,
-                    [
-                        ATTR_MILES_FROM_HOME,
-                        ATTR_DRIVING_MILES,
-                        ATTR_DRIVING_MINUTES,
-                        ATTR_ICON,
-                        {ATTR_UNIT_OF_MEASUREMENT: "m"},
-                    ],
-                )
-
-            elif attributeName == ATTR_MILES_FROM_HOME:
-                self.make_template_sensor(
-                    ATTR_MILES_FROM_HOME,
-                    [
-                        ATTR_METERS_FROM_HOME,
-                        ATTR_DRIVING_MILES,
-                        ATTR_DRIVING_MINUTES,
-                        {ATTR_UNIT_OF_MEASUREMENT: "mi"},
-                        ATTR_ICON,
-                    ],
-                )
-
-            else:
-                self.make_template_sensor(attributeName, [ATTR_ICON])
-
-        _LOGGER.debug("[make_template_sensors] === Return ===")

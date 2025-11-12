@@ -1,35 +1,32 @@
-"""
-The person_location integration.
-
-This integration supplies a service to reverse geocode the location
-using Open Street Map (Nominatim) or Google Maps or MapQuest or Radar
-and calculate the distance from home (miles and minutes) using
-WazeRouteCalculator.
-"""
+"""Person Location integration."""
 
 import logging
 import pprint
 from datetime import datetime, timedelta
 from functools import partial
 
-import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import STATE_OFF, STATE_ON
-from homeassistant.core import Event, EventStateChangedData
+from homeassistant.const import STATE_OFF, STATE_ON, Platform
+from homeassistant.core import Event, EventStateChangedData, HomeAssistant
 from homeassistant.helpers.event import (
     async_track_state_change_event,
-    threaded_listener_factory,
-    track_point_in_time,
+    async_track_point_in_time,
 )
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 
+from .process_trigger import setup_process_trigger
+from .reverse_geocode import setup_reverse_geocode
 from .const import (
     API_STATE_OBJECT,
+    CONF_CREATE_SENSORS,
     CONF_DEVICES,
     CONF_FOLLOW_PERSON_INTEGRATION,
     CONF_FRIENDLY_NAME_TEMPLATE,
     CONF_SHOW_ZONE_WHEN_AWAY,
     CONFIG_SCHEMA,
+    ALLOWED_OPTIONS_KEYS,
     DATA_ASYNC_SETUP_ENTRY,
     DATA_CONFIG_ENTRY,
     DATA_CONFIGURATION,
@@ -41,131 +38,179 @@ from .const import (
     DOMAIN,
     INTEGRATION_LOCK,
     PERSON_LOCATION_INTEGRATION,
+    TITLE_PERSON_LOCATION_CONFIG,
     VERSION,
 )
 
-# Platforms provided by this integration
-from homeassistant.const import Platform
-PLATFORMS: list[Platform] = [Platform.CAMERA]
-
-from .process_trigger import setup_process_trigger
-from .reverse_geocode import setup_reverse_geocode
-
 _LOGGER = logging.getLogger(__name__)
+PLATFORMS: list[Platform] = [Platform.CAMERA, Platform.SENSOR]
 
+def merge_entry_data(entry: ConfigEntry, conf: dict) -> tuple[dict, dict]:
+    """Merge YAML conf into an existing ConfigEntry's data and options.
 
-def setup(hass, config):
-    """Setup is called by Home Assistant to load our integration."""
+    ConfigEntry values override YAML:
+    - Dict keys (e.g. CONF_DEVICES): entry overrides YAML.
+    - List keys (e.g. CONF_CREATE_SENSORS): merged with duplicates removed.
+    - Other keys: entry values override YAML.
+    """
 
-    _LOGGER.debug("[setup] === Start ===")
+    # Start with YAML (which has data + options), overlay with entry data
+    updated_data_and_yaml = {**conf, **entry.data}
 
-    try:
-        config = CONFIG_SCHEMA(config)
-    except vol.Invalid as err:
-        # Handle invalid configuration
-        _LOGGER.error("Invalid yaml configuration: %s", err)
+    # Merge dict CONF_DEVICES key → entry wins
+    conf_devices = conf.get(CONF_DEVICES, {})
+    entry_devices = entry.data.get(CONF_DEVICES, {})
+    updated_data_and_yaml[CONF_DEVICES] = {**conf_devices, **entry_devices}
 
-    pli = PERSON_LOCATION_INTEGRATION(API_STATE_OBJECT, hass, config)
+    # Merge list CONF_CREATE_SENSORS key → deduped
+    conf_sensors = conf.get(CONF_CREATE_SENSORS, [])
+    entry_sensors = entry.data.get(CONF_CREATE_SENSORS, [])
+    updated_data_and_yaml[CONF_CREATE_SENSORS] = list(
+        dict.fromkeys(entry_sensors + conf_sensors)
+    )
+
+    # Pull out keys that should be in data only
+    updated_data = {
+        key: value for key, value in updated_data_and_yaml.items() if key not in ALLOWED_OPTIONS_KEYS
+    }
+    _LOGGER.debug("[merge_entry_data] Parsed updated_data: %s", updated_data)
+
+    # Preserve existing options (entry wins)
+    updated_options_data_and_yaml = {**updated_data_and_yaml, **entry.options}
+
+    # Pull out keys that should be in options only
+    updated_options = {
+        key: value for key, value in updated_options_data_and_yaml.items() if key in ALLOWED_OPTIONS_KEYS
+    }
+    _LOGGER.debug("[merge_entry_data] Parsed updated_options: %s", updated_options)
+
+    return updated_data, updated_options
+
+# ------------------------------------------------------------------
+# YAML setup (bridges into config entries)
+# ------------------------------------------------------------------
+
+async def async_setup(hass: HomeAssistant, yaml_config: dict) -> bool:
+    """Set up integration from YAML (bridges into config entries)."""
+
+    # get YAML conf defaults
+    default_conf = CONFIG_SCHEMA({DOMAIN: {} })[DOMAIN]
+    _LOGGER.debug("[async_setup] default_conf: %s", default_conf)
+    if not default_conf.get(CONF_DEVICES, {}):
+        default_conf[CONF_DEVICES] = {}
+ 
+    if DOMAIN not in yaml_config:
+        _LOGGER.debug("[async_setup] %s not found in yaml_config. Supplying defaults only.", DOMAIN)
+        conf_with_defaults = default_conf
+
+    else:
+        raw_conf = yaml_config.get(DOMAIN)
+        _LOGGER.debug("[async_setup] raw_conf: %s", raw_conf)
+        try:
+            conf = CONFIG_SCHEMA({DOMAIN: raw_conf})[DOMAIN]
+        except vol.Invalid as err:
+            _LOGGER.error("[async_setup] Invalid yaml configuration: %s", err)
+            return False
+        conf_with_defaults = {**default_conf, **conf}
+
+    existing_entries = hass.config_entries.async_entries(DOMAIN)
+    if existing_entries:
+        entry = existing_entries[0]  
+        _LOGGER.debug("[async_setup] Updating existing entry %s", entry.entry_id)
+        _LOGGER.debug("[async_setup] conf_with_defaults: %s", conf_with_defaults)
+        _LOGGER.debug("[async_setup] entry: %s", entry)
+        _LOGGER.debug("[async_setup] entry.data: %s", entry.data)
+        
+        new_data, new_options = merge_entry_data(entry, conf_with_defaults)
+
+        hass.config_entries.async_update_entry(
+            entry,
+            data=new_data,
+            options=new_options,
+        )
+
+    else:
+
+        _LOGGER.debug("[async_setup] Initiating config flow to create entry")
+        hass.async_create_task(
+            hass.config_entries.flow.async_init(
+                DOMAIN,
+                context={"source": "import"},
+                data=conf_with_defaults,
+            )
+        )
+
+    return True
+
+# ------------------------------------------------------------------
+# Options update listener
+# ------------------------------------------------------------------
+
+async def async_options_update_listener(hass: HomeAssistant, entry: ConfigEntry):
+    """Handle config_flow options updates."""
+    return await hass.data[DOMAIN][DATA_ASYNC_SETUP_ENTRY](hass, entry)
+
+# ------------------------------------------------------------------
+# Config entry setup
+# ------------------------------------------------------------------
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up integration from a ConfigEntry."""
+
+    _LOGGER.debug("[async_setup_entry] Setting up entry: %s", entry.entry_id)
+
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN][DATA_CONFIG_ENTRY] = entry
+
+    if DATA_UNDO_UPDATE_LISTENER not in hass.data[DOMAIN]:
+        hass.data[DOMAIN][DATA_UNDO_UPDATE_LISTENER] = entry.add_update_listener(
+            async_options_update_listener
+        )
+
+    # Create integration object
+    pli = PERSON_LOCATION_INTEGRATION(f"{DOMAIN}.integration", hass, entry.data)
+    # Explicit startup flag so logic downstream is predictable
+    pli.attributes.setdefault("startup", True)
+
+    # Store integration object
+    hass.data[DOMAIN][entry.entry_id] = pli
+    # Some code references may expect hass.data[DOMAIN]["integration"]
+    hass.data[DOMAIN]["integration"] = pli
+
+    # Setup services used by sensors/camera and triggers
     setup_process_trigger(pli)
     setup_reverse_geocode(pli)
 
+    # Forward setup to platforms
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # Services: geocode on/off
     def handle_geocode_api_on(call):
-        """Turn on the geocode service."""
-
-        _LOGGER.debug("[geocode_api_on] === Start===")
+        _LOGGER.debug("[geocode_api_on] === Start ===")
         with INTEGRATION_LOCK:
-            """Lock while updating the pli(API_STATE_OBJECT)."""
-            _LOGGER.debug("[handle_geocode_api_on]" + " INTEGRATION_LOCK obtained")
-
-            _LOGGER.debug("Setting " + API_STATE_OBJECT + " on")
+            _LOGGER.debug("[geocode_api_on] INTEGRATION_LOCK obtained")
             pli.state = STATE_ON
             pli.attributes["icon"] = "mdi:api"
             pli.set_state()
-            _LOGGER.debug("[geocode_api_on]" + " INTEGRATION_LOCK release...")
+            _LOGGER.debug("[geocode_api_on] INTEGRATION_LOCK release...")
         _LOGGER.debug("[geocode_api_on] === Return ===")
 
     def handle_geocode_api_off(call):
-        """Turn off the geocode service."""
-
         _LOGGER.debug("[geocode_api_off] === Start ===")
         with INTEGRATION_LOCK:
-            """Lock while updating the pli(API_STATE_OBJECT)."""
-            _LOGGER.debug("[handle_geocode_api_off]" + " INTEGRATION_LOCK obtained")
-
-            _LOGGER.debug("Setting " + API_STATE_OBJECT + " off")
+            _LOGGER.debug("[geocode_api_off] INTEGRATION_LOCK obtained")
             pli.state = STATE_OFF
             pli.attributes["icon"] = "mdi:api-off"
             pli.set_state()
-            _LOGGER.debug("[handle_geocode_api_off]" + " INTEGRATION_LOCK release...")
+            _LOGGER.debug("[geocode_api_off] INTEGRATION_LOCK release...")
         _LOGGER.debug("[geocode_api_off] === Return ===")
 
-    async def _async_setup_entry(hass, entry):
-        """Process config_flow configuration and options."""
+    hass.services.async_register(DOMAIN, "geocode_api_on", handle_geocode_api_on)
+    hass.services.async_register(DOMAIN, "geocode_api_off", handle_geocode_api_off)
 
-        _LOGGER.debug(
-            "[_async_setup_entry] === Start === -data: %s -options: %s",
-            entry.data,
-            entry.options,
-        )
-
-        friendly_name_template_changed = (
-            (not pli.attributes["startup"])
-            and ("friendly_name_template" in entry.options)
-            and ("friendly_name_template" in pli.configuration)
-            and (
-                entry.options["friendly_name_template"]
-                != pli.configuration["friendly_name_template"]
-            )
-        )
-        _LOGGER.debug("[_async_setup_entry] pli.configuration merge")
-        _LOGGER.debug("[_async_setup_entry] pli.configuration = \n%s", pprint.pformat(pli.configuration))
-        _LOGGER.debug("[_async_setup_entry] entry.data = \n%s", pprint.pformat(entry.data))
-    #    pli.configuration.update(entry.data)
-        _LOGGER.debug("[_async_setup_entry] entry.options = \n%s", pprint.pformat(entry.options))
-    #    pli.configuration.update(entry.options)
-    
-        pli.configuration = {**(pli.configuration or {}), **(entry.data or {}), **(entry.options or {})}
-
-        _LOGGER.debug("[_async_setup_entry] pli.configuration = \n%s", pprint.pformat(pli.configuration))
-
-        hass.data[DOMAIN][DATA_CONFIGURATION] = pli.configuration
-
-        await hass.async_add_executor_job(_listen_for_configured_entities)
-
-        if friendly_name_template_changed:
-            # Update the friendly_name for all enties that have been geocoded:
-
-            try:
-                entity_info = hass.data[DOMAIN][DATA_ENTITY_INFO]
-
-                for sensor in entity_info:
-                    if (
-                        "geocode_count" in entity_info[sensor]
-                        and entity_info[sensor]["geocode_count"] != 0
-                    ):
-                        _LOGGER.debug(f"sensor to be updated = {sensor}")
-                        service_data = {
-                            "entity_id": sensor,
-                            "friendly_name_template": pli.configuration[
-                                CONF_FRIENDLY_NAME_TEMPLATE
-                            ],
-                            "force_update": False,
-                        }
-                        await pli.hass.services.async_call(
-                            DOMAIN, "reverse_geocode", service_data, False
-                        )
-            except Exception as e:
-                _LOGGER.warning(
-                    f"Exception updating friendly name after template change - {e}"
-                )
-
-        _LOGGER.debug("[_async_setup_entry] === Return ===")
-        return True
-
-    hass.data[DOMAIN][DATA_ASYNC_SETUP_ENTRY] = _async_setup_entry
-
-    hass.services.register(DOMAIN, "geocode_api_on", handle_geocode_api_on)
-    hass.services.register(DOMAIN, "geocode_api_off", handle_geocode_api_off)
+    # ------------------------------------------------------------------
+    # Listeners: device tracker state change
+    # ------------------------------------------------------------------
 
     def _handle_device_tracker_state_change(
         event: Event[EventStateChangedData],
@@ -176,153 +221,227 @@ def setup(hass, config):
         new_state = event.data["new_state"]
 
         _LOGGER.debug(
-            "[_handle_device_tracker_state_change]"
-            + " === Start === (%s) " % (entity_id)
+            "[_handle_device_tracker_state_change] === Start === (%s)", entity_id
         )
 
-        #        _LOGGER.debug("[_handle_device_tracker_state_change]" + " (%s) " % (entity_id))
-        if hasattr(old_state, "state"):
-            fromState = old_state.state
-        else:
-            fromState = "unknown"
+        from_state = getattr(old_state, "state", "unknown")
         service_data = {
             "entity_id": entity_id,
-            "from_state": fromState,
+            "from_state": from_state,
             "to_state": new_state.state,
         }
         hass.services.call(DOMAIN, "process_trigger", service_data, False)
 
-        _LOGGER.debug("[_handle_device_tracker_state_change]" + " === Return ===")
+        _LOGGER.debug("[_handle_device_tracker_state_change] === Return ===")
 
-    track_state_change_event = threaded_listener_factory(async_track_state_change_event)
+    #track_state_change_event = threaded_listener_factory(async_track_state_change_event)
 
-    def _listen_for_device_tracker_state_changes(entity_id):
-        """Request notification of device tracker state changes."""
-
+    def _listen_for_device_tracker_state_changes(entity_id: str):
+        """Register state listener for a device tracker entity."""
         if entity_id not in pli.entity_info:
             pli.entity_info[entity_id] = {}
 
         if DATA_UNDO_STATE_LISTENER not in pli.entity_info[entity_id]:
-            remove = track_state_change_event(
-                pli.hass,
+            remove = async_track_state_change_event(
+                hass,
                 entity_id,
                 _handle_device_tracker_state_change,
             )
-
             if remove:
                 pli.entity_info[entity_id][DATA_UNDO_STATE_LISTENER] = remove
                 _LOGGER.debug(
-                    "[_listen_for_device_tracker_state_changes] _handle_device_tracker_state_change (%s)"
-                    % (entity_id)
+                    "[_listen_for_device_tracker_state_changes] Registered for %s",
+                    entity_id,
                 )
-
-    def _listen_for_configured_entities():
-        """Request notification of state changes for configured entities."""
-
+    def _listen_for_configured_entities(hass: HomeAssistant, pli_obj: PERSON_LOCATION_INTEGRATION):
+        """Register listeners for configured person/device entities."""
         _LOGGER.debug("[_listen_for_configured_entities] === Start ===")
 
-        if pli.configuration[CONF_FOLLOW_PERSON_INTEGRATION]:
-            for entity_id in pli.hass.states.entity_ids("person"):
+        if pli_obj.configuration.get(CONF_FOLLOW_PERSON_INTEGRATION):
+            for entity_id in hass.states.entity_ids("person"):
                 _listen_for_device_tracker_state_changes(entity_id)
 
-        for device in pli.configuration[CONF_DEVICES].keys():
+        for device in pli_obj.configuration.get(CONF_DEVICES, {}).keys():
             _listen_for_device_tracker_state_changes(device)
 
         _LOGGER.debug("[_listen_for_configured_entities] === Return ===")
 
-    # Set a timer for when to stop ignoring stuff during startup:
+    # ------------------------------------------------------------------
+    # Inner _async_setup_entry (options merge + post-merge actions)
+    # ------------------------------------------------------------------
 
-    def _handle_startup_is_done(now):
-        """Handle timer for "startup is done"."""
-
-        hass_state = pli.hass.state
+    async def _async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+        """Process config_flow configuration and options."""
         _LOGGER.debug(
-            "[_handle_startup_is_done] === Start === hass.state = %s", hass_state
+            "[_async_setup_entry] === Start === -data: %s -options: %s",
+            pprint.pformat(entry.data),
+            pprint.pformat(entry.options),
         )
 
+        friendly_name_template_changed = (
+            (not pli.attributes.get("startup", True))
+            and (CONF_FRIENDLY_NAME_TEMPLATE in entry.options)
+            and (CONF_FRIENDLY_NAME_TEMPLATE in (pli.configuration or {}))
+            and (
+                entry.options[CONF_FRIENDLY_NAME_TEMPLATE]
+                != pli.configuration[CONF_FRIENDLY_NAME_TEMPLATE]
+            )
+        )
+
+        # Merge data and options into runtime configuration
+        pli.configuration = {
+            **(pli.configuration or {}),
+            **(entry.data or {}),
+            **(entry.options or {}),
+        }
+        hass.data[DOMAIN][DATA_CONFIGURATION] = pli.configuration
+
+        # Wire listeners based on updated configuration
+        _listen_for_configured_entities(hass, pli)
+
+        # Re-apply friendly names if template changed
+        if friendly_name_template_changed:
+            try:
+                entity_info = hass.data[DOMAIN].get(DATA_ENTITY_INFO, {})
+                for sensor, info in entity_info.items():
+                    if info.get("geocode_count", 0) > 0:
+                        _LOGGER.debug("[_async_setup_entry] updating sensor %s", sensor)
+                        service_data = {
+                            "entity_id": sensor,
+                            "friendly_name_template": pli.configuration[
+                                CONF_FRIENDLY_NAME_TEMPLATE
+                            ],
+                            "force_update": False,
+                        }
+                        await hass.services.async_call(
+                            DOMAIN, "reverse_geocode", service_data, False
+                        )
+            except Exception as e:
+                _LOGGER.warning(
+                    "Exception updating friendly name after template change - %s", e
+                )
+
+        _LOGGER.debug("[_async_setup_entry] === Return ===")
+        return True
+
+    # Expose entry setup handler for options updates
+    hass.data[DOMAIN][DATA_ASYNC_SETUP_ENTRY] = _async_setup_entry
+    await _async_setup_entry(hass, entry)
+
+    # ------------------------------------------------------------------
+    # Startup timer (defer wiring until HA finishes starting)
+    # ------------------------------------------------------------------
+
+    def _handle_startup_is_done(now):
+        """Flip startup flag and rewire listeners when HA has started."""
+        
+        hass_state = hass.state
+        _LOGGER.debug("[_handle_startup_is_done] === Start === hass.state = %s", hass_state)
+
+        # Still starting? Wait another minute
         if hass_state == "STARTING":
             _set_timer_startup_is_done(1)
             return
 
         pli.attributes["startup"] = False
-
-        _listen_for_configured_entities()
-
+        _listen_for_configured_entities(hass, pli)
+        
+        # It should now be safe to expand template sensors for restored target sensors.
+        if pli._target_sensors_restored:
+            _LOGGER.debug("[_handle_startup_is_done] Running delayed reverse_geocode.")
+            for entity_id in pli._target_sensors_restored:
+                service_data = {
+                    "entity_id": entity_id,
+                    "friendly_name_template": pli.configuration.get(
+                        CONF_FRIENDLY_NAME_TEMPLATE,
+                        DEFAULT_FRIENDLY_NAME_TEMPLATE,
+                    ),
+                    "force_update": True,
+                }
+                pli.hass.services.call(
+                    DOMAIN, "reverse_geocode", service_data, False
+                )
+        
         _LOGGER.debug(
-            "[_handle_startup_is_done] === Return === HA just started flag is now turned off"
+            "[_handle_startup_is_done] === Return === startup flag turned off"
         )
 
-    def _set_timer_startup_is_done(minutes):
-        """Start a timer for "startup is done"."""
-
+    def _set_timer_startup_is_done(minutes: int):
+        """Start a timer for 'startup is done'."""
         point_in_time = datetime.now() + timedelta(minutes=minutes)
-        track_point_in_time(
+        async_track_point_in_time(
             hass,
-            partial(
-                _handle_startup_is_done,
-            ),
+            partial(_handle_startup_is_done),
             point_in_time=point_in_time,
         )
 
-    _listen_for_configured_entities()
-
+    # Initial listener wiring and startup timer
+    _listen_for_configured_entities(hass, pli)
     _set_timer_startup_is_done(2)
 
-    pli.set_state()
+    # Async state set (avoid sync set_state during startup)
+    hass.loop.call_soon_threadsafe(
+        lambda: hass.async_create_task(pli.async_set_state())
+    )
 
-    _LOGGER.debug("[setup] === Return ===")
-    # Return boolean to indicate that setup was successful.
+    _LOGGER.debug("[async_setup_entry] === Return ===")
     return True
 
-
+# ------------------------------------------------------------------
+# Unload entry (cleanup symmetry)
 # ------------------------------------------------------------------
 
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a config entry and clean up orphaned devices/entities."""
 
-async def async_setup_entry(hass, entry):
-    """Accept conf_flow configuration."""
-    # from homeassistant.helpers import platform_forward
+    _LOGGER.debug("[async_unload_entry] Unloading entry: %s", entry.entry_id)
 
-    _LOGGER.debug("[async_setup_entry] Setting up entry: %s", entry.entry_id)
-
-    if DOMAIN not in hass.data:
-        hass.data[DOMAIN] = {}
-    hass.data[DOMAIN][DATA_CONFIG_ENTRY] = entry
-
-    if DATA_UNDO_UPDATE_LISTENER not in hass.data[DOMAIN]:
-        hass.data[DOMAIN][DATA_UNDO_UPDATE_LISTENER] = entry.add_update_listener(
-            async_options_update_listener
-        )
-
-    # Forward the setup to the camera platform
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
-    return await hass.data[DOMAIN][DATA_ASYNC_SETUP_ENTRY](hass, entry)
-
-
-async def async_options_update_listener(hass, entry):
-    """Accept conf_flow options."""
-
-    return await hass.data[DOMAIN][DATA_ASYNC_SETUP_ENTRY](hass, entry)
-
-
-async def async_unload_entry(hass, entry):
-    """Unload a config entry."""
-
+    # Unload platforms first
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if not unload_ok:
+        return False
 
+    # Remove services registered by this integration
+    hass.services.async_remove(DOMAIN, "geocode_api_on")
+    hass.services.async_remove(DOMAIN, "geocode_api_off")
+
+    # Remove integration object and undo listeners
+    pli = hass.data[DOMAIN].pop(entry.entry_id, None)
+    if pli:
+        for entity_id, info in list(pli.entity_info.items()):
+            undo = info.get(DATA_UNDO_STATE_LISTENER)
+            if undo:
+                undo()
+                _LOGGER.debug(
+                    "[async_unload_entry] Removed state listener for %s", entity_id
+                )
+        pli.entity_info.clear()
+
+    # Clean up orphaned devices (no entities left)
+    dev_reg = dr.async_get(hass)
+    ent_reg = er.async_get(hass)
+
+    devices = [d for d in dev_reg.devices.values() if entry.entry_id in d.config_entries]
+    for device in devices:
+        entities = [e for e in ent_reg.entities.values() if e.device_id == device.id]
+        if not entities:
+            dev_reg.async_remove_device(device.id)
+            _LOGGER.info("[async_unload_entry] Removed orphaned device %s", device.name)
+
+    # Optional: clear per-domain bookkeeping
+    hass.data[DOMAIN].pop(DATA_CONFIG_ENTRY, None)
     if DATA_UNDO_UPDATE_LISTENER in hass.data[DOMAIN]:
         hass.data[DOMAIN][DATA_UNDO_UPDATE_LISTENER]()
+        hass.data[DOMAIN].pop(DATA_UNDO_UPDATE_LISTENER, None)
 
-    hass.data[DOMAIN].pop(DATA_UNDO_UPDATE_LISTENER)
-    hass.data[DOMAIN].pop(DATA_CONFIG_ENTRY)
-
-    return unload_ok
-
+    _LOGGER.debug("[async_unload_entry] === Return ===")
+    return True
 
 # ------------------------------------------------------------------
+# Migration
+# ------------------------------------------------------------------
 
-
-async def async_migrate_entry(hass, config_entry: ConfigEntry):
+async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Migrate old configuration entry."""
     _LOGGER.debug(
         "[async_migrate_entry] Migrating configuration %s from version %s.%s",
@@ -342,18 +461,15 @@ async def async_migrate_entry(hass, config_entry: ConfigEntry):
 
     if str(config_entry.version) == "1":
         if str(config_entry.minor_version) < "2":
-            # Add two new settings:
             if CONF_FRIENDLY_NAME_TEMPLATE not in new_options:
-                _LOGGER.debug(f"Adding { CONF_FRIENDLY_NAME_TEMPLATE }")
-                new_options[CONF_FRIENDLY_NAME_TEMPLATE] = (
-                    DEFAULT_FRIENDLY_NAME_TEMPLATE
-                )
+                _LOGGER.debug("Adding %s", CONF_FRIENDLY_NAME_TEMPLATE)
+                new_options[CONF_FRIENDLY_NAME_TEMPLATE] = DEFAULT_FRIENDLY_NAME_TEMPLATE
             if CONF_SHOW_ZONE_WHEN_AWAY not in new_options:
-                _LOGGER.debug(f"Adding { CONF_SHOW_ZONE_WHEN_AWAY }")
+                _LOGGER.debug("Adding %s", CONF_SHOW_ZONE_WHEN_AWAY)
                 new_options[CONF_SHOW_ZONE_WHEN_AWAY] = DEFAULT_SHOW_ZONE_WHEN_AWAY
 
-    _LOGGER.debug(f"data={ new_data }")
-    _LOGGER.debug(f"options={ new_options }")
+    _LOGGER.debug("data=%s", new_data)
+    _LOGGER.debug("options=%s", new_options)
 
     hass.config_entries.async_update_entry(
         config_entry,
@@ -361,7 +477,7 @@ async def async_migrate_entry(hass, config_entry: ConfigEntry):
         options=new_options,
         minor_version="1",
         version=VERSION,
-        title="Person Location Config",
+        title=TITLE_PERSON_LOCATION_CONFIG,
     )
 
     _LOGGER.debug(

@@ -66,7 +66,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
 async def async_setup_entry(hass, entry, async_add_entities):
     """Set up cameras from config entry providers."""
 
-    _LOGGER.debug("async_setup_entry: entry = %s", entry)
+    _LOGGER.debug("[async_setup_entry] entry: %s", entry)
     providers = entry.data.get(CONF_PROVIDERS, [])
     entities = [PersonLocationCamera(hass, normalize_provider(hass, p)) for p in providers]
     async_add_entities(entities, update_before_add=True)
