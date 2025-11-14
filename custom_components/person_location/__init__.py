@@ -54,33 +54,30 @@ def merge_entry_data(entry: ConfigEntry, conf: dict) -> tuple[dict, dict]:
     - Other keys: entry values override YAML.
     """
 
-    # Start with YAML (which has data + options), overlay with entry data
-    updated_data_and_yaml = {**conf, **entry.data}
+    # Start with YAML (which has data + options), overlay with entry data + options
+    updated_data_options_and_yaml = {**conf, **entry.data, **entry.options}
 
-    # Merge dict CONF_DEVICES key → entry wins
+    # Then, Merge dict CONF_DEVICES key → entry wins
     conf_devices = conf.get(CONF_DEVICES, {})
     entry_devices = entry.data.get(CONF_DEVICES, {})
-    updated_data_and_yaml[CONF_DEVICES] = {**conf_devices, **entry_devices}
+    updated_data_options_and_yaml[CONF_DEVICES] = {**conf_devices, **entry_devices}
 
-    # Merge list CONF_CREATE_SENSORS key → deduped
+    # Then, merge list CONF_CREATE_SENSORS key → deduped
     conf_sensors = conf.get(CONF_CREATE_SENSORS, [])
     entry_sensors = entry.data.get(CONF_CREATE_SENSORS, [])
-    updated_data_and_yaml[CONF_CREATE_SENSORS] = list(
+    updated_data_options_and_yaml[CONF_CREATE_SENSORS] = list(
         dict.fromkeys(entry_sensors + conf_sensors)
     )
 
     # Pull out keys that should be in data only
     updated_data = {
-        key: value for key, value in updated_data_and_yaml.items() if key not in ALLOWED_OPTIONS_KEYS
+        key: value for key, value in updated_data_options_and_yaml.items() if key not in ALLOWED_OPTIONS_KEYS
     }
     _LOGGER.debug("[merge_entry_data] Parsed updated_data: %s", updated_data)
 
-    # Preserve existing options (entry wins)
-    updated_options_data_and_yaml = {**updated_data_and_yaml, **entry.options}
-
     # Pull out keys that should be in options only
     updated_options = {
-        key: value for key, value in updated_options_data_and_yaml.items() if key in ALLOWED_OPTIONS_KEYS
+        key: value for key, value in updated_data_options_and_yaml.items() if key in ALLOWED_OPTIONS_KEYS
     }
     _LOGGER.debug("[merge_entry_data] Parsed updated_options: %s", updated_options)
 
@@ -118,10 +115,12 @@ async def async_setup(hass: HomeAssistant, yaml_config: dict) -> bool:
         entry = existing_entries[0]  
         _LOGGER.debug("[async_setup] Updating existing entry %s", entry.entry_id)
         _LOGGER.debug("[async_setup] conf_with_defaults: %s", conf_with_defaults)
-        _LOGGER.debug("[async_setup] entry: %s", entry)
         _LOGGER.debug("[async_setup] entry.data: %s", entry.data)
+        _LOGGER.debug("[async_setup] entry.options: %s", entry.options)
         
         new_data, new_options = merge_entry_data(entry, conf_with_defaults)
+        _LOGGER.debug("[async_setup] new_data: %s", new_data)
+        _LOGGER.debug("[async_setup] new_options: %s", new_options)
 
         hass.config_entries.async_update_entry(
             entry,

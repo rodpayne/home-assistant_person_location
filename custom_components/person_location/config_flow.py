@@ -136,17 +136,6 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.debug("[async_step_import] Skipping duplicate with matching title: %s", title)
                 return self.async_abort(reason="already_configured")
 
-        #split data and options
-        #conf_options = {
-        #    key: value for key, value in conf.items() if key in ALLOWED_OPTIONS_KEYS
-        #}
-        #_LOGGER.debug("[async_setup] Parsed conf_options: %s", conf_options)
-        #
-        #conf_data = {
-        #    key: value for key, value in conf.items() if key not in ALLOWED_OPTIONS_KEYS
-        #}
-        #_LOGGER.debug("[async_setup] Parsed conf_data: %s", conf_data)
-    
         conf_data, conf_options = _split_conf_data_and_options(conf)
 
         # Create config entry
@@ -255,46 +244,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     # ----------------- Sensors to be created -----------------
-    '''
-    async def async_step_sensors(self, user_input=None):
-        """Step: Collect sensor creation and output platform."""
-        if user_input is not None:
-            create_sensors_list = []
-            if user_input[CONF_CREATE_SENSORS]:
-                if isinstance(user_input[CONF_CREATE_SENSORS], str):
-                    create_sensors_list = [x.strip() for x in user_input[CONF_CREATE_SENSORS].split(",")]
-                else:
-                    create_sensors_list = user_input[CONF_CREATE_SENSORS]
-                create_sensors_list = sorted(set(create_sensors_list))
-                for sensor_name in create_sensors_list:
-                    if sensor_name not in VALID_CREATE_SENSORS:
-                        self._errors[CONF_CREATE_SENSORS] = "sensor_invalid"
-                        return await self._show_config_sensors_form(user_input)
 
-            self._user_input[CONF_OUTPUT_PLATFORM] = user_input[CONF_OUTPUT_PLATFORM]
-            self._user_input[CONF_CREATE_SENSORS] = create_sensors_list
-            return await self.async_step_menu()
-
-        create_sensors_list = self.integration_config_data.get(CONF_CREATE_SENSORS, [])
-        user_input = {
-            CONF_CREATE_SENSORS: ",".join(create_sensors_list),
-            CONF_OUTPUT_PLATFORM: self.integration_config_data.get(CONF_OUTPUT_PLATFORM, DEFAULT_OUTPUT_PLATFORM),
-        }
-        return await self._show_config_sensors_form(user_input)
-
-    async def _show_config_sensors_form(self, user_input):
-        """Show the form for sensor creation and output platform."""
-        return self.async_show_form(
-            step_id="sensors",
-            data_schema=vol.Schema(
-                {
-                    vol.Optional(CONF_CREATE_SENSORS, default=user_input[CONF_CREATE_SENSORS]): str,
-                    vol.Optional(CONF_OUTPUT_PLATFORM, default=user_input[CONF_OUTPUT_PLATFORM]): vol.In(VALID_OUTPUT_PLATFORM),
-                }
-            ),
-            errors=self._errors,
-        )
-    '''
     async def async_step_sensors(self, user_input=None):
         """Step: Collect sensor creation and output platform, with cleanup support."""
         _LOGGER.debug("[async_step_sensors] user_input = %s", user_input)
@@ -951,18 +901,18 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             # get YAML conf defaults
             default_conf = CONFIG_SCHEMA({DOMAIN: {} })[DOMAIN]
 
-            # split data and options
-            #self.config_entry_options = {
-            #    key: value for key, value in default_conf.items() if key in ALLOWED_OPTIONS_KEYS
-            #}
-            #_LOGGER.debug("[_load_previous_integration_config_data] Default conf_options: %s", self.config_entry_options)
-            #
-            #self.config_entry_data = {
-            #    key: value for key, value in default_conf.items() if key not in ALLOWED_OPTIONS_KEYS
-            #}
-            #_LOGGER.debug("[_load_previous_integration_config_data] Default conf_data: %s", self.config_entry_data)
-
             self.config_entry_data, self.config_entry_options = _split_conf_data_and_options(default_conf)
+
+        _LOGGER.debug(
+            "[_load_previous_integration_config_data] " \
+            "self.config_entry_data = %s",
+            self.config_entry_data
+        )
+        _LOGGER.debug(
+            "[_load_previous_integration_config_data] " \
+            "self.config_entry_options = %s",
+            self.config_entry_options
+        )
 
         if self.hass:
             self.integration_config_data = self.hass.data.get(DOMAIN, {}).get(DATA_CONFIGURATION, {})
