@@ -16,7 +16,7 @@ from homeassistant.helpers import selector
 from homeassistant.helpers.template import Template as HATemplate
 from urllib.parse import urlparse
 
-from .api import PersonLocation_aiohttp_Client
+from .helpers.api import PersonLocation_aiohttp_Client
 from .helpers.template import normalize_template
 from .helpers.template import validate_template
 

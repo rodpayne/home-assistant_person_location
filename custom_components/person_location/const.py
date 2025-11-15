@@ -32,7 +32,7 @@ DOMAIN = "person_location"
 API_STATE_OBJECT = DOMAIN + "." + DOMAIN + "_integration"
 INTEGRATION_NAME = "Person Location"
 ISSUE_URL = "https://github.com/rodpayne/home-assistant_person_location/issues"
-VERSION = "2025.11.11"
+VERSION = "2025.11.14"
 
 # Titles for the config entries:
 #TITLE_IMPORTED_YAML_CONFIG = "Imported YAML Config"
@@ -239,13 +239,6 @@ ALLOWED_OPTIONS_KEYS = {
     CONF_MINUTES_JUST_LEFT,
     CONF_SHOW_ZONE_WHEN_AWAY,
     CONF_FRIENDLY_NAME_TEMPLATE,
-#    CONF_LANGUAGE,
-#    CONF_REGION,
-#    CONF_MAPBOX_API_KEY,
-#    CONF_MAPQUEST_API_KEY,
-#    CONF_OSM_API_KEY,
-#    CONF_GOOGLE_API_KEY,
-#    CONF_RADAR_API_KEY,
 }
 
 # Items under hass.data[DOMAIN]:
@@ -260,6 +253,9 @@ DATA_ASYNC_SETUP_ENTRY = "async_setup_entry"
 
 INTEGRATION_LOCK = threading.Lock()
 TARGET_LOCK = threading.Lock()
+# Note to future me: If functions where these locks are used are converted to async,
+#   they will need to be changed to asyncio.Lock and the locations where
+#   `with TARGET_LOCK:` is used would need to change to `async with TARGET_LOCK:`
 
 _LOGGER = logging.getLogger(__name__)
 

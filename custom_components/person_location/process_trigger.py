@@ -122,7 +122,6 @@ def setup_process_trigger(pli):
                             _LOGGER.debug(
                                 f"Skipping use of zone {reportedZone} for Away state"
                             )
-                            pass
                         else:
                             zoneAttributesObject = zoneStateObject.attributes.copy()
                             if "friendly_name" in zoneAttributesObject:
@@ -134,7 +133,6 @@ def setup_process_trigger(pli):
                             "Extended Away",
                             (pli.configuration[CONF_HOURS_EXTENDED_AWAY] * 60),
                         )
-                        pass
                 elif to_state == "Extended Away":
                     pass
 

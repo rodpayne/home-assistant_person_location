@@ -24,6 +24,8 @@ from .const import (
     CONF_DEVICES,
     CONF_FOLLOW_PERSON_INTEGRATION,
     CONF_FRIENDLY_NAME_TEMPLATE,
+    CONF_NAME,
+    CONF_PERSON_NAMES,
     CONF_SHOW_ZONE_WHEN_AWAY,
     CONFIG_SCHEMA,
     ALLOWED_OPTIONS_KEYS,
@@ -111,16 +113,16 @@ async def async_setup(hass: HomeAssistant, yaml_config: dict) -> bool:
         conf_with_defaults = {**default_conf, **conf}
 
         # translate YAML way of specifying 'person_names' into 'devices' format
-        conf_person_names = conf_with_defaults.pop('person_names', [])
+        conf_person_names = conf_with_defaults.pop(CONF_PERSON_NAMES, [])
         if conf_person_names:
             _LOGGER.debug("[async_setup] conf_person_names: %s", conf_person_names)
             conf_devices = {
-                device: person['name']
+                device: person[CONF_NAME]
                 for person in conf_person_names
-                for device in person['devices']
+                for device in person[CONF_DEVICES]
             }
             _LOGGER.debug("[async_setup] conf_devices: %s", conf_devices)
-            conf_with_defaults['devices'] = conf_devices
+            conf_with_defaults[CONF_DEVICES] = conf_devices
 
     existing_entries = hass.config_entries.async_entries(DOMAIN)
     if existing_entries:

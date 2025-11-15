@@ -646,26 +646,6 @@ def setup_reverse_geocode(pli):
                                     ATTR_GEOCODED
                                     in pli.configuration[CONF_CREATE_SENSORS]
                                 ):
-                                    '''
-                                    target.make_template_sensor(
-                                        "Radar",
-                                        [
-                                            {ATTR_COMPASS_BEARING: compass_bearing},
-                                            ATTR_LATITUDE,
-                                            ATTR_LONGITUDE,
-                                            ATTR_SOURCE_TYPE,
-                                            ATTR_GPS_ACCURACY,
-                                            "icon",
-                                            {"locality": locality},
-                                            {
-                                                "location_time": new_location_time.strftime(
-                                                    "%Y-%m-%d %H:%M:%S"
-                                                )
-                                            },
-                                            {ATTR_ATTRIBUTION: radar_attribution},
-                                        ],
-                                    )
-                                    '''
                                     # Create the template sensor entity
                                     attrs = {
                                         ATTR_COMPASS_BEARING: compass_bearing,

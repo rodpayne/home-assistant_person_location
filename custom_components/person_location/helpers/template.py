@@ -136,7 +136,8 @@ async def test_friendly_name_template(hass, template_str: str) -> dict:
         return None
 
     # This rendering is using the following example states.
-    # TODO: we could use actual live state after triggers are configured (if we could decide which one to show).
+    # TODO: we could use actual live state after triggers are configured
+    #       (if we could decide which one to show).
 
     friendly_name_location = "is in Spanish Fork"
 
