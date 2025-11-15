@@ -110,6 +110,18 @@ async def async_setup(hass: HomeAssistant, yaml_config: dict) -> bool:
             return False
         conf_with_defaults = {**default_conf, **conf}
 
+        # translate YAML way of specifying 'person_names' into 'devices' format
+        conf_person_names = conf_with_defaults.pop('person_names', [])
+        if conf_person_names:
+            _LOGGER.debug("[async_setup] conf_person_names: %s", conf_person_names)
+            conf_devices = {
+                device: person['name']
+                for person in conf_person_names
+                for device in person['devices']
+            }
+            _LOGGER.debug("[async_setup] conf_devices: %s", conf_devices)
+            conf_with_defaults['devices'] = conf_devices
+
     existing_entries = hass.config_entries.async_entries(DOMAIN)
     if existing_entries:
         entry = existing_entries[0]  
