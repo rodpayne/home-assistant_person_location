@@ -180,9 +180,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     setup_process_trigger(pli)
     setup_reverse_geocode(pli)
 
-    # Forward setup to platforms
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
     # Services: geocode on/off
     def handle_geocode_api_on(call):
         _LOGGER.debug("[geocode_api_on] === Start ===")
@@ -294,6 +291,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             **(entry.options or {}),
         }
         hass.data[DOMAIN][DATA_CONFIGURATION] = pli.configuration
+
+        # Forward setup to platforms
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
         # Wire listeners based on updated configuration
         _listen_for_configured_entities(hass, pli)

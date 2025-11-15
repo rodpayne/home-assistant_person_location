@@ -210,13 +210,18 @@ class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
             self._attr_last_updated = old_state.last_updated
             self._attr_last_changed = old_state.last_changed
             self._previous_state = self._attr_native_value
-            _LOGGER.debug("Restored target sensor %s with state %s, last_updated %s",
+            _LOGGER.debug("Restored target sensor %s with state %s, last_changed %s, last_updated %s",
                 self._entity_id,
                 old_state.state,
-                old_state.last_updated
+                old_state.last_changed,
+                old_state.last_updated,
             )
             if self._entity_id not in self._pli._target_sensors_restored:
                 self._pli._target_sensors_restored.append(self._entity_id)
+
+            # TODO: remove geolocation attributes if corresponding key has been removed
+
+            # Handle timers for delayed state change
 
             if old_state.state in ["Home", ""]:
                 pass
@@ -243,6 +248,7 @@ class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
                     old_state.state,
                     "Extended Away",
                     self._pli.configuration[CONF_HOURS_EXTENDED_AWAY] * 60,
+                    # TODO: Calculate time till Extended Away based on when Away
                 )
             
     def set_state(self):
