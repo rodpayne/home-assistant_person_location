@@ -342,60 +342,58 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         self._errors = {}
 
         skip_add_device_choice = "— None to be added —"
-
         return_to_menu = "__return__"
         return_to_menu_choice = "🔙 Return to menu"
 
-        # Note: devices = dict of {entity_id: person_name}
-        devices = self._user_input.get(CONF_DEVICES, self.integration_config_data.get(CONF_DEVICES, []))
+        devices = self._user_input.get(CONF_DEVICES, self.integration_config_data.get(CONF_DEVICES, {}))
         if not devices:
             devices = {}
         _LOGGER.debug("[async_step_triggers] devices = %s", devices)
 
         if user_input is None:
-
             self._valid_device_entities = [skip_add_device_choice]
             self._valid_device_entities.extend(sorted(self.hass.states.async_entity_ids("device_tracker")))
             self._valid_device_entities.extend(sorted(self.hass.states.async_entity_ids("binary_sensor")))
             self._valid_device_entities.extend(sorted(self.hass.states.async_entity_ids("person")))
-            # add "" to the list so that clicking "X" to clear a choice does not result in a long, long error message
-            self._valid_device_entities.extend("")
+            self._valid_device_entities.append("")
 
             user_input = {
-                CONF_FOLLOW_PERSON_INTEGRATION: self.integration_config_data.get(CONF_FOLLOW_PERSON_INTEGRATION, False),
+                CONF_FOLLOW_PERSON_INTEGRATION: self._user_input.get(
+                    CONF_FOLLOW_PERSON_INTEGRATION,
+                    self.integration_config_data.get(CONF_FOLLOW_PERSON_INTEGRATION, False)
+                ),
                 CONF_NEW_DEVICE: skip_add_device_choice,
                 CONF_NEW_PERSON_NAME: ""
             }
 
         else:
+            # Persist follow_person_integration setting
+            if CONF_FOLLOW_PERSON_INTEGRATION in user_input:
+                self._user_input[CONF_FOLLOW_PERSON_INTEGRATION] = user_input[CONF_FOLLOW_PERSON_INTEGRATION]
+            else:
+                user_input[CONF_FOLLOW_PERSON_INTEGRATION] = self._user_input.get(CONF_FOLLOW_PERSON_INTEGRATION, False)
 
             soft_return = False
 
-            # Add new trigger:
-
             new_device = user_input.get(CONF_NEW_DEVICE, "").strip()
             new_person = user_input.get(CONF_NEW_PERSON_NAME, "").strip()
-            
+
             if CONF_NEW_DEVICE in user_input and new_device and new_device != skip_add_device_choice:
                 if new_device in devices.keys():
                     self._errors[CONF_NEW_DEVICE] = "duplicate_device"
                 elif not new_person:
                     self._errors[CONF_NEW_PERSON_NAME] = "missing_person"
                 else:
-                    # Add the Trigger and return to triggers list
                     devices[new_device] = new_person
                     self._user_input[CONF_DEVICES] = devices
                     user_input[CONF_NEW_DEVICE] = ""
                     user_input[CONF_NEW_PERSON_NAME] = ""
-                    return await self.async_step_triggers() 
+                    return await self.async_step_triggers()
             else:
                 if new_person:
                     self._errors[CONF_NEW_DEVICE] = "missing_device"
                 else:
-                    # Both empty, soft return
                     soft_return = True
-
-            # Choose Trigger to update or remove:
 
             choice = user_input.get("device_choice")
             if choice == return_to_menu:
@@ -404,16 +402,13 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 self._device_to_edit = choice
                 return await self.async_step_trigger_edit()
 
-            # Return to the menu if we are done:
-
             if soft_return and not self._errors:
-                return await self.async_step_menu()                           
+                return await self.async_step_menu()
 
-        existing_names = {}
-        for device in devices.keys():
-            existing_names[device] = (
-                device + " = " + devices[device]
-            )
+        existing_names = {
+            device: f"{device} = {devices[device]}"
+            for device in devices.keys()
+        }
         _LOGGER.debug("[async_step_triggers] existing_names = %s", existing_names)
 
         choices = {
@@ -426,7 +421,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema({
                 vol.Optional(
                     CONF_FOLLOW_PERSON_INTEGRATION,
-                    default=user_input[CONF_FOLLOW_PERSON_INTEGRATION]
+                    default=self._user_input.get(CONF_FOLLOW_PERSON_INTEGRATION, False)
                 ): bool,
                 vol.Optional(
                     CONF_NEW_DEVICE,
@@ -439,7 +434,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required("device_choice", default=return_to_menu): vol.In(choices),
             }),
             description_placeholders={
-                "existing": ", ".join(existing_names) if existing_names else "None"
+                "existing": ", ".join(existing_names.values()) if existing_names else "None"
             },
             errors=self._errors,
         )
@@ -462,6 +457,10 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_NEW_DEVICE: device,
                 CONF_NEW_PERSON_NAME: devices[device]
             }
+            # A non-existent device could come from YAML...
+            self._valid_device_entities_plus_device_to_edit = []
+            self._valid_device_entities_plus_device_to_edit.extend(self._valid_device_entities)
+            self._valid_device_entities_plus_device_to_edit.append(self._device_to_edit)
 
         else:
 
@@ -490,7 +489,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Optional(
                         CONF_NEW_DEVICE,
                         default=user_input[CONF_NEW_DEVICE],
-                    ): vol.In(self._valid_device_entities),
+                    ): vol.In(self._valid_device_entities_plus_device_to_edit),
                     vol.Optional(
                         CONF_NEW_PERSON_NAME,
                         default=user_input[CONF_NEW_PERSON_NAME],

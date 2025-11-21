@@ -48,6 +48,7 @@ from .const import (
     DEFAULT_FRIENDLY_NAME_TEMPLATE,
     DOMAIN,
     IC3_STATIONARY_ZONE_PREFIX,
+    INFO_TRIGGER_COUNT,
     # PERSON_LOCATION_TARGET,
     PERSON_LOCATION_TRIGGER,
     TARGET_LOCK,
@@ -287,7 +288,7 @@ def setup_process_trigger(pli):
                     _LOGGER.warning("No target sensor found for %s", trigger.targetName)
                     return False
 
-                target.this_entity_info["trigger_count"] += 1
+                target.this_entity_info[INFO_TRIGGER_COUNT] += 1
 
                 if triggerTo in ["NotSet", STATE_UNAVAILABLE, STATE_UNKNOWN]:
                     _LOGGER.debug(
@@ -349,7 +350,7 @@ def setup_process_trigger(pli):
                             if (
                                 ATTR_SOURCE not in target._attr_extra_state_attributes
                                 or target._attr_extra_state_attributes[ATTR_SOURCE] == trigger.entity_id
-                                or "reported_state" not in target._attr_extra_state_attributes
+                                or ATTR_REPORTED_STATE not in target._attr_extra_state_attributes
                             ):  # same entity as we are following, if any?
                                 saveThisUpdate = True
                                 _LOGGER.debug(

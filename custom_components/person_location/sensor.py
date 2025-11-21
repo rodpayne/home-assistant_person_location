@@ -19,7 +19,7 @@ from homeassistant.const import (
     ATTR_LONGITUDE,
     ATTR_UNIT_OF_MEASUREMENT,
 )
-from .const import DOMAIN, INTEGRATION_NAME
+from .const import DOMAIN, INTEGRATION_NAME, VERSION
 from .const import (
     ATTR_ALTITUDE,
     ATTR_BREAD_CRUMBS,
@@ -30,17 +30,24 @@ from .const import (
     ATTR_GEOCODED,
     ATTR_METERS_FROM_HOME,
     ATTR_MILES_FROM_HOME,
+    ATTR_PERSON_NAME,
+    ATTR_REPORTED_STATE,
+    ATTR_SOURCE,
     ATTR_ZONE,
     CONF_CREATE_SENSORS,
+    CONF_FOLLOW_PERSON_INTEGRATION,
     CONF_HOURS_EXTENDED_AWAY,
     CONF_MINUTES_JUST_ARRIVED,
     CONF_MINUTES_JUST_LEFT,
     CONF_SHOW_ZONE_WHEN_AWAY,
     DATA_CONFIGURATION,
     IC3_STATIONARY_ZONE_PREFIX,
+    INFO_GEOCODE_COUNT,
+    INFO_LOCALITY,
+    INFO_TRIGGER_COUNT,
+    PERSON_LOCATION_TRIGGER,
     TARGET_LOCK,
     ZONE_DOMAIN,
-    VERSION,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -58,19 +65,29 @@ class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
         self._attr_unique_id = f"{entity_id}_target"
         self._attr_name = friendly_name or f"{person_name} Location"
         self._attr_native_value = STATE_UNKNOWN
-        self._attr_extra_state_attributes = {}
-        self.this_entity_info = {
-            "geocode_count": 0,
-            "locality": "?",
-            "trigger_count": 0,
+        self._attr_extra_state_attributes = {
+            ATTR_BREAD_CRUMBS: "",
+            ATTR_PERSON_NAME: person_name,
+            ATTR_REPORTED_STATE: STATE_UNKNOWN,
+            ATTR_SOURCE: STATE_UNKNOWN,
+            "version": f"{DOMAIN} {VERSION}",
         }
-        if not self._pli._target_sensors_restored:
-            self._pli._target_sensors_restored = []
-        self._attr_extra_state_attributes["version"] = f"{DOMAIN} {VERSION}"
+        self.this_entity_info = {
+            INFO_GEOCODE_COUNT: 0,
+            INFO_LOCALITY: "?",
+            INFO_TRIGGER_COUNT: 0,
+        }
         self._attr_last_updated = datetime.now(timezone.utc)
         self._attr_last_changed = self._attr_last_updated
         self._previous_state = self._attr_native_value
-    
+        if not self._pli._target_sensors_restored:
+            self._pli._target_sensors_restored = []
+        self.set_state()
+
+        _LOGGER.debug("[PersonLocationTargetSensor] (%s) Initialized",
+            self._entity_id,
+        )
+
     # old code has target.last_updated
     @property
     def last_updated(self):
@@ -223,7 +240,7 @@ class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
 
             # Handle timers for delayed state change
 
-            if old_state.state in ["Home", ""]:
+            if old_state.state in ["Home", "Extended Away", ""]:
                 pass
             elif old_state.state == "Just Left":
                 _LOGGER.debug("Presence detection not-so-binary, change state later: Away")
@@ -250,9 +267,14 @@ class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
                     self._pli.configuration[CONF_HOURS_EXTENDED_AWAY] * 60,
                     # TODO: Calculate time till Extended Away based on when Away
                 )
+            await self.async_set_state()
             
     def set_state(self):
         """Called by services to push updates."""
+
+        _LOGGER.debug("[set_state] (%s)",
+            self._entity_id,
+        )
 
         self._attr_last_updated = datetime.now(timezone.utc)
         if self._previous_state != self._attr_native_value:
@@ -265,12 +287,15 @@ class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
     async def async_set_state(self):
         """Called by async services to push updates."""
 
+        _LOGGER.debug("[async_set_state] (%s)",
+            self._entity_id,
+        )
         self._attr_last_updated = datetime.now(timezone.utc)
         if self._previous_state != self._attr_native_value:
             self._attr_last_changed = self._attr_last_updated
             self._previous_state = self._attr_native_value
 
-        await self.async_write_ha_state()
+        self.async_write_ha_state()
 
     def make_template_sensor(self, attributeName, supplementalAttributeArray):
         """Make an additional sensor that will be used instead of making a template sensor."""
@@ -305,6 +330,7 @@ class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
                     supplementalAttribute,
                     type(supplementalAttribute),
                 )
+        templateAttributes[ATTR_PERSON_NAME] = self._person_name
         target = self._pli.hass.data[DOMAIN]["entities"].get(self._entity_id)
         create_and_register_template_sensor(self._pli.hass, target, attributeName, templateState, templateAttributes)
 
@@ -489,6 +515,24 @@ async def async_setup_entry(hass, entry, async_add_entities):
         new_entities = []
         seen_entity_ids = set()
 
+        if pli.configuration.get(CONF_FOLLOW_PERSON_INTEGRATION):
+            entity_ids = await hass.async_add_executor_job(hass.states.entity_ids, "person")
+            for trigger_entity_id in entity_ids:
+                trigger = PERSON_LOCATION_TRIGGER(trigger_entity_id, pli)
+                entity_id = trigger.targetName
+                person_name = trigger.personName
+
+                if entity_id in seen_entity_ids or entity_id in entities:
+                    _LOGGER.debug("[async_setup_entry] Skipping duplicate entity: %s", entity_id)
+                    continue
+
+                sensor = PersonLocationTargetSensor(entity_id, pli, person_name)
+                entities[entity_id] = sensor
+                new_entities.append(sensor)
+                seen_entity_ids.add(entity_id)
+
+                _LOGGER.debug("[async_setup_entry] Created and registered entity: %s", entity_id)
+                    
         for device_id, person_name in entry_devices.items():
             entity_id = f"sensor.{person_name.lower()}_location"
 

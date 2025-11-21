@@ -32,7 +32,7 @@ DOMAIN = "person_location"
 API_STATE_OBJECT = DOMAIN + "." + DOMAIN + "_integration"
 INTEGRATION_NAME = "Person Location"
 ISSUE_URL = "https://github.com/rodpayne/home-assistant_person_location/issues"
-VERSION = "2025.11.14"
+VERSION = "2025.11.19"
 
 # Titles for the config entries:
 #TITLE_IMPORTED_YAML_CONFIG = "Imported YAML Config"
@@ -86,6 +86,11 @@ ATTR_REPORTED_STATE = "reported_state"
 ATTR_SOURCE = "source"
 ATTR_SPEED = "speed"
 ATTR_ZONE = "zone"
+
+# Items under target.this_entity_info:
+INFO_GEOCODE_COUNT = "geocode_count"
+INFO_LOCALITY = "locality"
+INFO_TRIGGER_COUNT = "trigger_count"
 
 # Configuration Parameters:
 CONF_LANGUAGE = "language"
@@ -532,12 +537,13 @@ class PERSON_LOCATION_TRIGGER:
             self.personName = self.attributes["account_name"]
         elif "owner_fullname" in self.attributes:
             self.personName = self.attributes["owner_fullname"].split()[0].lower()
+        elif "friendly_name" in self.attributes and self.entity_id.split(".")[0] == "person":
+            self.personName = self.attributes["friendly_name"]
         else:
             self.personName = self.entity_id.split(".")[1].split("_")[0].lower()
             if self.firstTime is False:
                 _LOGGER.debug(
-                    'The account_name (or person_name) attribute \
-                        is missing in %s, trying "%s"',
+                    'The account_name (or person_name) attribute is missing in %s, trying "%s"',
                     self.entity_id,
                     self.personName,
                 )

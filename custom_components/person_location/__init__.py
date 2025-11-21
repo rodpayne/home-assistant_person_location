@@ -24,6 +24,7 @@ from .const import (
     CONF_DEVICES,
     CONF_FOLLOW_PERSON_INTEGRATION,
     CONF_FRIENDLY_NAME_TEMPLATE,
+    CONF_FROM_YAML,
     CONF_NAME,
     CONF_PERSON_NAMES,
     CONF_SHOW_ZONE_WHEN_AWAY,
@@ -38,10 +39,10 @@ from .const import (
     DEFAULT_FRIENDLY_NAME_TEMPLATE,
     DEFAULT_SHOW_ZONE_WHEN_AWAY,
     DOMAIN,
+    INFO_GEOCODE_COUNT,
     INTEGRATION_LOCK,
     PERSON_LOCATION_INTEGRATION,
     TITLE_PERSON_LOCATION_CONFIG,
-    VERSION,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -94,7 +95,7 @@ async def async_setup(hass: HomeAssistant, yaml_config: dict) -> bool:
 
     # get YAML conf defaults
     default_conf = CONFIG_SCHEMA({DOMAIN: {} })[DOMAIN]
-    _LOGGER.debug("[async_setup] default_conf: %s", default_conf)
+    #LOGGER.debug("[async_setup] default_conf: %s", default_conf)
     if not default_conf.get(CONF_DEVICES, {}):
         default_conf[CONF_DEVICES] = {}
  
@@ -103,6 +104,10 @@ async def async_setup(hass: HomeAssistant, yaml_config: dict) -> bool:
         conf_with_defaults = default_conf
 
     else:
+        #hass.data.setdefault(DOMAIN, {})
+        #hass.data[DOMAIN].setdefault(DATA_CONFIGURATION, {})
+        #hass.data[DOMAIN][DATA_CONFIGURATION][CONF_FROM_YAML] = True
+
         raw_conf = yaml_config.get(DOMAIN)
         _LOGGER.debug("[async_setup] raw_conf: %s", raw_conf)
         try:
@@ -111,6 +116,7 @@ async def async_setup(hass: HomeAssistant, yaml_config: dict) -> bool:
             _LOGGER.error("[async_setup] Invalid yaml configuration: %s", err)
             return False
         conf_with_defaults = {**default_conf, **conf}
+        conf_with_defaults[CONF_FROM_YAML] = True
 
         # translate YAML way of specifying 'person_names' into 'devices' format
         conf_person_names = conf_with_defaults.pop(CONF_PERSON_NAMES, [])
@@ -160,8 +166,20 @@ async def async_setup(hass: HomeAssistant, yaml_config: dict) -> bool:
 # ------------------------------------------------------------------
 
 async def async_options_update_listener(hass: HomeAssistant, entry: ConfigEntry):
-    """Handle config_flow options updates."""
-    return await hass.data[DOMAIN][DATA_ASYNC_SETUP_ENTRY](hass, entry)
+    #"""Handle config_flow options updates."""
+    #setup_entry_fn = hass.data.get(DOMAIN, {}).get(DATA_ASYNC_SETUP_ENTRY)
+    #if not setup_entry_fn:
+    #    _LOGGER.warning(
+    #        "[async_options_update_listener] DATA_ASYNC_SETUP_ENTRY not yet initialized for %s",
+    #        entry.entry_id,
+    #    )
+    #    return False  # or True if you want to silently succeed
+    #return await setup_entry_fn(hass, entry)
+
+    """Handle config_flow options updates by reloading the entry cleanly."""
+    _LOGGER.debug("[async_options_update_listener] Reloading entry %s after options update", entry.entry_id)
+    await hass.config_entries.async_reload(entry.entry_id)
+    return True
 
 # ------------------------------------------------------------------
 # Config entry setup
@@ -267,9 +285,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         """Register listeners for configured person/device entities."""
         _LOGGER.debug("[_listen_for_configured_entities] === Start ===")
 
-        if pli_obj.configuration.get(CONF_FOLLOW_PERSON_INTEGRATION):
+        def _register_person_entities():
             for entity_id in hass.states.entity_ids("person"):
                 _listen_for_device_tracker_state_changes(entity_id)
+
+        if pli_obj.configuration.get(CONF_FOLLOW_PERSON_INTEGRATION):
+            # Run the sync call safely in executor
+            #hass.async_add_job(_register_person_entities)
+            hass.loop.run_in_executor(None, _register_person_entities)
 
         for device in pli_obj.configuration.get(CONF_DEVICES, {}).keys():
             _listen_for_device_tracker_state_changes(device)
@@ -304,6 +327,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             **(entry.data or {}),
             **(entry.options or {}),
         }
+        hass.data.setdefault(DOMAIN, {})
         hass.data[DOMAIN][DATA_CONFIGURATION] = pli.configuration
 
         # Forward setup to platforms
@@ -317,7 +341,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             try:
                 entity_info = hass.data[DOMAIN].get(DATA_ENTITY_INFO, {})
                 for sensor, info in entity_info.items():
-                    if info.get("geocode_count", 0) > 0:
+                    if info.get(INFO_GEOCODE_COUNT, 0) > 0:
                         _LOGGER.debug("[_async_setup_entry] updating sensor %s", sensor)
                         service_data = {
                             "entity_id": sensor,
@@ -348,11 +372,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     def _handle_startup_is_done(now):
         """Flip startup flag and rewire listeners when HA has started."""
         
-        hass_state = hass.state
-        _LOGGER.debug("[_handle_startup_is_done] === Start === hass.state = %s", hass_state)
+        _LOGGER.debug("[_handle_startup_is_done] === Start ===")
 
         # Still starting? Wait another minute
-        if hass_state == "STARTING":
+        if not hass.is_running:
+            _LOGGER.debug("[_handle_startup_is_done] === Delay ===")
             _set_timer_startup_is_done(1)
             return
 
@@ -362,7 +386,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # It should now be safe to expand template sensors for restored target sensors.
         if pli._target_sensors_restored:
             _LOGGER.debug("[_handle_startup_is_done] Running delayed reverse_geocode.")
-            for entity_id in pli._target_sensors_restored:
+            while pli._target_sensors_restored:
+                entity_id = pli._target_sensors_restored.pop()
                 service_data = {
                     "entity_id": entity_id,
                     "friendly_name_template": pli.configuration.get(
@@ -376,7 +401,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 )
         
         _LOGGER.debug(
-            "[_handle_startup_is_done] === Return === startup flag turned off"
+            "[_handle_startup_is_done] === Return === startup flag is turned off"
         )
 
     def _set_timer_startup_is_done(minutes: int):
@@ -454,6 +479,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 # Migration
 # ------------------------------------------------------------------
 
+# Update MIGRATION_SCHEMA_VERSION if integration can't be reverted without restore
+MIGRATION_SCHEMA_VERSION = 2
+MIGRATION_SCHEMA_MINOR = 1
+
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Migrate old configuration entry."""
     _LOGGER.debug(
@@ -463,11 +492,12 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
         config_entry.minor_version,
     )
 
-    if str(config_entry.version) > VERSION:
-        _LOGGER.error(
-            "Component has been downgraded without restoring configuration from backup"
-        )
-        return False
+    # TODO: add this test when there is a migration that can't be reverted
+    #if str(config_entry.version) > MIGRATION_SCHEMA_VERSION:
+    #    _LOGGER.error(
+    #        "Component has been downgraded without restoring configuration from backup"
+    #    )
+    #    return False
 
     new_data = {**config_entry.data}
     new_options = {**config_entry.options}
@@ -488,8 +518,8 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
         config_entry,
         data=new_data,
         options=new_options,
-        minor_version="1",
-        version=VERSION,
+        minor_version=MIGRATION_SCHEMA_MINOR,
+        version=MIGRATION_SCHEMA_VERSION,
         title=TITLE_PERSON_LOCATION_CONFIG,
     )
 

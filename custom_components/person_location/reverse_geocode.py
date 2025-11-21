@@ -39,6 +39,8 @@ from .const import (
     ATTR_GEOCODED,
     ATTR_METERS_FROM_HOME,
     ATTR_MILES_FROM_HOME,
+    ATTR_REPORTED_STATE,
+    ATTR_SOURCE,
     ATTR_SPEED,
     CONF_CREATE_SENSORS,
     CONF_FRIENDLY_NAME_TEMPLATE,
@@ -54,6 +56,8 @@ from .const import (
     FAR_AWAY_METERS,
     get_waze_region,
     IC3_STATIONARY_ZONE_PREFIX,
+    INFO_GEOCODE_COUNT,
+    INFO_LOCALITY,
     INTEGRATION_LOCK,
     INTEGRATION_NAME,
     DEFAULT_LOCALITY_PRIORITY_OSM,
@@ -521,8 +525,8 @@ def setup_reverse_geocode(pli):
                             )
 
                             if (
-                                "reported_state" in target._attr_extra_state_attributes
-                                and target._attr_extra_state_attributes["reported_state"].lower()
+                                ATTR_REPORTED_STATE in target._attr_extra_state_attributes
+                                and target._attr_extra_state_attributes[ATTR_REPORTED_STATE].lower()
                                 == "home"
                             ):
                                 distance_from_home = 0  # clamp it down since "Home" is not a single point
@@ -1006,8 +1010,8 @@ def setup_reverse_geocode(pli):
                                                 create_and_register_template_sensor(pli.hass, target, "MapQuest", formatted_address, attrs)
 
                             target._attr_extra_state_attributes["locality"] = locality
-                            target.this_entity_info["locality"] = locality
-                            target.this_entity_info["geocode_count"] += 1
+                            target.this_entity_info[INFO_LOCALITY] = locality
+                            target.this_entity_info[INFO_GEOCODE_COUNT] += 1
                             target.this_entity_info["location_latitude"] = new_latitude
                             target.this_entity_info["location_longitude"] = (
                                 new_longitude
@@ -1027,13 +1031,13 @@ def setup_reverse_geocode(pli):
 
                         # Determine friendly_name_location and new_bread_crumb:
 
-                        if target._attr_extra_state_attributes["reported_state"].lower() in [
+                        if target._attr_extra_state_attributes[ATTR_REPORTED_STATE].lower() in [
                             STATE_HOME,
                             STATE_ON,
                         ]:
                             new_bread_crumb = "Home"
                             friendly_name_location = "is Home"
-                        elif target._attr_extra_state_attributes["reported_state"].lower() in [
+                        elif target._attr_extra_state_attributes[ATTR_REPORTED_STATE].lower() in [
                             "away",
                             STATE_NOT_HOME,
                             STATE_OFF,
@@ -1041,7 +1045,7 @@ def setup_reverse_geocode(pli):
                             new_bread_crumb = "Away"
                             friendly_name_location = "is Away"
                         else:
-                            new_bread_crumb = target._attr_extra_state_attributes["reported_state"]
+                            new_bread_crumb = target._attr_extra_state_attributes[ATTR_REPORTED_STATE]
                             friendly_name_location = f"is at {new_bread_crumb}"
 
                         if "zone" in target._attr_extra_state_attributes:
@@ -1090,21 +1094,22 @@ def setup_reverse_geocode(pli):
                             # Format friendly_name attribute using the supplied friendly_name_template:
 
                             if (
-                                "source" in target._attr_extra_state_attributes
-                                and "." in target._attr_extra_state_attributes["source"]
+                                ATTR_SOURCE in target._attr_extra_state_attributes
+                                and "." in target._attr_extra_state_attributes[ATTR_SOURCE]
                             ):
-                                sourceEntity = target._attr_extra_state_attributes["source"]
+                                sourceEntity = target._attr_extra_state_attributes[ATTR_SOURCE]
                                 sourceObject = pli.hass.states.get(sourceEntity)
                                 if (
                                     sourceObject is not None
-                                    and "source" in sourceObject.attributes
-                                    and "." in target._attr_extra_state_attributes["source"]
+                                    and ATTR_SOURCE in sourceObject.attributes
+                                    and "." in target._attr_extra_state_attributes[ATTR_SOURCE]
                                 ):
                                     # Find the source for a person entity:
-                                    sourceEntity = sourceObject.attributes["source"]
+                                    sourceEntity = sourceObject.attributes[ATTR_SOURCE]
                                     sourceObject = pli.hass.states.get(sourceEntity)
                             else:
-                                sourceObject = target
+                                sourceEntity = target.entity_id
+                                sourceObject = pli.hass.states.get(sourceEntity)
 
                             friendly_name_variables = {
                                 "friendly_name_location": friendly_name_location,
