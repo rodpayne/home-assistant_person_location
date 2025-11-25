@@ -1,6 +1,6 @@
 """Provide info to system health."""
 
-# https://developers.home-assistant.io/blog/2020/11/09/system-health-and-templates
+# See https://developers.home-assistant.io/blog/2020/11/09/system-health-and-templates
 
 from homeassistant.components import system_health
 from homeassistant.core import HomeAssistant, callback

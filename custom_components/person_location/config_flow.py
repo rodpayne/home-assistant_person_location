@@ -11,7 +11,6 @@ from homeassistant.helpers.aiohttp_client import async_create_clientsession
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.httpx_client import get_async_client
-#from homeassistant.helpers.selector import selector
 from homeassistant.helpers import selector
 from homeassistant.helpers.template import Template as HATemplate
 from urllib.parse import urlparse
@@ -273,8 +272,8 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             # └───────────────────────────────────────────────┘
 
             # TODO: look at doing this in _async_save_integration_config_data when 
-            # committed to making the update? Only remove for the ones that were
-            # removed from the create_sensors list?
+            #   committed to making the update? Only remove for the ones that were
+            #   removed from the create_sensors list?
 
             if not create_sensors_list:
                 registry = er.async_get(self.hass)
@@ -345,6 +344,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         return_to_menu = "__return__"
         return_to_menu_choice = "🔙 Return to menu"
 
+        # Note: devices = dict of {entity_id: person_name}
         devices = self._user_input.get(CONF_DEVICES, self.integration_config_data.get(CONF_DEVICES, {}))
         if not devices:
             devices = {}
@@ -355,6 +355,8 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             self._valid_device_entities.extend(sorted(self.hass.states.async_entity_ids("device_tracker")))
             self._valid_device_entities.extend(sorted(self.hass.states.async_entity_ids("binary_sensor")))
             self._valid_device_entities.extend(sorted(self.hass.states.async_entity_ids("person")))
+            # Add "" to the list so that clicking "X" to clear a choice does not result 
+            #   in a long, long error message.
             self._valid_device_entities.append("")
 
             user_input = {
@@ -506,7 +508,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         """Step: Manage providers list (structural)."""
         _LOGGER.debug("[async_step_providers] user_input = %s", user_input)
 
-        # note: providers = list of dicts with keys name, state, url
+        # Note: providers = list of dicts with keys name, state, url
         providers = self._user_input.get(CONF_PROVIDERS, self.integration_config_data.get(CONF_PROVIDERS, []))
         existing_names = {p["name"]: p["name"] for p in providers}
         _LOGGER.debug("[async_step_providers] providers = %s", providers)
@@ -553,14 +555,13 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_provider_add(self, user_input=None):
         """Add a new provider."""
-        # from homeassistant.helpers import selector
 
         _LOGGER.debug("[async_step_provider_add] user_input = %s", user_input)
 
         errors = {}
         placeholders = {}
 
-        # note: providers = list of dicts with keys name, state, url
+        # Note: providers = list of dicts with keys name, state, url
         providers = self._user_input.get(CONF_PROVIDERS, self.integration_config_data.get(CONF_PROVIDERS, []))
 
         if user_input is None:
@@ -626,12 +627,12 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                         self._user_input[CONF_PROVIDERS] = providers
                         return await self.async_step_providers()
             else:
-                # nothing added
+                # Nothing added
                 if providers:
-                    # go back and choose a provider action
+                    # Go back and choose a provider action
                     return await self.async_step_providers()
                 else:
-                    # nothing to see until one is added
+                    # Nothing to see until one is added
                     return await self.async_step_menu()
 
         _LOGGER.debug(
@@ -663,11 +664,10 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_provider_edit(self, user_input=None):
         """Edit an existing map provider (update/remove)."""
-        # from homeassistant.helpers import selector
         
         _LOGGER.debug("[async_step_provider_edit] user_input = %s", user_input)
 
-        # note: providers = list of dicts with keys name, state, url
+        # Note: providers = list of dicts with keys name, state, url
         providers = self._user_input.get(CONF_PROVIDERS, self.integration_config_data.get(CONF_PROVIDERS, []))
         provider = next((p for p in providers if p["name"] == self._provider_to_edit), None)
         if not provider:
@@ -763,7 +763,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         
         _LOGGER.debug("[async_step_provider_prieview] user_input = %s", user_input)
 
-        # note: providers = list of dicts with keys name, state, url
+        # Note: providers = list of dicts with keys name, state, url
         providers = self._user_input.get(CONF_PROVIDERS, self.integration_config_data.get(CONF_PROVIDERS, []))
         provider = next((p for p in providers if p["name"] == self._provider_to_edit), None)
         if not provider:
@@ -897,7 +897,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             self._source_create = True
             self.config_entry = None
 
-            # get YAML conf defaults
+            # Get YAML conf defaults
             default_conf = CONFIG_SCHEMA({DOMAIN: {} })[DOMAIN]
 
             self.config_entry_data, self.config_entry_options = _split_conf_data_and_options(default_conf)
@@ -958,8 +958,6 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     # ----------------- API Key Tests -----------------
 
     async def _test_google_api_key(self, key):
-        # from .api import PersonLocation_aiohttp_Client
-        # from homeassistant.helpers.aiohttp_client import async_create_clientsession
 
         if key == DEFAULT_API_KEY_NOT_SET:
             return True
@@ -977,7 +975,6 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         return False
 
     async def _test_mapbox_api_key(self, key):
-        # from homeassistant.helpers.httpx_client import get_async_client
 
         if key == DEFAULT_API_KEY_NOT_SET:
             return True
@@ -996,8 +993,6 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         return False
 
     async def _test_mapquest_api_key(self, key):
-        # from .api import PersonLocation_aiohttp_Client
-        # from homeassistant.helpers.aiohttp_client import async_create_clientsession
 
         if key == DEFAULT_API_KEY_NOT_SET:
             return True
@@ -1029,7 +1024,6 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         return False
 
     async def _test_radar_api_key(self, key):
-        # from homeassistant.helpers.httpx_client import get_async_client
 
         if key == DEFAULT_API_KEY_NOT_SET:
             return True

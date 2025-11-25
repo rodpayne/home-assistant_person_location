@@ -49,7 +49,6 @@ from .const import (
     DOMAIN,
     IC3_STATIONARY_ZONE_PREFIX,
     INFO_TRIGGER_COUNT,
-    # PERSON_LOCATION_TARGET,
     PERSON_LOCATION_TRIGGER,
     TARGET_LOCK,
     ZONE_DOMAIN,
@@ -77,9 +76,6 @@ def setup_process_trigger(pli):
         with TARGET_LOCK:
             """Lock while updating the target(entity_id)."""
             _LOGGER.debug("[handle_delayed_state_change]" + " TARGET_LOCK obtained")
-            # Look up the existing entity from hass.data
-            #entities = pli.hass.data[DOMAIN]["entities"]
-            #target = entities.get(entity_id)
             target = get_target_entity(pli, entity_id)
             if not target:
                 _LOGGER.warning("[handle_delayed_state_change] no target sensor found for %s", entity_id)
@@ -252,7 +248,7 @@ def setup_process_trigger(pli):
                 triggerSourceType = trigger.attributes[ATTR_SOURCE_TYPE]
             else:
                 triggerSourceType = "other"
-                # person entities do not indicate the source type, dig deeper:
+                # Person entities do not indicate the source type, dig deeper:
                 if (
                     "source" in trigger.attributes
                     and "." in trigger.attributes["source"]
@@ -268,8 +264,8 @@ def setup_process_trigger(pli):
 
             # ---------------------------------------------------------
             # Get the current state of the target person location
-            # sensor and decide if it should be updated with values
-            # from the triggered device tracker:
+            #   sensor and decide if it should be updated with values
+            #   from the triggered device tracker:
             saveThisUpdate = False
             # ---------------------------------------------------------
 
@@ -279,10 +275,6 @@ def setup_process_trigger(pli):
                     "(%s) TARGET_LOCK obtained",
                     trigger.targetName,
                 )
-                # target = PERSON_LOCATION_TARGET(trigger.targetName, pli)
-                # Look up the existing entity from hass.data
-                #entities = pli.hass.data[DOMAIN]["entities"]
-                #target = entities.get(trigger.targetName)
                 target = get_target_entity(pli, trigger.targetName)
                 if not target:
                     _LOGGER.warning("No target sensor found for %s", trigger.targetName)
@@ -351,7 +343,7 @@ def setup_process_trigger(pli):
                                 ATTR_SOURCE not in target._attr_extra_state_attributes
                                 or target._attr_extra_state_attributes[ATTR_SOURCE] == trigger.entity_id
                                 or ATTR_REPORTED_STATE not in target._attr_extra_state_attributes
-                            ):  # same entity as we are following, if any?
+                            ):  # Same entity as we are following, if any?
                                 saveThisUpdate = True
                                 _LOGGER.debug(
                                     "(%s) Decision: continue following trigger",
@@ -370,7 +362,7 @@ def setup_process_trigger(pli):
                                 )
                             elif (
                                 trigger.state == target._attr_extra_state_attributes[ATTR_REPORTED_STATE]
-                            ):  # same status as the one we are following?
+                            ):  # Same status as the one we are following?
                                 #if ATTR_VERTICAL_ACCURACY in trigger.attributes:
                                 #    if (
                                 #        ATTR_VERTICAL_ACCURACY not in target._attr_extra_state_attributes
@@ -390,7 +382,7 @@ def setup_process_trigger(pli):
                                     and (ATTR_GPS_ACCURACY not in target._attr_extra_state_attributes
                                     or trigger.attributes[ATTR_GPS_ACCURACY]
                                     < target._attr_extra_state_attributes[ATTR_GPS_ACCURACY])
-                                ):  # better choice based on accuracy?
+                                ):  # Better choice based on accuracy?
                                     saveThisUpdate = True
                                     _LOGGER.debug(
                                         "(%s) Decision: gps_accuracy is better than %s",
@@ -596,7 +588,7 @@ def setup_process_trigger(pli):
                             or ha_just_started
                             or (pli.configuration[CONF_MINUTES_JUST_LEFT] == 0)
                         ):
-                            # initial setting at startup goes straight to Away
+                            # Initial setting at startup goes straight to Away
                             newTargetState = "Away"
                             if pli.configuration[CONF_HOURS_EXTENDED_AWAY] != 0:
                                 change_state_later(
@@ -618,7 +610,7 @@ def setup_process_trigger(pli):
                                 pli.configuration[CONF_MINUTES_JUST_LEFT],
                             )
                         else:
-                            # oldTargetState is either "away" or a Zone
+                            # The oldTargetState is either "away" or a Zone
                             newTargetState = "Away"
                     if (
                         newTargetState == "Away"
@@ -644,13 +636,11 @@ def setup_process_trigger(pli):
                     if ha_just_started:
                         target._attr_extra_state_attributes[ATTR_BREAD_CRUMBS] = newTargetState
 
-                    # target._attr_extra_state_attributes["version"] = f"{DOMAIN} {VERSION}"
-
                     target.set_state()
 
                     # Call service to "reverse geocode" the location.
                     # For devices at Home, this will be forced to run
-                    # just at startup or on arrival.
+                    #   just at startup or on arrival.
 
                     force_update = (newTargetState in ["Home", "Just Arrived"]) and (
                         oldTargetState in ["away", "extended away", "just left"]

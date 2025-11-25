@@ -72,6 +72,9 @@ def merge_entry_data(entry: ConfigEntry, conf: dict) -> tuple[dict, dict]:
         dict.fromkeys(entry_sensors + conf_sensors)
     )
 
+    # Preserve conf_with_defaults[CONF_FROM_YAML] because that is the copy that knows
+    updated_data_options_and_yaml[CONF_FROM_YAML] = conf.get(CONF_FROM_YAML)
+
     # Pull out keys that should be in data only
     updated_data = {
         key: value for key, value in updated_data_options_and_yaml.items() if key not in ALLOWED_OPTIONS_KEYS
@@ -102,11 +105,9 @@ async def async_setup(hass: HomeAssistant, yaml_config: dict) -> bool:
     if DOMAIN not in yaml_config:
         _LOGGER.debug("[async_setup] %s not found in yaml_config. Supplying defaults only.", DOMAIN)
         conf_with_defaults = default_conf
+        conf_with_defaults[CONF_FROM_YAML] = False
 
     else:
-        #hass.data.setdefault(DOMAIN, {})
-        #hass.data[DOMAIN].setdefault(DATA_CONFIGURATION, {})
-        #hass.data[DOMAIN][DATA_CONFIGURATION][CONF_FROM_YAML] = True
 
         raw_conf = yaml_config.get(DOMAIN)
         _LOGGER.debug("[async_setup] raw_conf: %s", raw_conf)
@@ -166,17 +167,8 @@ async def async_setup(hass: HomeAssistant, yaml_config: dict) -> bool:
 # ------------------------------------------------------------------
 
 async def async_options_update_listener(hass: HomeAssistant, entry: ConfigEntry):
-    #"""Handle config_flow options updates."""
-    #setup_entry_fn = hass.data.get(DOMAIN, {}).get(DATA_ASYNC_SETUP_ENTRY)
-    #if not setup_entry_fn:
-    #    _LOGGER.warning(
-    #        "[async_options_update_listener] DATA_ASYNC_SETUP_ENTRY not yet initialized for %s",
-    #        entry.entry_id,
-    #    )
-    #    return False  # or True if you want to silently succeed
-    #return await setup_entry_fn(hass, entry)
-
     """Handle config_flow options updates by reloading the entry cleanly."""
+
     _LOGGER.debug("[async_options_update_listener] Reloading entry %s after options update", entry.entry_id)
     await hass.config_entries.async_reload(entry.entry_id)
     return True
@@ -291,7 +283,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         if pli_obj.configuration.get(CONF_FOLLOW_PERSON_INTEGRATION):
             # Run the sync call safely in executor
-            #hass.async_add_job(_register_person_entities)
             hass.loop.run_in_executor(None, _register_person_entities)
 
         for device in pli_obj.configuration.get(CONF_DEVICES, {}).keys():
@@ -482,7 +473,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 # Update MIGRATION_SCHEMA_VERSION if integration can't be reverted without restore
 MIGRATION_SCHEMA_VERSION = 2
 MIGRATION_SCHEMA_MINOR = 1
-
+'''
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Migrate old configuration entry."""
     _LOGGER.debug(
@@ -530,3 +521,4 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
     )
 
     return True
+    '''

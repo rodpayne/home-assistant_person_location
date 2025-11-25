@@ -42,6 +42,10 @@ from .const import (
     ATTR_REPORTED_STATE,
     ATTR_SOURCE,
     ATTR_SPEED,
+    ATTR_GOOGLE_MAPS,
+    ATTR_MAPQUEST,
+    ATTR_OPEN_STREET_MAP,
+    ATTR_RADAR,
     CONF_CREATE_SENSORS,
     CONF_FRIENDLY_NAME_TEMPLATE,
     CONF_GOOGLE_API_KEY,
@@ -58,6 +62,8 @@ from .const import (
     IC3_STATIONARY_ZONE_PREFIX,
     INFO_GEOCODE_COUNT,
     INFO_LOCALITY,
+    INFO_LOCATION_LATITUDE,
+    INFO_LOCATION_LONGITUDE,
     INTEGRATION_LOCK,
     INTEGRATION_NAME,
     DEFAULT_LOCALITY_PRIORITY_OSM,
@@ -122,7 +128,7 @@ def setup_reverse_geocode(pli):
         initial_bearing = math.atan2(x, y)
 
         # Now we have the initial bearing but math.atan2 return values
-        # from -180° to + 180° which is not what we want for a compass bearing.
+        #   from -180° to + 180° which is not what we want for a compass bearing.
         initial_bearing = math.degrees(initial_bearing)
         compass_bearing = (initial_bearing + 360) % 360
 
@@ -187,7 +193,7 @@ def setup_reverse_geocode(pli):
             if not routes:
                 raise ValueError("No routes from HA service")
 
-            # pick first or apply your street‐name filter here
+            # Pick first or apply your street‐name filter here
             best = routes[0]
             duration = best["duration"]
             distance_km = best["distance"]
@@ -264,7 +270,7 @@ def setup_reverse_geocode(pli):
                 - location_time (optional)
         Output:
             - determine <locality> for friendly_name
-            - record full location from Google_Maps, MapQuest, and/or Open_Street_Map
+            - full location from Radar, Google_Maps, MapQuest, and/or Open_Street_Map
             - calculate other location-based statistics, such as distance_from_home
             - add to bread_crumbs as locality changes
             - create/update additional sensors if requested
@@ -356,13 +362,6 @@ def setup_reverse_geocode(pli):
                         """Lock while updating the target(entity_id)."""
                         _LOGGER.debug("TARGET_LOCK obtained")
 
-                        # target = PERSON_LOCATION_TARGET(entity_id, pli)
-                        # target.entity_id = entity_id
-                        # target._attr_extra_state_attributes[ATTR_ATTRIBUTION] = ""
-
-                        # Look up the existing entity from hass.data
-                        #entities = pli.hass.data[DOMAIN]["entities"]
-                        #target = entities.get(entity_id)
                         target = get_target_entity(pli, entity_id)
                         if not target:
                             _LOGGER.warning("No target sensor found for %s", entity_id)
@@ -380,13 +379,13 @@ def setup_reverse_geocode(pli):
                         else:
                             new_longitude = "None"
 
-                        if "location_latitude" in target.this_entity_info:
-                            old_latitude = target.this_entity_info["location_latitude"]
+                        if INFO_LOCATION_LATITUDE in target.this_entity_info:
+                            old_latitude = target.this_entity_info[INFO_LOCATION_LATITUDE]
                         else:
                             old_latitude = "None"
-                        if "location_longitude" in target.this_entity_info:
+                        if INFO_LOCATION_LONGITUDE in target.this_entity_info:
                             old_longitude = target.this_entity_info[
-                                "location_longitude"
+                                INFO_LOCATION_LONGITUDE
                             ]
                         else:
                             old_longitude = "None"
@@ -577,8 +576,10 @@ def setup_reverse_geocode(pli):
                             )
                             target._attr_extra_state_attributes["direction"] = direction
 
-                            # default the waze country code from Google region config
+                            # Default the waze country code from Google region config
                             waze_country_code = pli.configuration["region"].upper()
+
+                        #------- Radar -------------------------------------------------
 
                             if (
                                 pli.configuration[CONF_RADAR_API_KEY]
@@ -639,7 +640,7 @@ def setup_reverse_geocode(pli):
                                     + formatted_address
                                 )
 
-                                target._attr_extra_state_attributes["Radar"] = formatted_address
+                                target._attr_extra_state_attributes[ATTR_RADAR] = formatted_address
 
                                 radar_attribution = '"Powered by Radar"'
                                 target._attr_extra_state_attributes[ATTR_ATTRIBUTION] += (
@@ -662,7 +663,9 @@ def setup_reverse_geocode(pli):
                                         "location_time": new_location_time.strftime("%Y-%m-%d %H:%M:%S"),
                                         ATTR_ATTRIBUTION: radar_attribution,
                                     }
-                                    create_and_register_template_sensor(pli.hass, target, "Radar", formatted_address, attrs)
+                                    create_and_register_template_sensor(pli.hass, target, ATTR_RADAR, formatted_address, attrs)
+
+                        #------- Open Street Map ---------------------------------------
 
                             if (
                                 pli.configuration[CONF_OSM_API_KEY]
@@ -720,7 +723,7 @@ def setup_reverse_geocode(pli):
                                     + display_name
                                 )
 
-                                target._attr_extra_state_attributes["Open_Street_Map"] = (
+                                target._attr_extra_state_attributes[ATTR_OPEN_STREET_MAP] = (
                                     display_name.replace(", ", " ")
                                 )
 
@@ -749,8 +752,10 @@ def setup_reverse_geocode(pli):
                                         "location_time": new_location_time.strftime("%Y-%m-%d %H:%M:%S"),
                                         ATTR_ATTRIBUTION: osm_attribution,
                                     }
-                                    create_and_register_template_sensor(pli.hass, target, "Open_Street_Map", display_name, attrs)
+                                    create_and_register_template_sensor(pli.hass, target, ATTR_OPEN_STREET_MAP, display_name, attrs)
 
+                        #------- Google Maps -------------------------------------------
+        
                             if (
                                 pli.configuration[CONF_GOOGLE_API_KEY]
                                 != DEFAULT_API_KEY_NOT_SET
@@ -797,7 +802,7 @@ def setup_reverse_geocode(pli):
                                                 + ") Google formatted_address = "
                                                 + formatted_address
                                             )
-                                            target._attr_extra_state_attributes["Google_Maps"] = (
+                                            target._attr_extra_state_attributes[ATTR_GOOGLE_MAPS] = (
                                                 formatted_address
                                             )
                                         for component in google_decoded["results"][0][
@@ -814,12 +819,12 @@ def setup_reverse_geocode(pli):
                                             elif (locality == "?") and (
                                                 "administrative_area_level_2"
                                                 in component["types"]
-                                            ):  # fall back to county
+                                            ):  # Fall back to county
                                                 locality = component["long_name"]
                                             elif (locality == "?") and (
                                                 "administrative_area_level_1"
                                                 in component["types"]
-                                            ):  # fall back to state
+                                            ):  # Fall back to state
                                                 locality = component["long_name"]
 
                                             if "country" in component["types"]:
@@ -848,8 +853,9 @@ def setup_reverse_geocode(pli):
                                                 "location_time": new_location_time.strftime("%Y-%m-%d %H:%M:%S"),
                                                 ATTR_ATTRIBUTION: google_attribution,
                                             }
-                                            create_and_register_template_sensor(pli.hass, target, "Google_Maps", formatted_address, attrs)
+                                            create_and_register_template_sensor(pli.hass, target, ATTR_GOOGLE_MAPS, formatted_address, attrs)
 
+                        #------- Mapquest ----------------------------------------------
 
                             if (
                                 pli.configuration[CONF_MAPQUEST_API_KEY]
@@ -916,7 +922,7 @@ def setup_reverse_geocode(pli):
                                                 )
                                             if (
                                                 "adminArea5" in mapquest_location
-                                            ):  # city
+                                            ):  # Like city
                                                 locality = mapquest_location[
                                                     "adminArea5"
                                                 ]
@@ -925,7 +931,7 @@ def setup_reverse_geocode(pli):
                                                 "adminArea4" in mapquest_location
                                                 and "adminArea4Type"
                                                 in mapquest_location
-                                            ):  # county
+                                            ):  # Like county
                                                 locality = (
                                                     mapquest_location["adminArea4"]
                                                     + " "
@@ -936,7 +942,7 @@ def setup_reverse_geocode(pli):
                                                 formatted_address += locality + ", "
                                             if (
                                                 "adminArea3" in mapquest_location
-                                            ):  # state
+                                            ):  # Like state
                                                 formatted_address += (
                                                     mapquest_location["adminArea3"]
                                                     + " "
@@ -950,7 +956,7 @@ def setup_reverse_geocode(pli):
                                                 "adminArea1" in mapquest_location
                                                 and mapquest_location["adminArea1"]
                                                 != "US"
-                                            ):  # country
+                                            ):  # Like country
                                                 formatted_address += mapquest_location[
                                                     "adminArea1"
                                                 ]
@@ -968,7 +974,7 @@ def setup_reverse_geocode(pli):
                                                     "(" + entity_id + ") mapquest waze_country_code = " + waze_country_code
                                                 )
 
-                                            target._attr_extra_state_attributes["MapQuest"] = (
+                                            target._attr_extra_state_attributes[ATTR_MAPQUEST] = (
                                                 formatted_address
                                             )
 
@@ -1007,13 +1013,16 @@ def setup_reverse_geocode(pli):
                                                     "location_time": new_location_time.strftime("%Y-%m-%d %H:%M:%S"),
                                                     ATTR_ATTRIBUTION: mapquest_attribution,
                                                 }
-                                                create_and_register_template_sensor(pli.hass, target, "MapQuest", formatted_address, attrs)
-
+                                                create_and_register_template_sensor(pli.hass, target, ATTR_MAPQUEST, formatted_address, attrs)
+                        #------- All ---------------------------------------------------
+                            
                             target._attr_extra_state_attributes["locality"] = locality
                             target.this_entity_info[INFO_LOCALITY] = locality
                             target.this_entity_info[INFO_GEOCODE_COUNT] += 1
-                            target.this_entity_info["location_latitude"] = new_latitude
-                            target.this_entity_info["location_longitude"] = (
+                            target.this_entity_info[INFO_LOCATION_LATITUDE] = (
+                                new_latitude
+                            )
+                            target.this_entity_info[INFO_LOCATION_LONGITUDE] = (
                                 new_longitude
                             )
                             target.this_entity_info["reverse_geocode_location_time"] = (

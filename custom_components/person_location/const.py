@@ -87,10 +87,17 @@ ATTR_SOURCE = "source"
 ATTR_SPEED = "speed"
 ATTR_ZONE = "zone"
 
+ATTR_GOOGLE_MAPS = "Google_Maps"
+ATTR_MAPQUEST = "MapQuest"
+ATTR_OPEN_STREET_MAP = "Open_Street_Map"
+ATTR_RADAR = "Radar"
+
 # Items under target.this_entity_info:
 INFO_GEOCODE_COUNT = "geocode_count"
 INFO_LOCALITY = "locality"
 INFO_TRIGGER_COUNT = "trigger_count"
+INFO_LOCATION_LATITUDE = "location_latitide"
+INFO_LOCATION_LONGITUDE = "location_longitide"
 
 # Configuration Parameters:
 CONF_LANGUAGE = "language"
@@ -279,7 +286,7 @@ class PERSON_LOCATION_INTEGRATION:
     def __init__(self, _entity_id, _hass, _config):
         """Initialize the integration instance."""
 
-        # log startup message:
+        # Log startup message:
         _LOGGER.info(
             STARTUP_VERSION.format(name=DOMAIN, version=VERSION, issue_link=ISSUE_URL)
         )
@@ -465,7 +472,6 @@ class PERSON_LOCATION_INTEGRATION:
             self.entity_id,
             self.state,
             self.attributes,
-            #self.hass.data[DOMAIN],
         )
         
 class PERSON_LOCATION_TRIGGER:
@@ -502,17 +508,6 @@ class PERSON_LOCATION_TRIGGER:
             self.last_updated = datetime(2020, 3, 14, 15, 9, 26, 535897)
             self.attributes = {}
 
-#        if self.entity_id in self.hass.data[DOMAIN][DATA_ENTITY_INFO]:
-#            self.this_entity_info = self.hass.data[DOMAIN][DATA_ENTITY_INFO][
-#                self.entity_id
-#            ].copy()
-#        else:
-#            self.this_entity_info = {
-#                "geocode_count": 0,
-#                "locality": "?",
-#                "trigger_count": 0,
-#            }
-
         if "friendly_name" in self.attributes:
             self.friendlyName = self.attributes["friendly_name"]
         else:
@@ -548,9 +543,9 @@ class PERSON_LOCATION_TRIGGER:
                     self.personName,
                 )
         # It is tempting to make the output a device_tracker instead of sensor,
-        # so that it can be input into the Person built-in integration,
-        # but if you do, be very careful not to trigger a loop.
-        # The state and other attributes will also need to be adjusted.
+        #   so that it can be input into the Person built-in integration,
+        #   but if you do, be very careful not to trigger a loop.
+        #   The state and other attributes will also need to be adjusted.
 
         self.targetName = (
             self.configuration[CONF_OUTPUT_PLATFORM]

@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone
 from functools import partial
 import logging
 from homeassistant.components.sensor import SensorEntity
-# from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.event import (
     async_track_point_in_time,
 )
@@ -34,6 +33,10 @@ from .const import (
     ATTR_REPORTED_STATE,
     ATTR_SOURCE,
     ATTR_ZONE,
+    ATTR_GOOGLE_MAPS,
+    ATTR_MAPQUEST,
+    ATTR_OPEN_STREET_MAP,
+    ATTR_RADAR,
     CONF_CREATE_SENSORS,
     CONF_FOLLOW_PERSON_INTEGRATION,
     CONF_HOURS_EXTENDED_AWAY,
@@ -88,12 +91,12 @@ class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
             self._entity_id,
         )
 
-    # old code has target.last_updated
+    # Old code has target.last_updated
     @property
     def last_updated(self):
         return self._attr_last_updated
     
-    # old code has target.last_changed
+    # Old code has target.last_changed
     @property
     def last_changed(self):
         return self._attr_last_changed
@@ -110,7 +113,6 @@ class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
             name=f"{self._person_name} Location",
             manufacturer=INTEGRATION_NAME,
             model="Person Tracker",
-            #via_device=(DOMAIN, "person_locations_device"),  # link to umbrella
         )
 
     def handle_delayed_state_change(self,
@@ -126,8 +128,9 @@ class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
 
         with TARGET_LOCK:
             """Lock while updating the target(entity_id)."""
+
             _LOGGER.debug("[handle_delayed_state_change]" + " TARGET_LOCK obtained")
-            # target = PERSON_LOCATION_TARGET(entity_id, pli)
+
             target = get_target_entity(self._pli, entity_id)
             if not target:
                 _LOGGER.warning("[handle_delayed_state_change] no target sensor found for %s", entity_id)
@@ -159,7 +162,6 @@ class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
                     target._attr_extra_state_attributes[ATTR_DIRECTION] = "home"
                 elif to_state == "Away":
                     if self._pli.configuration.get(CONF_SHOW_ZONE_WHEN_AWAY,False):
-                        #reportedZone = target._attr_extra_state_attributes[ATTR_ZONE]
                         reportedZone = target._attr_extra_state_attributes.get(ATTR_ZONE)
                         zoneStateObject = self._pli.hass.states.get(
                             ZONE_DOMAIN + "." + reportedZone
@@ -236,7 +238,11 @@ class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
             if self._entity_id not in self._pli._target_sensors_restored:
                 self._pli._target_sensors_restored.append(self._entity_id)
 
-            # TODO: remove geolocation attributes if corresponding key has been removed
+        # TODO: Remove geolocation attributes if corresponding key has been removed
+        # CONF_RADAR_API_KEY => target._attr_extra_state_attributes[ATTR_RADAR]
+        # CONF_OSM_API_KEY => target._attr_extra_state_attributes[ATTR_OPEN_STREET_MAP]
+        # CONF_GOOGLE_API_KEY => target._attr_extra_state_attributes[ATTR_GOOGLE_MAPS]
+        # CONF_MAPQUEST_API_KEY => target._attr_extra_state_attributes[ATTR_MAPQUEST]
 
             # Handle timers for delayed state change
 
@@ -436,13 +442,8 @@ class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
 
         _LOGGER.debug("[make_template_sensors] === Return ===")
 
-# class PersonLocationTemplateSensor(SensorEntity, RestoreEntity):
 class PersonLocationTemplateSensor(SensorEntity):
     """Template sensor (altitude, speed, etc.) tied to a person."""
-
-    # todo: We may not need template sensor entities to be restored after reboot 
-    # because they can be cleanly recreated when the target sensors are restored.
-    # todo: Test without RestoreEntity and async_added_to_hass.
 
     def __init__(self, parent: PersonLocationTargetSensor, suffix: str, value, attrs):
         base_id = getattr(parent, "_entity_id", None) or getattr(parent, "entity_id")
@@ -465,27 +466,7 @@ class PersonLocationTemplateSensor(SensorEntity):
             manufacturer=INTEGRATION_NAME,
             model="Person Tracker",
         )
-    '''
-    async def async_added_to_hass(self):
-        """Restore state after reboot and schedule initial update safely."""
-        old_state = await self.async_get_last_state()
-        if old_state:
-            self._attr_native_value = old_state.state
-            self._attr_extra_state_attributes.update(old_state.attributes)
-            _LOGGER.debug(
-                "Restored template sensor %s with %s",
-                self._attr_unique_id,
-                old_state.state,
-            )
 
-        if self._pending_update:
-            self._pending_update = False
-            if self.hass:
-                # Schedule state write safely via event loop
-                self.hass.loop.call_soon_threadsafe(
-                    lambda: self.async_write_ha_state()
-                )
-    '''
     async def async_will_remove_from_hass(self):
         """Clean up any listeners or tasks when entity is removed."""
         if self._unsub:
