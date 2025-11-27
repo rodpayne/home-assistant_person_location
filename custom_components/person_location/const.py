@@ -1,5 +1,6 @@
 """Constants and Classes for person_location integration."""
 
+import asyncio
 import logging
 import threading
 from datetime import datetime, timedelta
@@ -48,7 +49,7 @@ IC3_STATIONARY_ZONE_PREFIX = "ic3_stationary_"
 # Fixed parameters:
 MIN_DISTANCE_TRAVELLED_TO_GEOCODE = 5  # in km?
 THROTTLE_INTERVAL = timedelta(
-    seconds=1
+    seconds=2
 )  # See https://operations.osmfoundation.org/policies/nominatim/ regarding throttling.
 WAZE_MIN_METERS_FROM_HOME = 500
 FAR_AWAY_METERS = 400 * METERS_PER_KM
@@ -127,6 +128,7 @@ VALID_OUTPUT_PLATFORM = ["sensor", "device_tracker"]
 CONF_REGION = "region"
 DEFAULT_REGION = "US"
 
+CONF_DISTANCE_DURATION_SOURCE = "distance_duration_source"
 CONF_USE_WAZE = "use_waze"
 CONF_WAZE_REGION = "waze_region"
 
@@ -137,6 +139,7 @@ CONF_NAME = "name"
 CONF_OSM_API_KEY = "osm_api_key"
 CONF_RADAR_API_KEY = "radar_api_key"
 DEFAULT_API_KEY_NOT_SET = "not used"
+
 
 CONF_CREATE_SENSORS = "create_sensors"
 VALID_CREATE_SENSORS = [
@@ -234,7 +237,10 @@ CONFIG_SCHEMA = vol.Schema(
                 vol.Optional(
                     CONF_RADAR_API_KEY, default=DEFAULT_API_KEY_NOT_SET
                 ): cv.string,
-                vol.Optional(CONF_FOLLOW_PERSON_INTEGRATION, default=False): cv.boolean,
+                vol.Optional(CONF_FOLLOW_PERSON_INTEGRATION, default=False
+                ): cv.boolean,
+                vol.Optional(CONF_DISTANCE_DURATION_SOURCE, default="waze"
+                ): cv.string,
                 vol.Optional(CONF_PERSON_NAMES, default=[]): vol.All(
                     cv.ensure_list, [PERSON_SCHEMA]
                 ),
@@ -268,6 +274,8 @@ TARGET_LOCK = threading.Lock()
 # Note to future me: If functions where these locks are used are converted to async,
 #   they will need to be changed to asyncio.Lock and the locations where
 #   `with TARGET_LOCK:` is used would need to change to `async with TARGET_LOCK:`
+INTEGRATION_ASYNCIO_LOCK = asyncio.Lock()
+TARGET_ASYNCIO_LOCK = asyncio.Lock()
 
 _LOGGER = logging.getLogger(__name__)
 

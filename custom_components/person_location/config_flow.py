@@ -30,6 +30,7 @@ from .const import (
     CONF_MAPQUEST_API_KEY,
     CONF_OSM_API_KEY,
     CONF_RADAR_API_KEY,
+    CONF_DISTANCE_DURATION_SOURCE,
     CONF_REGION,
     CONF_LANGUAGE,
     CONF_OUTPUT_PLATFORM,
@@ -210,7 +211,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
             if all([valid1, valid2, valid3, valid4, valid5]):
                 self._user_input.update(user_input)
-                return await self.async_step_menu()
+                return await self.async_step_source()
             return await self._async_show_config_geocode_form(user_input)
 
         user_input = {
@@ -240,6 +241,49 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=self._errors,
+        )
+
+    async def async_step_source(self, user_input=None):
+        """Step: Select source for driving distance and duration."""
+        _LOGGER.debug("[async_step_source] user_input = %s", user_input)
+
+        if user_input is not None:
+            # Save selected source and continue
+            self._user_input.update(user_input)
+            return await self.async_step_menu()
+
+        # Pull API keys from previous step (stored in self._user_input)
+        google_key = self._user_input.get(CONF_GOOGLE_API_KEY, DEFAULT_API_KEY_NOT_SET)
+        mapbox_key = self._user_input.get(CONF_MAPBOX_API_KEY, DEFAULT_API_KEY_NOT_SET)
+        osm_key = self._user_input.get(CONF_OSM_API_KEY, DEFAULT_API_KEY_NOT_SET)
+        radar_key = self._user_input.get(CONF_RADAR_API_KEY, DEFAULT_API_KEY_NOT_SET)
+
+        # Build dynamic options
+        options = [
+            {"label": "Waze integration / pywaze", "value": "waze"},
+            {"label": "None", "value": "none"},
+        ]
+    #    if osm_key != DEFAULT_API_KEY_NOT_SET:
+    #        options.insert(1, {"label": "Open Street Maps", "value": "osm"})
+        if google_key != DEFAULT_API_KEY_NOT_SET:
+            options.insert(1, {"label": "Google Maps", "value": "google_maps"})
+        if mapbox_key != DEFAULT_API_KEY_NOT_SET:
+            options.insert(1, {"label": "Mapbox", "value": "mapbox"})
+        if radar_key != DEFAULT_API_KEY_NOT_SET:
+            options.insert(1, {"label": "Radar", "value": "radar"})
+
+        # Get previous selection or default to "waze"
+        previous_selection = self._user_input.get(CONF_DISTANCE_DURATION_SOURCE,
+        self.integration_config_data.get(CONF_DISTANCE_DURATION_SOURCE, "waze"))
+
+        return self.async_show_form(
+            step_id="source",
+            data_schema=vol.Schema({
+                vol.Required(CONF_DISTANCE_DURATION_SOURCE, default=previous_selection): selector.SelectSelector({
+                    "options": options,
+                    "mode": "list"  # Radio buttons
+                })
+            }),
         )
 
     # ----------------- Sensors to be created -----------------

@@ -9,7 +9,7 @@
                 }
             },
             "geocode": {
-                "title": "Person Location Geocode Configuration",
+                "title": "Person Location Geocode Configuration (1 of 2)",
                 "description": "Reverse geocoding and mapping can be done using one (or more) external services.  If you need help with the configuration or obtaining keys, have a look at More Details [**here**](https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#configuration-parameters).",
                 "data": {
                     "language": "Google Language",
@@ -19,6 +19,13 @@
                     "mapquest_api_key": "MapQuest API Key",
                     "osm_api_key": "OSM API Key (your eMail Address)",
                     "radar_api_key": "Radar API Key (publishable)"
+                }
+            },
+            "source": {
+                "title": "Person Location Geocode Configuration (2 of 2)",
+                "description": "Driving distance and duration can be obtained using one of the following external services. If you need help with the configuration or obtaining keys, have a look at More Details [**here**](https://github.com/rodpayne/home-assistant_person_location/blob/master/README.md#configuration-parameters).",
+                "data": {
+                    "distance_duration_source": "Source for driving distance and duration"
                 }
             },
             "sensors": {

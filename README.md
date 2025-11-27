@@ -298,6 +298,7 @@ The configuration can be updated in either the `Settings > Devices & services` G
 | MapQuest API Key | `mapquest_api_key`    | Yes | MapQuest API Key obtained from the [MapQuest Developer site](https://developer.mapquest.com/user/me/apps). | Do not do the MapQuest reverse geocoding.
 | OSM API Key (your eMail Address) | `osm_api_key`    | Yes | Contact email address to be used by the Open Street Map API. | Do not do the OSM reverse geocoding.
 | Radar API Key (publishable) | `radar_api_key`    | Yes | Publishable client API key obtained from the [Radar.com site](https://radar.com). | Do not do the Radar reverse geocoding.
+| Source for driving distance and duration | `distance_duration_source` | Yes | Choice for which external system will provide Driving Miles and Driving Minutes from the Person Location to Home. Choose from `waze`, `radar`, `google_maps`, `mapbox`, or `none`.| `waze`
 | **Section:** |**Sensors to be created** |
 | Sensors to be created | `create_sensors`  | Yes | List of attributes for which individual sensors are to be created so that template sensors do not need to be configured.  Choose from this list: `altitude`, `bread_crumbs`, `direction`, `driving_miles`, `driving_minutes`, `geocoded`, `latitude`, `longitude`, `meters_from_home`, `miles_from_home`. | None
 | Platform for output sensor | `platform`       | Yes | Platform used for the person location "sensor". (Experimental.) | `sensor` as in `sensor.<name>_location`.
@@ -353,7 +354,40 @@ person_location:
 ```
 
 #### **Google Maps Geocoding Configuration**
-To activate the custom integration with the Google Maps Geocoding feature, add a Google API Key to `<config>/configuration.yaml`. A Google API Key can be obtained from the [Google Maps Platform site](https://cloud.google.com/maps-platform#get-started). Unfortunately, obtaining a Key requires that billing be set up. Their free tier is generous for our purposes, but if it gives you the heebie-jeebies to give Google a credit card, stick with Open Street Map.
+To activate the custom integration with the Google Maps Geocoding feature, add a Google API Key to `<config>/configuration.yaml` or enter in the configuration flow. A Google API Key can be obtained from the [Google Maps Platform site](https://cloud.google.com/maps-platform#get-started). Unfortunately, obtaining a Key requires that billing be set up. Their free tier is generous for our purposes, but if it gives you the heebie-jeebies to give Google a credit card, stick with Open Street Map.
+
+#### How to Obtain a Google Maps API Key
+
+To use the Google Maps services, you need an API key from Google Cloud Platform.
+
+#### Step 1: Create a Google Cloud Account
+- Go to [Google Cloud Console](https://console.cloud.google.com/).
+- Sign in with your Google account (or create one if needed).
+
+##### Step 2: Create a New Project
+- In the top navigation bar, click the project dropdown.
+- Select **New Project**, give it a name (e.g., `Home Assistant Integration`), and click **Create**.
+
+#### Step 3: Enable the Geocoding API and Distance Matrix API
+- In the Cloud Console, go to **APIs & Services > Library**.
+- Search for **Geocoding API**.
+- Click **Enable**.
+- *(Optional: also enable **Distance Matrix API** if you plan to use for driving distance and duration.)*
+
+#### Step 4: Create Credentials (API Key)
+- Go to **APIs & Services > Credentials**.
+- Click **Create Credentials > API key**.
+- Copy the generated key.
+
+#### Step 5: Restrict Your Key (Recommended)
+- In the credentials page, click your new key.
+- Under **Application restrictions**, limit usage to specific domains, IPs, or apps.
+- Under **API restrictions**, select **Geocoding API** (and **Distance Matrix API** if planning to use for driving distance and duration).
+- Save changes.
+
+#### Step 6: Use the Key in Your Integration
+- In your Home Assistant config, set `CONF_GOOGLE_API_KEY` to the key you generated.
+
 ```yaml
 # Example configuration.yaml entry
 person_location:

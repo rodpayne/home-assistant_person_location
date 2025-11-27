@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 import math
-import time
+#import time
 import traceback
 from datetime import datetime
 
@@ -47,6 +47,7 @@ from .const import (
     ATTR_OPEN_STREET_MAP,
     ATTR_RADAR,
     CONF_CREATE_SENSORS,
+    CONF_DISTANCE_DURATION_SOURCE,
     CONF_FRIENDLY_NAME_TEMPLATE,
     CONF_GOOGLE_API_KEY,
     CONF_LANGUAGE,
@@ -64,18 +65,20 @@ from .const import (
     INFO_LOCALITY,
     INFO_LOCATION_LATITUDE,
     INFO_LOCATION_LONGITUDE,
-    INTEGRATION_LOCK,
+    INTEGRATION_ASYNCIO_LOCK,
     INTEGRATION_NAME,
     DEFAULT_LOCALITY_PRIORITY_OSM,
     METERS_PER_KM,
     METERS_PER_MILE,
     MIN_DISTANCE_TRAVELLED_TO_GEOCODE,
 #    PERSON_LOCATION_TARGET,
-    TARGET_LOCK,
+    TARGET_ASYNCIO_LOCK,
     THROTTLE_INTERVAL,
     WAZE_MIN_METERS_FROM_HOME,
     ZONE_DOMAIN,
 )
+
+from .helpers.duration_distance import update_driving_miles_and_minutes
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -112,7 +115,7 @@ def setup_reverse_geocode(pli):
 
         From https://gist.github.com/jeromer/2005586.
         """
-        if (type(pointA) != tuple) or (type(pointB) != tuple):
+        if (type(pointA) is not tuple) or (type(pointB) is not tuple):
             raise TypeError("Only tuples are supported as arguments")
 
         lat1 = math.radians(pointA[0])
@@ -134,128 +137,7 @@ def setup_reverse_geocode(pli):
 
         return compass_bearing
 
-    def _get_waze_driving_miles_and_minutes(
-        target,
-        new_latitude,
-        new_longitude,
-        waze_country_code,
-    ):
-        """ 
-        Updates target._attr_extra_state_attributes:
-            ATTR_DRIVING_MILES
-            ATTR_DRIVING_MINUTES
-            ATTR_ATTRIBUTION
-
-        May update pli.attributes:
-            "waze_error_count"
-        """
-
-        entity_id = target.entity_id
-        if not pli.configuration["use_waze"]:
-            return
-
-        # If we’re already “home,” skip routing
-        if target._attr_extra_state_attributes[ATTR_METERS_FROM_HOME] < WAZE_MIN_METERS_FROM_HOME:
-            target._attr_extra_state_attributes[ATTR_DRIVING_MILES] = target._attr_extra_state_attributes[ATTR_MILES_FROM_HOME]
-            target._attr_extra_state_attributes[ATTR_DRIVING_MINUTES] = "0"
-            return
-
-        from_location = f"{new_latitude},{new_longitude}"
-        to_location = (
-            f"{pli.attributes['home_latitude']},"
-            f"{pli.attributes['home_longitude']}"
-        )
-        waze_region = get_waze_region(waze_country_code)
-
-        _LOGGER.debug("from_location: " + from_location)
-        _LOGGER.debug("to_location: " + to_location)
-        _LOGGER.debug("waze_region: " + waze_region)
-
-        # First attempt: HA-managed service
-        try:
-            if not pli.hass.services.has_service("waze_travel_time", "get_travel_times"):
-                raise ServiceNotFound("waze_travel_time", "get_travel_times")
-
-            service_coro = pli.hass.services.async_call(
-                "waze_travel_time",
-                "get_travel_times",
-                {
-                    "origin": from_location,
-                    "destination": to_location,
-                    "region": waze_region,
-                },
-                blocking=True,
-                return_response=True,
-            )
-            future = asyncio.run_coroutine_threadsafe(service_coro, pli.hass.loop)
-            data = future.result()
-            routes = data.get("routes", [])
-            if not routes:
-                raise ValueError("No routes from HA service")
-
-            # Pick first or apply your street‐name filter here
-            best = routes[0]
-            duration = best["duration"]
-            distance_km = best["distance"]
-
-        except Exception as service_err:
-            _LOGGER.debug(
-                "(%s) Waze service failed (%s), falling back to pywaze",
-                entity_id,
-                type(service_err).__name__,
-            )
-            # Fallback: direct pywaze call
-            try:
-                # pywaze expects an aiohttp client session
-                client = WazeRouteCalculator(
-                    region=waze_region.upper(),
-                    client=get_async_client(pli.hass),
-                )
-                coro = client.calc_routes(
-                    from_location,
-                    to_location,
-                    avoid_toll_roads=True,
-                    avoid_subscription_roads=True,
-                    avoid_ferries=True,
-                )
-                future = asyncio.run_coroutine_threadsafe(coro, pli.hass.loop)
-                pywaze_routes = future.result()
-                if not pywaze_routes:
-                    raise ValueError("No routes from pywaze")
-
-                route = pywaze_routes[0]
-                duration = route.duration
-                distance_km = route.distance
-
-            except Exception as pw_err:
-                _LOGGER.error(
-                    "(%s) pywaze fallback failed %s: %s",
-                    entity_id,
-                    type(pw_err).__name__,
-                    pw_err,
-                )
-                pli.attributes["waze_error_count"] = (
-                    pli.attributes.get("waze_error_count", 0) + 1
-                )
-                target._attr_extra_state_attributes[ATTR_DRIVING_MILES] = target._attr_extra_state_attributes[ATTR_MILES_FROM_HOME]
-                return
-
-        # Common post‐processing
-        miles = distance_km * METERS_PER_KM / METERS_PER_MILE
-        if miles <= 0:
-            display_miles = target._attr_extra_state_attributes[ATTR_MILES_FROM_HOME]
-        elif miles >= 100:
-            display_miles = round(miles, 0)
-        elif miles >= 10:
-            display_miles = round(miles, 1)
-        else:
-            display_miles = round(miles, 2)
-
-        target._attr_extra_state_attributes[ATTR_DRIVING_MILES] = str(display_miles)
-        target._attr_extra_state_attributes[ATTR_DRIVING_MINUTES] = str(round(duration, 1))
-        target._attr_extra_state_attributes[ATTR_ATTRIBUTION] += '"Data by Waze App. https://waze.com"; '
-
-    def handle_reverse_geocode(call):
+    async def handle_reverse_geocode(call):
         """
         Handle the reverse_geocode service.
 
@@ -301,9 +183,9 @@ def setup_reverse_geocode(pli):
             )
         )
 
-        with INTEGRATION_LOCK:
+        async with INTEGRATION_ASYNCIO_LOCK:
             """Lock while updating the pli(API_STATE_OBJECT)."""
-            _LOGGER.debug("INTEGRATION_LOCK obtained")
+            _LOGGER.debug("INTEGRATION_ASYNCIO_LOCK obtained")
 
             try:
                 currentApiTime = datetime.now()
@@ -332,7 +214,7 @@ def setup_reverse_geocode(pli):
                                 pli.attributes["api_calls_throttled"],
                             )
                         )
-                        time.sleep(wait_time)
+                        await asyncio.sleep(wait_time)
                         currentApiTime = datetime.now()
 
                     # Record the integration attributes in the API_STATE_OBJECT:
@@ -358,9 +240,9 @@ def setup_reverse_geocode(pli):
 
                     # Handle the service call, updating the target(entity_id):
 
-                    with TARGET_LOCK:
+                    async with TARGET_ASYNCIO_LOCK:
                         """Lock while updating the target(entity_id)."""
-                        _LOGGER.debug("TARGET_LOCK obtained")
+                        _LOGGER.debug("TARGET_ASYNCIO_LOCK obtained")
 
                         target = get_target_entity(pli, entity_id)
                         if not target:
@@ -599,9 +481,9 @@ def setup_reverse_geocode(pli):
                                 }
 
                                 radar_decoded = {}
-                                radar_response = httpx.get(radar_url, headers=headers)
-                                radar_json_input = radar_response.text
-                                radar_decoded = json.loads(radar_json_input)
+                                async_client = get_async_client(pli.hass)
+                                radar_response = await async_client.get(radar_url, headers=headers)
+                                radar_decoded = radar_response.json()
 
                                 if "city" in radar_decoded["addresses"][0]:
                                     locality = radar_decoded["addresses"][0]["city"]
@@ -694,9 +576,10 @@ def setup_reverse_geocode(pli):
                                     )
 
                                 osm_decoded = {}
-                                osm_response = httpx.get(osm_url)
-                                osm_json_input = osm_response.text
-                                osm_decoded = json.loads(osm_json_input)
+                                async_client = get_async_client(pli.hass)  # HA-managed httpx.AsyncClient
+                                osm_response = await async_client.get(osm_url)  # await instead of blocking
+
+                                osm_decoded = osm_response.json()
 
                                 for key in DEFAULT_LOCALITY_PRIORITY_OSM:
                                     if key in osm_decoded["address"]:
@@ -775,9 +658,9 @@ def setup_reverse_geocode(pli):
                                     + pli.configuration[CONF_GOOGLE_API_KEY]
                                 )
                                 google_decoded = {}
-                                google_response = httpx.get(google_url)
-                                google_json_input = google_response.text
-                                google_decoded = json.loads(google_json_input)
+                                async_client = get_async_client(pli.hass)  # HA-managed httpx.AsyncClient
+                                google_response = await async_client.get(google_url)  # await instead of blocking
+                                google_decoded = google_response.json()
 
                                 google_status = google_decoded["status"]
                                 if google_status != "OK":
@@ -874,7 +757,8 @@ def setup_reverse_geocode(pli):
                                     + pli.configuration[CONF_MAPQUEST_API_KEY]
                                 )
                                 mapquest_decoded = {}
-                                mapquest_response = httpx.get(mapquest_url)
+                                async_client = get_async_client(pli.hass)  # HA-managed httpx.AsyncClient
+                                mapquest_response = await async_client.get(mapquest_url)  # await instead of blocking
                                 mapquest_json_input = mapquest_response.text
                                 if not is_json(mapquest_json_input):
                                     _LOGGER.error(
@@ -1029,9 +913,10 @@ def setup_reverse_geocode(pli):
                                 new_location_time
                             )
 
-                            # Call WazeRouteCalculator if not at Home:
+                            # Call WazeRouteCalculator or alternate:
 
-                            _get_waze_driving_miles_and_minutes(
+                            await update_driving_miles_and_minutes(
+                                pli,
                                 target,
                                 new_latitude,
                                 new_longitude,
@@ -1161,7 +1046,7 @@ def setup_reverse_geocode(pli):
 
                             target.make_template_sensors()
 
-                        _LOGGER.debug("TARGET_LOCK release...")
+                        _LOGGER.debug("TARGET_ASYNCIO_LOCK release...")
             except Exception as e:
                 _LOGGER.error(
                     "(%s) Exception %s: %s" % (entity_id, type(e).__name__, str(e))
@@ -1170,7 +1055,7 @@ def setup_reverse_geocode(pli):
                 pli.attributes["api_error_count"] += 1
 
             pli.set_state()
-            _LOGGER.debug("INTEGRATION_LOCK release...")
+            _LOGGER.debug("INTEGRATION_ASYNCIO_LOCK release...")
         _LOGGER.debug("(%s) === Return ===", entity_id)
 
     pli.hass.services.async_register(DOMAIN, "reverse_geocode", handle_reverse_geocode)
