@@ -85,7 +85,10 @@ class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
         self._previous_state = self._attr_native_value
         if not self._pli._target_sensors_restored:
             self._pli._target_sensors_restored = []
-        self.set_state()
+        
+        # Note: async_write_ha_state() in set_state does not have hass until
+        #   after async_add_entities() in async_setup_entry().
+        #self.set_state()
 
         _LOGGER.debug("[PersonLocationTargetSensor] (%s) Initialized",
             self._entity_id,
@@ -288,7 +291,10 @@ class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
             self._previous_state = self._attr_native_value
 
         # Schedule state write safely
-        self._pli.hass.add_job(self.async_write_ha_state)
+        if self.hass:
+            self.hass.add_job(self.async_write_ha_state)
+        else:
+            _LOGGER.debug("[set_state] hass not set for async_write_ha_state.")
 
     async def async_set_state(self):
         """Called by async services to push updates."""
@@ -301,7 +307,11 @@ class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
             self._attr_last_changed = self._attr_last_updated
             self._previous_state = self._attr_native_value
 
-        self.async_write_ha_state()
+        if self.hass:
+            self.async_write_ha_state()
+        else:
+            _LOGGER.debug("[async_set_state] hass not set for async_write_ha_state.")
+
 
     def make_template_sensor(self, attributeName, supplementalAttributeArray):
         """Make an additional sensor that will be used instead of making a template sensor."""
@@ -504,7 +514,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 person_name = trigger.personName
 
                 if entity_id in seen_entity_ids or entity_id in entities:
-                    _LOGGER.debug("[async_setup_entry] Skipping duplicate entity: %s", entity_id)
+                    _LOGGER.debug("[async_setup_entry] Skipping duplicate entity in entity_ids: %s", entity_id)
                     continue
 
                 sensor = PersonLocationTargetSensor(entity_id, pli, person_name)
@@ -512,13 +522,13 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 new_entities.append(sensor)
                 seen_entity_ids.add(entity_id)
 
-                _LOGGER.debug("[async_setup_entry] Created and registered entity: %s", entity_id)
+                _LOGGER.debug("[async_setup_entry] Created and preparing to register entity from entity_ids: %s", entity_id)
                     
         for device_id, person_name in entry_devices.items():
             entity_id = f"sensor.{person_name.lower()}_location"
 
             if entity_id in seen_entity_ids or entity_id in entities:
-                _LOGGER.debug("[async_setup_entry] Skipping duplicate entity: %s", entity_id)
+                _LOGGER.debug("[async_setup_entry] Skipping duplicate entity in entry_devices: %s", entity_id)
                 continue
 
             sensor = PersonLocationTargetSensor(entity_id, pli, person_name)
@@ -526,11 +536,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
             new_entities.append(sensor)
             seen_entity_ids.add(entity_id)
 
-            _LOGGER.debug("[async_setup_entry] Created and registered entity: %s", entity_id)
+            _LOGGER.debug("[async_setup_entry] Created and preparing to register entity from entry_devices: %s", entity_id)
 
         if new_entities:
             async_add_entities(new_entities)
-            _LOGGER.debug("[async_setup_entry] Registering entities: %s", [e.entity_id for e in new_entities])
+            _LOGGER.debug("[async_setup_entry] Registered entities: %s", [e.entity_id for e in new_entities])
     else:
         _LOGGER.debug("[async_setup_entry] pli is not yet available, hass.data[DOMAIN]: %s", hass.data[DOMAIN])
 
@@ -554,7 +564,7 @@ def create_and_register_template_sensor(hass, parent, suffix, value, attrs):
             )
         else:
             _LOGGER.warning(
-                "[create_and_register_template_sensor] Sensor %s has no hass; skipping state write",
+                "[create_and_register_template_sensor] Sensor %s hass not set for async_write_ha_state.",
                 entity_id,
             )
 
