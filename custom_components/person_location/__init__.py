@@ -470,10 +470,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 # Migration
 # ------------------------------------------------------------------
 
-# Update MIGRATION_SCHEMA_VERSION if integration can't be reverted without restore
+# Note: Update MIGRATION_SCHEMA_VERSION if integration can't be reverted without restore
 MIGRATION_SCHEMA_VERSION = 2
 MIGRATION_SCHEMA_MINOR = 1
-'''
+
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Migrate old configuration entry."""
     _LOGGER.debug(
@@ -482,7 +482,7 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
         config_entry.version,
         config_entry.minor_version,
     )
-
+    
     # TODO: add this test when there is a migration that can't be reverted
     #if str(config_entry.version) > MIGRATION_SCHEMA_VERSION:
     #    _LOGGER.error(
@@ -502,9 +502,6 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
                 _LOGGER.debug("Adding %s", CONF_SHOW_ZONE_WHEN_AWAY)
                 new_options[CONF_SHOW_ZONE_WHEN_AWAY] = DEFAULT_SHOW_ZONE_WHEN_AWAY
 
-    _LOGGER.debug("data=%s", new_data)
-    _LOGGER.debug("options=%s", new_options)
-
     hass.config_entries.async_update_entry(
         config_entry,
         data=new_data,
@@ -521,4 +518,3 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
     )
 
     return True
-    '''

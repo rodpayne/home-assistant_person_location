@@ -23,5 +23,5 @@
   "requirements": [
       "pywaze>=1.1.1"
     ],
-  "version": "2025.11.28"
+  "version": "2025.11.28-b1"
 }
