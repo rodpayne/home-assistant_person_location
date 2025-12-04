@@ -29,7 +29,7 @@ def async_register(
 
 
 async def system_health_info(hass):
-    """Get info for the system health info (Configuration > Info)."""
+    """Get system health info (Settings -> System -> Repairs ⋮ System information)."""
 
     return_info = {}
     return_info["Version"] = VERSION

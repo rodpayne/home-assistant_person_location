@@ -203,7 +203,9 @@ CONFIG_SCHEMA = vol.Schema(
         DOMAIN: vol.Schema(
             {
                 vol.Optional(CONF_CREATE_SENSORS, default=[]): vol.All(
-                    cv.ensure_list, [vol.In(VALID_CREATE_SENSORS)]
+                    cv.ensure_list,  # turn string into list
+                    [vol.In(VALID_CREATE_SENSORS)],
+                    sorted           # ensures deterministic ordering
                 ),
                 vol.Optional(
                     CONF_HOURS_EXTENDED_AWAY, default=DEFAULT_HOURS_EXTENDED_AWAY
@@ -291,7 +293,7 @@ def get_waze_region(country_code: str) -> str:
 class PERSON_LOCATION_INTEGRATION:
     """Class to represent the integration itself."""
 
-    def __init__(self, _entity_id, _hass, _config):
+    def __init__(self, _entity_id, _hass):
         """Initialize the integration instance."""
 
         # Log startup message:
@@ -301,7 +303,7 @@ class PERSON_LOCATION_INTEGRATION:
 
         self.entity_id = _entity_id
         self.hass = _hass
-        self.config = _config
+        #self.config = _config
         self.state = "on"
         self.attributes = {}
         self.attributes[ATTR_ICON] = "mdi:api"
@@ -331,6 +333,7 @@ class PERSON_LOCATION_INTEGRATION:
         ] = f"System information for the {INTEGRATION_NAME} integration \
                 ({DOMAIN}), version {VERSION}."
 
+        '''
         if DOMAIN in self.config:
             self.configuration[CONF_FROM_YAML] = True
 
@@ -450,6 +453,7 @@ class PERSON_LOCATION_INTEGRATION:
             self.configuration[CONF_CREATE_SENSORS] = []
             self.configuration[CONF_FOLLOW_PERSON_INTEGRATION] = False
             self.configuration[CONF_DEVICES] = {}
+        '''
 
         # ❌ self.set_state()
 

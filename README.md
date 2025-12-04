@@ -444,12 +444,12 @@ switch:
     switches:
       person_location_integration:
         friendly_name: Person Location Service
-        value_template: "{{ is_state('person_location.person_location_integration', 'on') }}"
+        value_template: "{{ is_state('person_location.integration', 'on') }}"
         turn_on:
           service: person_location.geocode_api_on
         turn_off:
           service: person_location.geocode_api_off
-        icon_template: "{{ state_attr('person_location.person_location_integration','icon') }}"
+        icon_template: "{{ state_attr('person_location.integration','icon') }}"
 ```
 
 ### **Map Configuration Examples (Optional)**

@@ -13,6 +13,8 @@ from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_point_in_time,
 )
+import homeassistant.helpers.config_validation as cv
+
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 
@@ -94,9 +96,21 @@ def merge_entry_data(entry: ConfigEntry, conf: dict) -> tuple[dict, dict]:
 # ------------------------------------------------------------------
 
 async def async_setup(hass: HomeAssistant, yaml_config: dict) -> bool:
-    """Set up integration from YAML (bridges into config entries)."""
+    """Set up integration and bridge YAML into config entry."""
 
-    # get YAML conf defaults
+    hass.data.setdefault(DOMAIN, {})
+
+    # Create integration object
+    pli = PERSON_LOCATION_INTEGRATION(f"{DOMAIN}.integration", hass)
+
+    # Explicit startup flag so logic downstream is predictable
+    pli.attributes.setdefault("startup", True)
+
+    # Some code references expect hass.data[DOMAIN]["integration"]
+    hass.data[DOMAIN]["integration"] = pli
+
+    #------- get configuration from YAML -------
+
     default_conf = CONFIG_SCHEMA({DOMAIN: {} })[DOMAIN]
     #LOGGER.debug("[async_setup] default_conf: %s", default_conf)
     if not default_conf.get(CONF_DEVICES, {}):
@@ -130,6 +144,45 @@ async def async_setup(hass: HomeAssistant, yaml_config: dict) -> bool:
             }
             _LOGGER.debug("[async_setup] conf_devices: %s", conf_devices)
             conf_with_defaults[CONF_DEVICES] = conf_devices
+
+        # YAML schema allows a couple of different formats for the list
+        #conf_create_sensors = conf_with_defaults.pop(CONF_CREATE_SENSORS, [])
+        #conf_with_defaults[CONF_CREATE_SENSORS] = sorted(cv.ensure_list(conf_create_sensors))
+
+    if not pli.configuration:
+        pli.DATA_CONFIGURATION = conf_with_defaults
+
+    #------- register services -------
+
+    # Services: geocode on/off
+    async def handle_geocode_api_on(call):
+        _LOGGER.debug("[geocode_api_on] === Start ===")
+        with INTEGRATION_LOCK:
+            _LOGGER.debug("[geocode_api_on] INTEGRATION_LOCK obtained")
+            pli.state = STATE_ON
+            pli.attributes["icon"] = "mdi:api"
+            pli.set_state()
+            _LOGGER.debug("[geocode_api_on] INTEGRATION_LOCK release...")
+        _LOGGER.debug("[geocode_api_on] === Return ===")
+
+    async def handle_geocode_api_off(call):
+        _LOGGER.debug("[geocode_api_off] === Start ===")
+        with INTEGRATION_LOCK:
+            _LOGGER.debug("[geocode_api_off] INTEGRATION_LOCK obtained")
+            pli.state = STATE_OFF
+            pli.attributes["icon"] = "mdi:api-off"
+            pli.set_state()
+            _LOGGER.debug("[geocode_api_off] INTEGRATION_LOCK release...")
+        _LOGGER.debug("[geocode_api_off] === Return ===")
+
+    hass.services.async_register(DOMAIN, "geocode_api_on", handle_geocode_api_on)
+    hass.services.async_register(DOMAIN, "geocode_api_off", handle_geocode_api_off)
+
+    # Services: integration functionality
+    setup_reverse_geocode(pli)
+    setup_process_trigger(pli)
+
+    #------- update existing config entry or request a new one -------
 
     existing_entries = hass.config_entries.async_entries(DOMAIN)
     if existing_entries:
@@ -174,7 +227,7 @@ async def async_options_update_listener(hass: HomeAssistant, entry: ConfigEntry)
     return True
 
 # ------------------------------------------------------------------
-# Config entry setup
+# Setup from Config Entry
 # ------------------------------------------------------------------
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -185,48 +238,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][DATA_CONFIG_ENTRY] = entry
 
+    # Get integration object
+    pli = hass.data[DOMAIN]["integration"]
+
+    # Store integration object for entry
+    hass.data[DOMAIN][entry.entry_id] = pli
+
+    pli.config = entry.data # TODO: is this used anywhere?
+
     if DATA_UNDO_UPDATE_LISTENER not in hass.data[DOMAIN]:
         hass.data[DOMAIN][DATA_UNDO_UPDATE_LISTENER] = entry.add_update_listener(
             async_options_update_listener
         )
-
-    # Create integration object
-    pli = PERSON_LOCATION_INTEGRATION(f"{DOMAIN}.integration", hass, entry.data)
-    # Explicit startup flag so logic downstream is predictable
-    pli.attributes.setdefault("startup", True)
-
-    # Store integration object
-    hass.data[DOMAIN][entry.entry_id] = pli
-    # Some code references may expect hass.data[DOMAIN]["integration"]
-    hass.data[DOMAIN]["integration"] = pli
-
-    # Setup services used by sensors/camera and triggers
-    setup_process_trigger(pli)
-    setup_reverse_geocode(pli)
-
-    # Services: geocode on/off
-    def handle_geocode_api_on(call):
-        _LOGGER.debug("[geocode_api_on] === Start ===")
-        with INTEGRATION_LOCK:
-            _LOGGER.debug("[geocode_api_on] INTEGRATION_LOCK obtained")
-            pli.state = STATE_ON
-            pli.attributes["icon"] = "mdi:api"
-            pli.set_state()
-            _LOGGER.debug("[geocode_api_on] INTEGRATION_LOCK release...")
-        _LOGGER.debug("[geocode_api_on] === Return ===")
-
-    def handle_geocode_api_off(call):
-        _LOGGER.debug("[geocode_api_off] === Start ===")
-        with INTEGRATION_LOCK:
-            _LOGGER.debug("[geocode_api_off] INTEGRATION_LOCK obtained")
-            pli.state = STATE_OFF
-            pli.attributes["icon"] = "mdi:api-off"
-            pli.set_state()
-            _LOGGER.debug("[geocode_api_off] INTEGRATION_LOCK release...")
-        _LOGGER.debug("[geocode_api_off] === Return ===")
-
-    hass.services.async_register(DOMAIN, "geocode_api_on", handle_geocode_api_on)
-    hass.services.async_register(DOMAIN, "geocode_api_off", handle_geocode_api_off)
 
     # ------------------------------------------------------------------
     # Listeners: device tracker state change
