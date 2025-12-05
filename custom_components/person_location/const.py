@@ -333,127 +333,6 @@ class PERSON_LOCATION_INTEGRATION:
         ] = f"System information for the {INTEGRATION_NAME} integration \
                 ({DOMAIN}), version {VERSION}."
 
-        '''
-        if DOMAIN in self.config:
-            self.configuration[CONF_FROM_YAML] = True
-
-            # Pull in configuration from configuration.yaml:
-
-            self.configuration[CONF_GOOGLE_API_KEY] = self.config[DOMAIN].get(
-                CONF_GOOGLE_API_KEY, DEFAULT_API_KEY_NOT_SET
-            )
-            self.configuration[CONF_LANGUAGE] = self.config[DOMAIN].get(
-                CONF_LANGUAGE, DEFAULT_LANGUAGE
-            )
-            self.configuration[CONF_FRIENDLY_NAME_TEMPLATE] = self.config[DOMAIN].get(
-                CONF_FRIENDLY_NAME_TEMPLATE, DEFAULT_FRIENDLY_NAME_TEMPLATE
-            )
-            self.configuration[CONF_HOURS_EXTENDED_AWAY] = self.config[DOMAIN].get(
-                CONF_HOURS_EXTENDED_AWAY, DEFAULT_HOURS_EXTENDED_AWAY
-            )
-            self.configuration[CONF_MINUTES_JUST_ARRIVED] = self.config[DOMAIN].get(
-                CONF_MINUTES_JUST_ARRIVED, DEFAULT_MINUTES_JUST_ARRIVED
-            )
-            self.configuration[CONF_MINUTES_JUST_LEFT] = self.config[DOMAIN].get(
-                CONF_MINUTES_JUST_LEFT, DEFAULT_MINUTES_JUST_LEFT
-            )
-            self.configuration[CONF_OUTPUT_PLATFORM] = self.config[DOMAIN].get(
-                CONF_OUTPUT_PLATFORM, DEFAULT_OUTPUT_PLATFORM
-            )
-            self.configuration[CONF_MAPBOX_API_KEY] = self.config[DOMAIN].get(
-                CONF_MAPBOX_API_KEY, DEFAULT_API_KEY_NOT_SET
-            )
-            self.configuration[CONF_MAPQUEST_API_KEY] = self.config[DOMAIN].get(
-                CONF_MAPQUEST_API_KEY, DEFAULT_API_KEY_NOT_SET
-            )
-            self.configuration[CONF_OSM_API_KEY] = self.config[DOMAIN].get(
-                CONF_OSM_API_KEY, DEFAULT_API_KEY_NOT_SET
-            )
-            self.configuration[CONF_RADAR_API_KEY] = self.config[DOMAIN].get(
-                CONF_RADAR_API_KEY, DEFAULT_API_KEY_NOT_SET
-            )
-            self.configuration[CONF_SHOW_ZONE_WHEN_AWAY] = self.config[DOMAIN].get(
-                CONF_SHOW_ZONE_WHEN_AWAY, DEFAULT_SHOW_ZONE_WHEN_AWAY
-            )
-            self.configuration[CONF_REGION] = self.config[DOMAIN].get(
-                CONF_REGION, DEFAULT_REGION
-            )
-            self.configuration[CONF_WAZE_REGION] = get_waze_region(
-                self.configuration[CONF_REGION]
-            )
-            if self.configuration[CONF_WAZE_REGION] in WAZE_REGIONS:
-                self.configuration[CONF_USE_WAZE] = True
-            else:
-                self.configuration[CONF_USE_WAZE] = False
-                _LOGGER.warning(
-                    "Configured Waze region (%s) is not valid",
-                    self.configuration[CONF_WAZE_REGION],
-                )
-                _LOGGER.debug(
-                    "Valid Waze regions: %s",
-                    WAZE_REGIONS,
-                )
-            raw_conf_create_sensors = self.config[DOMAIN].get(CONF_CREATE_SENSORS, [])
-            itemType = type(raw_conf_create_sensors)
-            if itemType in (list, NodeListClass):
-                self.configuration[CONF_CREATE_SENSORS] = sorted(
-                    raw_conf_create_sensors
-                )
-            elif itemType in (str, NodeStrClass):
-                self.configuration[CONF_CREATE_SENSORS] = sorted(
-                    [x.strip() for x in raw_conf_create_sensors.split(",")]
-                )
-            else:
-                _LOGGER.error(
-                    "Configured %s: %s is not valid (type %s)",
-                    CONF_CREATE_SENSORS,
-                    raw_conf_create_sensors,
-                    itemType,
-                )
-                self.configuration[CONF_CREATE_SENSORS] = []
-            for sensor_name in self.configuration[CONF_CREATE_SENSORS]:
-                if sensor_name not in VALID_CREATE_SENSORS:
-                    _LOGGER.error(
-                        "Configured %s: %s is not valid",
-                        CONF_CREATE_SENSORS,
-                        sensor_name,
-                    )
-            self.configuration[CONF_FOLLOW_PERSON_INTEGRATION] = self.config[
-                DOMAIN
-            ].get(CONF_FOLLOW_PERSON_INTEGRATION, False)
-
-            self.configuration[CONF_DEVICES] = {}
-            for person_name_config in self.config[DOMAIN].get(CONF_PERSON_NAMES, []):
-                person_name = person_name_config[CONF_NAME]
-                _LOGGER.debug("person_name_config name = %s", person_name)
-                devices = person_name_config[CONF_DEVICES]
-                if (devices is str) or (devices is NodeStrClass):
-                    devices = [devices]
-                for device in devices:
-                    _LOGGER.debug("person_name_config device = %s", device)
-                    self.configuration[CONF_DEVICES][device] = person_name
-
-        else:
-            self.configuration[CONF_FROM_YAML] = False
-
-            # Provide defaults if no configuration.yaml config:
-
-            self.configuration[CONF_GOOGLE_API_KEY] = DEFAULT_API_KEY_NOT_SET
-            self.configuration[CONF_LANGUAGE] = DEFAULT_LANGUAGE
-            self.configuration[CONF_HOURS_EXTENDED_AWAY] = DEFAULT_HOURS_EXTENDED_AWAY
-            self.configuration[CONF_MINUTES_JUST_ARRIVED] = DEFAULT_MINUTES_JUST_ARRIVED
-            self.configuration[CONF_MINUTES_JUST_LEFT] = DEFAULT_MINUTES_JUST_LEFT
-            self.configuration[CONF_OUTPUT_PLATFORM] = DEFAULT_OUTPUT_PLATFORM
-            self.configuration[CONF_MAPQUEST_API_KEY] = DEFAULT_API_KEY_NOT_SET
-            self.configuration[CONF_OSM_API_KEY] = DEFAULT_API_KEY_NOT_SET
-            self.configuration[CONF_RADAR_API_KEY] = DEFAULT_API_KEY_NOT_SET
-            self.configuration[CONF_REGION] = DEFAULT_REGION
-            self.configuration[CONF_WAZE_REGION] = DEFAULT_REGION
-            self.configuration[CONF_USE_WAZE] = True
-            self.configuration[CONF_CREATE_SENSORS] = []
-            self.configuration[CONF_FOLLOW_PERSON_INTEGRATION] = False
-            self.configuration[CONF_DEVICES] = {}
-        '''
 
         # ❌ self.set_state()
 
@@ -480,7 +359,7 @@ class PERSON_LOCATION_INTEGRATION:
         self.hass.states.async_set(self.entity_id, self.state, simple_attributes)
 
         _LOGGER.debug(
-            "(%s.async_set_state) -state: %s -attributes: %s",
+            "[async_set_state] (%s) -state: %s -attributes: %s",
             self.entity_id,
             self.state,
             self.attributes,

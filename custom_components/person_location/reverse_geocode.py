@@ -137,6 +137,15 @@ def setup_reverse_geocode(pli):
 
         return compass_bearing
 
+# "Global" variables for the following geocode routines
+
+    new_latitude: str = None
+    new_longitude: str = None
+    new_location_time: str = None
+    new_locality: str = None
+    waze_country_code: str = None
+
+    # TODO: spl;it up the handle_reverse_geocode function for each external service
     async def handle_reverse_geocode(call):
         """
         Handle the reverse_geocode service.
@@ -151,13 +160,19 @@ def setup_reverse_geocode(pli):
                 - longitude
                 - location_time (optional)
         Output:
-            - determine <locality> for friendly_name
+            - determine <new_locality> for friendly_name
             - full location from Radar, Google_Maps, MapQuest, and/or Open_Street_Map
             - calculate other location-based statistics, such as distance_from_home
             - add to bread_crumbs as locality changes
             - create/update additional sensors if requested
             - friendly_name: something like "Rod (i.e. Rod's watch) is at Drew's"
         """
+
+        nonlocal new_latitude
+        nonlocal new_longitude
+        nonlocal new_location_time
+        nonlocal new_locality
+        nonlocal waze_country_code
 
         entity_id = call.data.get(CONF_ENTITY_ID, "NONE")
         template = call.data.get(CONF_FRIENDLY_NAME_TEMPLATE, "NONE")
@@ -346,7 +361,7 @@ def setup_reverse_geocode(pli):
                                 + str(MIN_DISTANCE_TRAVELLED_TO_GEOCODE)
                             )
                         else:
-                            locality = "?"
+                            new_locality = "?"
 
                             if "location_time" in target._attr_extra_state_attributes:
                                 new_location_time = datetime.strptime(
@@ -486,21 +501,21 @@ def setup_reverse_geocode(pli):
                                 radar_decoded = radar_response.json()
 
                                 if "city" in radar_decoded["addresses"][0]:
-                                    locality = radar_decoded["addresses"][0]["city"]
+                                    new_locality = radar_decoded["addresses"][0]["city"]
                                 elif "town" in radar_decoded["addresses"][0]:
-                                    locality = radar_decoded["addresses"][0]["town"]
+                                    new_locality = radar_decoded["addresses"][0]["town"]
                                 elif "village" in radar_decoded["addresses"][0]:
-                                    locality = radar_decoded["addresses"][0]["village"]
+                                    new_locality = radar_decoded["addresses"][0]["village"]
                                 elif "municipality" in radar_decoded["addresses"][0]:
-                                    locality = radar_decoded["addresses"][0]["municipality"]
+                                    new_locality = radar_decoded["addresses"][0]["municipality"]
                                 elif "county" in radar_decoded["addresses"][0]:
-                                    locality = radar_decoded["addresses"][0]["county"]
+                                    new_locality = radar_decoded["addresses"][0]["county"]
                                 elif "state" in radar_decoded["addresses"][0]:
-                                    locality = radar_decoded["addresses"][0]["state"]
+                                    new_locality = radar_decoded["addresses"][0]["state"]
                                 elif "country" in radar_decoded["addresses"][0]:
-                                    locality = radar_decoded["addresses"][0]["country"]
+                                    new_locality = radar_decoded["addresses"][0]["country"]
                                 _LOGGER.debug(
-                                    "(" + entity_id + ") Radar locality = " + locality
+                                    "(" + entity_id + ") Radar new_locality = " + new_locality
                                 )
 
                                 if "countryCode" in radar_decoded["addresses"][0]:
@@ -514,7 +529,7 @@ def setup_reverse_geocode(pli):
                                 elif "addressLabel" in radar_decoded["addresses"][0]:
                                     formatted_address = radar_decoded["addresses"][0]["addressLabel"]
                                 else:
-                                    formatted_address = locality
+                                    formatted_address = new_locality
                                 _LOGGER.debug(
                                     "("
                                     + entity_id
@@ -541,7 +556,7 @@ def setup_reverse_geocode(pli):
                                         ATTR_SOURCE_TYPE: target._attr_extra_state_attributes.get(ATTR_SOURCE_TYPE),
                                         ATTR_GPS_ACCURACY: target._attr_extra_state_attributes.get(ATTR_GPS_ACCURACY),
                                         "icon": target._attr_extra_state_attributes.get("icon"),
-                                        "locality": locality,
+                                        "locality": new_locality,
                                         "location_time": new_location_time.strftime("%Y-%m-%d %H:%M:%S"),
                                         ATTR_ATTRIBUTION: radar_attribution,
                                     }
@@ -583,10 +598,10 @@ def setup_reverse_geocode(pli):
 
                                 for key in DEFAULT_LOCALITY_PRIORITY_OSM:
                                     if key in osm_decoded["address"]:
-                                        locality = osm_decoded["address"][key]
+                                        new_locality = osm_decoded["address"][key]
                                         break
                                 _LOGGER.debug(
-                                    "(" + entity_id + ") OSM locality = " + locality
+                                    "(" + entity_id + ") OSM new_locality = " + new_locality
                                 )
 
                                 if "country_code" in osm_decoded["address"]:
@@ -598,7 +613,7 @@ def setup_reverse_geocode(pli):
                                 if "display_name" in osm_decoded:
                                     display_name = osm_decoded["display_name"]
                                 else:
-                                    display_name = locality
+                                    display_name = new_locality
                                 _LOGGER.debug(
                                     "("
                                     + entity_id
@@ -631,7 +646,7 @@ def setup_reverse_geocode(pli):
                                         ATTR_SOURCE_TYPE: target._attr_extra_state_attributes.get(ATTR_SOURCE_TYPE),
                                         ATTR_GPS_ACCURACY: target._attr_extra_state_attributes.get(ATTR_GPS_ACCURACY),
                                         "icon": target._attr_extra_state_attributes.get("icon"),
-                                        "locality": locality,
+                                        "locality": new_locality,
                                         "location_time": new_location_time.strftime("%Y-%m-%d %H:%M:%S"),
                                         ATTR_ATTRIBUTION: osm_attribution,
                                     }
@@ -692,23 +707,23 @@ def setup_reverse_geocode(pli):
                                             "address_components"
                                         ]:
                                             if "locality" in component["types"]:
-                                                locality = component["long_name"]
+                                                new_locality = component["long_name"]
                                                 _LOGGER.debug(
                                                     "("
                                                     + entity_id
-                                                    + ") Google locality = "
-                                                    + locality
+                                                    + ") Google new_locality = "
+                                                    + new_locality
                                                 )
-                                            elif (locality == "?") and (
+                                            elif (new_locality == "?") and (
                                                 "administrative_area_level_2"
                                                 in component["types"]
                                             ):  # Fall back to county
-                                                locality = component["long_name"]
-                                            elif (locality == "?") and (
+                                                new_locality = component["long_name"]
+                                            elif (new_locality == "?") and (
                                                 "administrative_area_level_1"
                                                 in component["types"]
                                             ):  # Fall back to state
-                                                locality = component["long_name"]
+                                                new_locality = component["long_name"]
 
                                             if "country" in component["types"]:
                                                 waze_country_code = component["short_name"].upper()
@@ -732,7 +747,7 @@ def setup_reverse_geocode(pli):
                                                 ATTR_SOURCE_TYPE: target._attr_extra_state_attributes.get(ATTR_SOURCE_TYPE),
                                                 ATTR_GPS_ACCURACY: target._attr_extra_state_attributes.get(ATTR_GPS_ACCURACY),
                                                 "icon": target._attr_extra_state_attributes.get("icon"),
-                                                "locality": locality,
+                                                "locality": new_locality,
                                                 "location_time": new_location_time.strftime("%Y-%m-%d %H:%M:%S"),
                                                 ATTR_ATTRIBUTION: google_attribution,
                                             }
@@ -807,23 +822,23 @@ def setup_reverse_geocode(pli):
                                             if (
                                                 "adminArea5" in mapquest_location
                                             ):  # Like city
-                                                locality = mapquest_location[
+                                                new_locality = mapquest_location[
                                                     "adminArea5"
                                                 ]
-                                                formatted_address += locality + ", "
+                                                formatted_address += new_locality + ", "
                                             elif (
                                                 "adminArea4" in mapquest_location
                                                 and "adminArea4Type"
                                                 in mapquest_location
                                             ):  # Like county
-                                                locality = (
+                                                new_locality = (
                                                     mapquest_location["adminArea4"]
                                                     + " "
                                                     + mapquest_location[
                                                         "adminArea4Type"
                                                     ]
                                                 )
-                                                formatted_address += locality + ", "
+                                                formatted_address += new_locality + ", "
                                             if (
                                                 "adminArea3" in mapquest_location
                                             ):  # Like state
@@ -865,8 +880,8 @@ def setup_reverse_geocode(pli):
                                             _LOGGER.debug(
                                                 "("
                                                 + entity_id
-                                                + ") mapquest locality = "
-                                                + locality
+                                                + ") mapquest new_locality = "
+                                                + new_locality
                                             )
 
                                             mapquest_attribution = (
@@ -893,15 +908,15 @@ def setup_reverse_geocode(pli):
                                                     ATTR_SOURCE_TYPE: target._attr_extra_state_attributes.get(ATTR_SOURCE_TYPE),
                                                     ATTR_GPS_ACCURACY: target._attr_extra_state_attributes.get(ATTR_GPS_ACCURACY),
                                                     "icon": target._attr_extra_state_attributes.get("icon"),
-                                                    "locality": locality,
+                                                    "locality": new_locality,
                                                     "location_time": new_location_time.strftime("%Y-%m-%d %H:%M:%S"),
                                                     ATTR_ATTRIBUTION: mapquest_attribution,
                                                 }
                                                 create_and_register_template_sensor(pli.hass, target, ATTR_MAPQUEST, formatted_address, attrs)
                         #------- All ---------------------------------------------------
                             
-                            target._attr_extra_state_attributes["locality"] = locality
-                            target.this_entity_info[INFO_LOCALITY] = locality
+                            target._attr_extra_state_attributes["locality"] = new_locality
+                            target.this_entity_info[INFO_LOCALITY] = new_locality
                             target.this_entity_info[INFO_GEOCODE_COUNT] += 1
                             target.this_entity_info[INFO_LOCATION_LATITUDE] = (
                                 new_latitude

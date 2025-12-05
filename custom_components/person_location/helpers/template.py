@@ -1,7 +1,12 @@
-""" template.py - Helpers for template validation """
+""" helpers/template.py - Helpers for template validation """
 
 import logging
+import inspect
+from urllib.parse import urlparse
 from typing import Any, Dict, Optional
+
+from homeassistant.helpers.template import Template
+from homeassistant.exceptions import TemplateError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -45,10 +50,6 @@ async def validate_template(
             "missing_entities": list[str]
             }
     """
-    from homeassistant.helpers.template import Template
-    from homeassistant.exceptions import TemplateError
-    import inspect
-    from urllib.parse import urlparse
 
     result: Dict[str, Any] = {
         "ok": False,
