@@ -14,6 +14,7 @@ from homeassistant.helpers.template import Template
 
 from .const import (
     DOMAIN,
+    VERSION,
     DATA_CONFIGURATION,
     CONF_PROVIDERS,
     CONF_NAME,
@@ -32,8 +33,8 @@ _LOGGER = logging.getLogger(__name__)
 GET_IMAGE_TIMEOUT = 10
 
 CAMERA_PARENT_DEVICE = DeviceInfo(
-    identifiers={(DOMAIN, "map_cameras")},
-    name="Map Cameras",
+    identifiers={(DOMAIN, "map_camera")},
+    name="Map Camera",
     manufacturer="rodpayne",
     model="Map Camera Group",
 )
@@ -80,6 +81,8 @@ class PersonLocationCamera(Camera):
         self._name = provider[CONF_NAME]
         _LOGGER.debug("PersonLocationCamera: creating name = %s", self._name)
         self._attr_unique_id = f"map_camera_{slugify(self._name)}"
+        self._attr_has_entity_name = True
+        self._attr_name = provider[CONF_NAME].replace("_", " ").title()
         self._still_image_url = provider[CONF_STILL_IMAGE_URL]
         self._still_image_url.hass = self.hass
         self._state_template = provider[CONF_STATE]

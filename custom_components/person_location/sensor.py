@@ -61,19 +61,26 @@ def get_target_entity(pli, entity_id):
 class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
     """Main target sensor created by this integration."""
 
-    def __init__(self, entity_id, pli, person_name, friendly_name=""):
+    def __init__(self, entity_id, pli, person_name):
         self._entity_id = entity_id
         self._pli = pli
         self._person_name = person_name
         self._attr_unique_id = f"{entity_id}_target"
-        self._attr_name = friendly_name or f"{person_name} Location"
+        # Note: the following is the new HA specified way to set the name.
+        #   Unfortunately, this causes HA to always prepend the device name to
+        #   the friendly name, so we would lose the ability to completely
+        #   control the friendly name.
+        # self._attr_has_entity_name = True
+        # self._attr_name = None  # Use the name of the device
+        self._attr_name = f"{person_name} Location"
+        #
         self._attr_native_value = STATE_UNKNOWN
         self._attr_extra_state_attributes = {
             ATTR_BREAD_CRUMBS: "",
             ATTR_PERSON_NAME: person_name,
             ATTR_REPORTED_STATE: STATE_UNKNOWN,
             ATTR_SOURCE: STATE_UNKNOWN,
-            "version": f"{DOMAIN} {VERSION}",
+            #"version": f"{DOMAIN} {VERSION}",
         }
         self.this_entity_info = {
             INFO_GEOCODE_COUNT: 0,
@@ -461,7 +468,9 @@ class PersonLocationTemplateSensor(SensorEntity):
         self._parent = parent
         self._suffix = suffix
         self._attr_unique_id = f"{base_id}_{suffix}_template"
-        self._attr_name = f"{getattr(parent, 'personName', base_id)} {suffix}"
+        self._attr_has_entity_name = True
+        self._attr_name = suffix.replace("_", " ").title()
+        #self._attr_name = f"{getattr(parent, 'personName', base_id)} {suffix}"
         self._attr_native_value = value
         self._attr_extra_state_attributes = attrs
         self._pending_update = True

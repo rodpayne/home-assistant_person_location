@@ -16,7 +16,7 @@
 - [ ] `docs-removal-instructions` - The documentation provides removal instructions
 - [ ] `entity-event-setup` - Entity events are subscribed in the correct lifecycle methods
 - [X] `entity-unique-id` - Entities have a unique ID
-- [ ] `has-entity-name` - Entities use has_entity_name = True
+- [/] `has-entity-name` - Entities use has_entity_name = True - *This has been set for the template sensors and the map  cameras, and is workinmg well. Unfortunately, when set for the target sensors, it causes them to prefix the friendly name with the device name and this cannot be overridden by our friendly name template.*
 - [ ] `runtime-data` - Use ConfigEntry.runtime_data to store runtime data
 - [X] `test-before-configure` - Test a connection in the config flow
 - [ ] `test-before-setup` - Check during integration initialization if we are able to set it up correctly

@@ -1158,7 +1158,8 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
             else:
                 result = await test_friendly_name_template(
                     self.hass,
-                    template_str)
+                    template_str,
+                )
                 if result is None:
                     errors[CONF_FRIENDLY_NAME_TEMPLATE] = "template_required"
                 elif not result["ok"]:
