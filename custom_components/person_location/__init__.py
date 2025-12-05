@@ -47,6 +47,8 @@ from .const import (
     TITLE_PERSON_LOCATION_CONFIG,
 )
 
+from .helpers.entity import prune_orphan_template_entities
+
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS: list[Platform] = [Platform.CAMERA, Platform.SENSOR]
 
@@ -161,7 +163,7 @@ async def async_setup(hass: HomeAssistant, yaml_config: dict) -> bool:
             _LOGGER.debug("[geocode_api_on] INTEGRATION_LOCK obtained")
             pli.state = STATE_ON
             pli.attributes["icon"] = "mdi:api"
-            pli.set_state()
+            pli.async_set_state()
             _LOGGER.debug("[geocode_api_on] INTEGRATION_LOCK release...")
         _LOGGER.debug("[geocode_api_on] === Return ===")
 
@@ -171,7 +173,7 @@ async def async_setup(hass: HomeAssistant, yaml_config: dict) -> bool:
             _LOGGER.debug("[geocode_api_off] INTEGRATION_LOCK obtained")
             pli.state = STATE_OFF
             pli.attributes["icon"] = "mdi:api-off"
-            pli.set_state()
+            pli.async_set_state()
             _LOGGER.debug("[geocode_api_off] INTEGRATION_LOCK release...")
         _LOGGER.debug("[geocode_api_off] === Return ===")
 
@@ -245,6 +247,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = pli
 
     pli.config = entry.data # TODO: is this used anywhere?
+    pli.async_set_state
 
     if DATA_UNDO_UPDATE_LISTENER not in hass.data[DOMAIN]:
         hass.data[DOMAIN][DATA_UNDO_UPDATE_LISTENER] = entry.add_update_listener(
@@ -448,14 +451,31 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _LOGGER.debug("[async_unload_entry] Unloading entry: %s", entry.entry_id)
 
-    # Unload platforms first
+    # Get template sensor names that are still valid
+    create_sensors_list = (
+        hass.data[DOMAIN][DATA_CONFIGURATION][CONF_CREATE_SENSORS]
+    )
+
+    # Remove template sensors that are no longer needed
+    removed = await prune_orphan_template_entities(
+        hass,
+        platform_domain=DOMAIN,
+        entity_domain="sensor",
+        allowed_suffixes=create_sensors_list,
+    )
+    if removed:
+        _LOGGER.debug("[async_unload_entry] Removed orphan template entities: %s", removed)
+
+    # Unload platforms
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if not unload_ok:
         return False
 
     # Remove services registered by this integration
-    hass.services.async_remove(DOMAIN, "geocode_api_on")
-    hass.services.async_remove(DOMAIN, "geocode_api_off")
+    if hass.services.has_service(DOMAIN, "geocode_api_on"):
+        hass.services.async_remove(DOMAIN, "geocode_api_on")
+    if hass.services.has_service(DOMAIN, "geocode_api_off"):
+        hass.services.async_remove(DOMAIN, "geocode_api_off")
 
     # Remove integration object and undo listeners
     pli = hass.data[DOMAIN].pop(entry.entry_id, None)
