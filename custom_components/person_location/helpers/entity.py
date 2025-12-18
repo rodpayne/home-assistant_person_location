@@ -1,24 +1,25 @@
-""" helpers/entity.py - Helpers for entity lifecycle """
+"""helpers/entity.py - Helpers for entity lifecycle"""
 
 import logging
 import re
-
-from homeassistant.helpers import entity_registry as er
 from typing import Iterable
+
 from homeassistant.const import STATE_UNAVAILABLE
+from homeassistant.helpers import entity_registry as er
 
 from ..const import (
-    DOMAIN,
-    DATA_CONFIGURATION,
     CONF_CREATE_SENSORS,
+    DATA_CONFIGURATION,
+    DOMAIN,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
-#-------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------
 
 # Base ends with "_location"; suffix can contain underscores
 _TEMPLATE_RE = re.compile(r"^(?P<base>.+_location)_(?P<suffix>.+)_template$")
+
 
 def _extract_base_and_suffix(unique_id: str) -> tuple[str, str] | None:
     if not unique_id:
@@ -26,16 +27,18 @@ def _extract_base_and_suffix(unique_id: str) -> tuple[str, str] | None:
     m = _TEMPLATE_RE.match(unique_id)
     if not m:
         return None
-    _LOGGER.debug("[_extract_base_and_suffix] base: %s, suffix: %s",
+    _LOGGER.debug(
+        "[_extract_base_and_suffix] base: %s, suffix: %s",
         m.group("base"),
         m.group("suffix"),
     )
     return m.group("base"), m.group("suffix")
 
+
 async def prune_orphan_template_entities(
     hass,
     *,
-    platform_domain: str,            # your integration's domain string in the registry
+    platform_domain: str,  # your integration's domain string in the registry
     entity_domain: str = "sensor",
     allowed_suffixes: Iterable[str],
 ) -> list[str]:
@@ -68,4 +71,5 @@ async def prune_orphan_template_entities(
 
     return removed
 
-#-------------------------------------------------------------------------------
+
+# -------------------------------------------------------------------------------

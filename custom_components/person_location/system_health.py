@@ -28,9 +28,8 @@ def async_register(
     register.async_register_info(system_health_info)
 
 
-async def system_health_info(hass):
+async def system_health_info(hass: HomeAssistant) -> dict:
     """Get system health info (Settings -> System -> Repairs ⋮ System information)."""
-
     return_info = {}
     return_info["Version"] = VERSION
 

@@ -2,73 +2,78 @@
 
 import copy
 import logging
+from typing import Any, Dict, Optional
+
+# from urllib.parse import urlparse
 import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry, OptionsFlow
 from homeassistant.core import callback
-from homeassistant.helpers.aiohttp_client import async_create_clientsession
+from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers import entity_registry as er, selector
+
+# from homeassistant.helpers.aiohttp_client import async_create_clientsession
 import homeassistant.helpers.config_validation as cv
-from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.httpx_client import get_async_client
-from homeassistant.helpers import selector
+
+# from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.template import Template as HATemplate
-from urllib.parse import urlparse
-
-from .helpers.api import PersonLocation_aiohttp_Client
-from .helpers.template import normalize_template
-from .helpers.template import validate_template
-
-from typing import Any, Dict, Optional
 
 from .const import (
-    DOMAIN,
-    DATA_CONFIGURATION,
-    # Data (structural)
-    CONF_GOOGLE_API_KEY,
-    CONF_MAPBOX_API_KEY,
-    CONF_MAPQUEST_API_KEY,
-    CONF_OSM_API_KEY,
-    CONF_RADAR_API_KEY,
-    CONF_DISTANCE_DURATION_SOURCE,
-    CONF_REGION,
-    CONF_LANGUAGE,
-    CONF_OUTPUT_PLATFORM,
+    ALLOWED_OPTIONS_KEYS,
     CONF_CREATE_SENSORS,
     CONF_DEVICES,
-    CONF_PROVIDERS,
-        CONF_NAME,
-        CONF_STATE,
-        CONF_STILL_IMAGE_URL,
+    CONF_DISTANCE_DURATION_SOURCE,
     CONF_FOLLOW_PERSON_INTEGRATION,
-    DEFAULT_API_KEY_NOT_SET,
-    DEFAULT_REGION,
-    DEFAULT_LANGUAGE,
-    DEFAULT_OUTPUT_PLATFORM,
-    VALID_CREATE_SENSORS,
-    VALID_OUTPUT_PLATFORM,
-    # Options (behavioral)
+    CONF_FRIENDLY_NAME_TEMPLATE,
+    CONF_GOOGLE_API_KEY,
     CONF_HOURS_EXTENDED_AWAY,
+    CONF_LANGUAGE,
+    CONF_MAPBOX_API_KEY,
+    CONF_MAPQUEST_API_KEY,
     CONF_MINUTES_JUST_ARRIVED,
     CONF_MINUTES_JUST_LEFT,
+    CONF_NAME,
+    CONF_OSM_API_KEY,
+    CONF_OUTPUT_PLATFORM,
+    CONF_PROVIDERS,
+    CONF_RADAR_API_KEY,
+    CONF_REGION,
     CONF_SHOW_ZONE_WHEN_AWAY,
-    CONF_FRIENDLY_NAME_TEMPLATE,
+    CONF_STATE,
+    CONF_STILL_IMAGE_URL,
+    CONFIG_SCHEMA,
+    DATA_CONFIGURATION,
+    DEFAULT_API_KEY_NOT_SET,
+    DEFAULT_FRIENDLY_NAME_TEMPLATE,
     DEFAULT_HOURS_EXTENDED_AWAY,
+    DEFAULT_LANGUAGE,
     DEFAULT_MINUTES_JUST_ARRIVED,
     DEFAULT_MINUTES_JUST_LEFT,
+    DEFAULT_OUTPUT_PLATFORM,
+    DEFAULT_REGION,
     DEFAULT_SHOW_ZONE_WHEN_AWAY,
-    DEFAULT_FRIENDLY_NAME_TEMPLATE,
+    DOMAIN,
     TITLE_IMPORTED_YAML_CONFIG,
     TITLE_PERSON_LOCATION_CONFIG,
-    CONFIG_SCHEMA,
-    ALLOWED_OPTIONS_KEYS,
+    VALID_CREATE_SENSORS,
+    VALID_OUTPUT_PLATFORM,
 )
+from .helpers.api import (
+    async_get_google_maps_geocoding,
+    async_get_mapbox_static_image,
+    async_get_mapquest_reverse_geocoding,
+    async_get_open_street_map_reverse_geocoding,
+    async_get_radar_reverse_geocoding,
+)
+from .helpers.template import normalize_template, validate_template
 
 CONF_NEW_DEVICE = "new_device_entity"
 CONF_NEW_PERSON_NAME = "new_person_name"
 
 _LOGGER = logging.getLogger(__name__)
 GET_IMAGE_TIMEOUT = 10
+
 
 def _split_conf_data_and_options(conf: dict) -> tuple[dict, dict]:
     _LOGGER.debug("[_split_conf_data_and_options] conf: %s", conf)
@@ -77,9 +82,11 @@ def _split_conf_data_and_options(conf: dict) -> tuple[dict, dict]:
         {k: v for k, v in conf.items() if k in ALLOWED_OPTIONS_KEYS},
     )
 
+
 # ============================================================
 # ConfigFlow — handles DATA (structural configuration)
 # ============================================================
+
 
 class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle initial config flow for Person Location."""
@@ -92,12 +99,12 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         self.integration_config_data = {}
         self._provider_to_edit = None
         self._device_to_edit = None
-        self._source_create = None      # Create new entry at end of flow?
+        self._source_create = None  # Create new entry at end of flow?
 
         self._last_step = None  # Tracks last completed step
         self._step_order = ["geocode", "sensors", "triggers", "providers", "done"]
 
-    async def async_step_user(self, user_input=None):
+    async def async_step_user(self, user_input=None) -> FlowResult:
         """Handle first configuration or when Add Service is clicked."""
         _LOGGER.debug("[async_step_user] user_input = %s", user_input)
 
@@ -106,7 +113,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
         return await self.async_step_menu(user_input)
 
-    async def async_step_reconfigure(self, user_input=None):
+    async def async_step_reconfigure(self, user_input=None) -> FlowResult:
         """Handle reconfigure initiated from the three-dot menu."""
         _LOGGER.debug("[async_step_reconfigure] user_input = %s", user_input)
 
@@ -117,15 +124,8 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         # Jump straight to the menu so the user can pick what to edit
         return await self.async_step_menu(user_input)
 
-    async def async_step_import(self, conf: dict):
-        """Handle configuration from __init__.py async_setup:
-
-            hass.config_entries.flow.async_init(
-                DOMAIN,
-                context={"source": "import"},
-                data=conf,
-            )
-        """
+    async def async_step_import(self, conf: dict) -> FlowResult:
+        """Handle configuration from __init__.py async_setup."""
         _LOGGER.debug("[async_step_import] conf = %s", conf)
 
         title = TITLE_IMPORTED_YAML_CONFIG
@@ -133,7 +133,10 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         # Check for duplicates by title
         for entry in self._async_current_entries():
             if entry.title == title:
-                _LOGGER.debug("[async_step_import] Skipping duplicate with matching title: %s", title)
+                _LOGGER.debug(
+                    "[async_step_import] Skipping duplicate with matching title: %s",
+                    title,
+                )
                 return self.async_abort(reason="already_configured")
 
         conf_data, conf_options = _split_conf_data_and_options(conf)
@@ -141,15 +144,15 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         # Create config entry
         _LOGGER.debug("[async_step_import] Creating entry with title: %s", title)
         return self.async_create_entry(
-            title=title, 
+            title=title,
             data=conf_data,
             options=conf_options,
         )
-    
+
     # ----------------- Menu for Configuration Steps -----------------
 
-    async def async_step_menu(self, user_input=None):
-        """Initial menu for ConfigFlow."""
+    async def async_step_menu(self, user_input=None) -> FlowResult:
+        """Present initial menu for ConfigFlow."""
         _LOGGER.debug("[async_step_menu] user_input = %s", user_input)
 
         if not self.config_entry_data:
@@ -174,7 +177,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 return await self.async_step_providers()
             if choice == "done":
                 return await self._async_save_integration_config_data()
-            
+
         default_choice = "geocode"
         if self._last_step in self._step_order:
             idx = self._step_order.index(self._last_step)
@@ -185,26 +188,32 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="menu",
             data_schema=vol.Schema(
                 {
-                    vol.Required("menu_selection", default=default_choice): vol.In({
-                        "geocode": "Geocode API keys, region, language",
-                        "sensors": "Sensors to be created",
-                        "triggers": "Manage triggers/devices",
-                        "providers": "Manage map camera providers",
-                        "done": "Save and exit configuration setup",
-                    })
+                    vol.Required("menu_selection", default=default_choice): vol.In(
+                        {
+                            "geocode": "Geocode API keys, region, language",
+                            "sensors": "Sensors to be created",
+                            "triggers": "Manage triggers/devices",
+                            "providers": "Manage map camera providers",
+                            "done": "Save and exit configuration setup",
+                        }
+                    )
                 }
-            )
+            ),
         )
-    
+
     # ----------------- Geocode: API keys, region, language -----------------
 
-    async def async_step_geocode(self, user_input=None):
+    async def async_step_geocode(self, user_input=None) -> FlowResult:
         """Step: Collect API keys, region, language."""
         _LOGGER.debug("[async_step_geocode] user_input = %s", user_input)
 
+        self._errors = {}
+
         if user_input is not None:
             valid1 = await self._test_google_api_key(user_input[CONF_GOOGLE_API_KEY])
-            valid2 = await self._test_mapquest_api_key(user_input[CONF_MAPQUEST_API_KEY])
+            valid2 = await self._test_mapquest_api_key(
+                user_input[CONF_MAPQUEST_API_KEY]
+            )
             valid3 = await self._test_osm_api_key(user_input[CONF_OSM_API_KEY])
             valid4 = await self._test_mapbox_api_key(user_input[CONF_MAPBOX_API_KEY])
             valid5 = await self._test_radar_api_key(user_input[CONF_RADAR_API_KEY])
@@ -215,17 +224,29 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             return await self._async_show_config_geocode_form(user_input)
 
         user_input = {
-            CONF_GOOGLE_API_KEY: self.integration_config_data.get(CONF_GOOGLE_API_KEY, DEFAULT_API_KEY_NOT_SET),
-            CONF_LANGUAGE: self.integration_config_data.get(CONF_LANGUAGE, DEFAULT_LANGUAGE),
-            CONF_MAPBOX_API_KEY: self.integration_config_data.get(CONF_MAPBOX_API_KEY, DEFAULT_API_KEY_NOT_SET),
-            CONF_MAPQUEST_API_KEY: self.integration_config_data.get(CONF_MAPQUEST_API_KEY, DEFAULT_API_KEY_NOT_SET),
-            CONF_OSM_API_KEY: self.integration_config_data.get(CONF_OSM_API_KEY, DEFAULT_API_KEY_NOT_SET),
-            CONF_RADAR_API_KEY: self.integration_config_data.get(CONF_RADAR_API_KEY, DEFAULT_API_KEY_NOT_SET),
+            CONF_GOOGLE_API_KEY: self.integration_config_data.get(
+                CONF_GOOGLE_API_KEY, DEFAULT_API_KEY_NOT_SET
+            ),
+            CONF_LANGUAGE: self.integration_config_data.get(
+                CONF_LANGUAGE, DEFAULT_LANGUAGE
+            ),
+            CONF_MAPBOX_API_KEY: self.integration_config_data.get(
+                CONF_MAPBOX_API_KEY, DEFAULT_API_KEY_NOT_SET
+            ),
+            CONF_MAPQUEST_API_KEY: self.integration_config_data.get(
+                CONF_MAPQUEST_API_KEY, DEFAULT_API_KEY_NOT_SET
+            ),
+            CONF_OSM_API_KEY: self.integration_config_data.get(
+                CONF_OSM_API_KEY, DEFAULT_API_KEY_NOT_SET
+            ),
+            CONF_RADAR_API_KEY: self.integration_config_data.get(
+                CONF_RADAR_API_KEY, DEFAULT_API_KEY_NOT_SET
+            ),
             CONF_REGION: self.integration_config_data.get(CONF_REGION, DEFAULT_REGION),
         }
         return await self._async_show_config_geocode_form(user_input)
 
-    async def _async_show_config_geocode_form(self, user_input):
+    async def _async_show_config_geocode_form(self, user_input) -> FlowResult:
         """Show the initial form for API keys and geocoding settings."""
         return self.async_show_form(
             step_id="geocode",
@@ -233,17 +254,27 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 {
                     vol.Optional(CONF_LANGUAGE, default=user_input[CONF_LANGUAGE]): str,
                     vol.Optional(CONF_REGION, default=user_input[CONF_REGION]): str,
-                    vol.Optional(CONF_GOOGLE_API_KEY, default=user_input[CONF_GOOGLE_API_KEY]): str,
-                    vol.Optional(CONF_MAPBOX_API_KEY, default=user_input[CONF_MAPBOX_API_KEY]): str,
-                    vol.Optional(CONF_MAPQUEST_API_KEY, default=user_input[CONF_MAPQUEST_API_KEY]): str,
-                    vol.Optional(CONF_OSM_API_KEY, default=user_input[CONF_OSM_API_KEY]): str,
-                    vol.Optional(CONF_RADAR_API_KEY, default=user_input[CONF_RADAR_API_KEY]): str,
+                    vol.Optional(
+                        CONF_GOOGLE_API_KEY, default=user_input[CONF_GOOGLE_API_KEY]
+                    ): str,
+                    vol.Optional(
+                        CONF_MAPBOX_API_KEY, default=user_input[CONF_MAPBOX_API_KEY]
+                    ): str,
+                    vol.Optional(
+                        CONF_MAPQUEST_API_KEY, default=user_input[CONF_MAPQUEST_API_KEY]
+                    ): str,
+                    vol.Optional(
+                        CONF_OSM_API_KEY, default=user_input[CONF_OSM_API_KEY]
+                    ): str,
+                    vol.Optional(
+                        CONF_RADAR_API_KEY, default=user_input[CONF_RADAR_API_KEY]
+                    ): str,
                 }
             ),
             errors=self._errors,
         )
 
-    async def async_step_source(self, user_input=None):
+    async def async_step_source(self, user_input=None) -> FlowResult:
         """Step: Select source for driving distance and duration."""
         _LOGGER.debug("[async_step_source] user_input = %s", user_input)
 
@@ -263,8 +294,8 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             {"label": "Waze integration / pywaze", "value": "waze"},
             {"label": "None", "value": "none"},
         ]
-    #    if osm_key != DEFAULT_API_KEY_NOT_SET:
-    #        options.insert(1, {"label": "Open Street Maps", "value": "osm"})
+        #    if osm_key != DEFAULT_API_KEY_NOT_SET:
+        #        options.insert(1, {"label": "Open Street Maps", "value": "osm"})
         if google_key != DEFAULT_API_KEY_NOT_SET:
             options.insert(1, {"label": "Google Maps", "value": "google_maps"})
         if mapbox_key != DEFAULT_API_KEY_NOT_SET:
@@ -273,22 +304,30 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             options.insert(1, {"label": "Radar", "value": "radar"})
 
         # Get previous selection or default to "waze"
-        previous_selection = self._user_input.get(CONF_DISTANCE_DURATION_SOURCE,
-        self.integration_config_data.get(CONF_DISTANCE_DURATION_SOURCE, "waze"))
+        previous_selection = self._user_input.get(
+            CONF_DISTANCE_DURATION_SOURCE,
+            self.integration_config_data.get(CONF_DISTANCE_DURATION_SOURCE, "waze"),
+        )
 
         return self.async_show_form(
             step_id="source",
-            data_schema=vol.Schema({
-                vol.Required(CONF_DISTANCE_DURATION_SOURCE, default=previous_selection): selector.SelectSelector({
-                    "options": options,
-                    "mode": "list"  # Radio buttons
-                })
-            }),
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_DISTANCE_DURATION_SOURCE, default=previous_selection
+                    ): selector.SelectSelector(
+                        {
+                            "options": options,
+                            "mode": "list",  # Radio buttons
+                        }
+                    )
+                }
+            ),
         )
 
     # ----------------- Sensors to be created -----------------
 
-    async def async_step_sensors(self, user_input=None):
+    async def async_step_sensors(self, user_input=None) -> FlowResult:
         """Step: Collect sensor creation and output platform, with cleanup support."""
         _LOGGER.debug("[async_step_sensors] user_input = %s", user_input)
 
@@ -315,18 +354,19 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             # │    Only prune sensors ending in "_template"   │
             # └───────────────────────────────────────────────┘
 
-            # TODO: look at doing this in _async_save_integration_config_data when 
+            # TODO: look at doing this in _async_save_integration_config_data when
             #   committed to making the update? Only remove for the ones that were
             #   removed from the create_sensors list?
 
             if not create_sensors_list:
                 registry = er.async_get(self.hass)
                 for entity_id, entry in list(registry.entities.items()):
-                    if (
-                        entry.platform == DOMAIN
-                        and entry.unique_id.endswith("_template")
+                    if entry.platform == DOMAIN and entry.unique_id.endswith(
+                        "_template"
                     ):
-                        _LOGGER.debug("Removing orphaned template sensor entity: %s", entity_id)
+                        _LOGGER.debug(
+                            "Removing orphaned template sensor entity: %s", entity_id
+                        )
                         registry.async_remove(entity_id)
 
             return await self.async_step_menu()
@@ -340,19 +380,22 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         if CONF_CREATE_SENSORS in self._user_input:
             existing_sensors = set(self._user_input[CONF_CREATE_SENSORS])
         else:
-            existing_sensors = set(self.integration_config_data.get(CONF_CREATE_SENSORS, []))
+            existing_sensors = set(
+                self.integration_config_data.get(CONF_CREATE_SENSORS, [])
+            )
 
         user_input = {
             CONF_OUTPUT_PLATFORM: self._user_input.get(
                 CONF_OUTPUT_PLATFORM,
-                self.integration_config_data.get(CONF_OUTPUT_PLATFORM, DEFAULT_OUTPUT_PLATFORM),
+                self.integration_config_data.get(
+                    CONF_OUTPUT_PLATFORM, DEFAULT_OUTPUT_PLATFORM
+                ),
             ),
             **{sensor: sensor in existing_sensors for sensor in VALID_CREATE_SENSORS},
         }
         return await self._show_config_sensors_form(user_input)
 
-
-    async def _show_config_sensors_form(self, user_input):
+    async def _show_config_sensors_form(self, user_input) -> FlowResult:
         """Show the form for sensor creation and output platform."""
         # ┌───────────────────────────────────────────────┐
         # │ Form schema                                   │
@@ -360,15 +403,17 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         # │ - Platform: optional, with safe default       │
         # └───────────────────────────────────────────────┘
         data_schema = {
-            #vol.Optional(
+            # vol.Optional(
             #    CONF_OUTPUT_PLATFORM,
             #    default=user_input.get(CONF_OUTPUT_PLATFORM, DEFAULT_OUTPUT_PLATFORM),
-            #): vol.In(VALID_OUTPUT_PLATFORM),
+            # ): vol.In(VALID_OUTPUT_PLATFORM),
         }
 
         # Add a boolean toggle for each valid sensor
         for sensor in VALID_CREATE_SENSORS:
-            data_schema[vol.Optional(sensor, default=user_input.get(sensor, False))] = bool
+            data_schema[vol.Optional(sensor, default=user_input.get(sensor, False))] = (
+                bool
+            )
 
         return self.async_show_form(
             step_id="sensors",
@@ -378,7 +423,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     # ----------------- Triggers: Manage triggers/devices -----------------
 
-    async def async_step_triggers(self, user_input=None):
+    async def async_step_triggers(self, user_input=None) -> FlowResult:
         """Manage triggers list: pairs of device entities/person names."""
         _LOGGER.debug("[async_step_triggers] user_input = %s", user_input)
 
@@ -389,42 +434,60 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         return_to_menu_choice = "🔙 Return to menu"
 
         # Note: devices = dict of {entity_id: person_name}
-        devices = self._user_input.get(CONF_DEVICES, self.integration_config_data.get(CONF_DEVICES, {}))
+        devices = self._user_input.get(
+            CONF_DEVICES, self.integration_config_data.get(CONF_DEVICES, {})
+        )
         if not devices:
             devices = {}
         _LOGGER.debug("[async_step_triggers] devices = %s", devices)
 
         if user_input is None:
             self._valid_device_entities = [skip_add_device_choice]
-            self._valid_device_entities.extend(sorted(self.hass.states.async_entity_ids("device_tracker")))
-            self._valid_device_entities.extend(sorted(self.hass.states.async_entity_ids("binary_sensor")))
-            self._valid_device_entities.extend(sorted(self.hass.states.async_entity_ids("person")))
-            # Add "" to the list so that clicking "X" to clear a choice does not result 
+            self._valid_device_entities.extend(
+                sorted(self.hass.states.async_entity_ids("device_tracker"))
+            )
+            self._valid_device_entities.extend(
+                sorted(self.hass.states.async_entity_ids("binary_sensor"))
+            )
+            self._valid_device_entities.extend(
+                sorted(self.hass.states.async_entity_ids("person"))
+            )
+            # Add "" to the list so that clicking "X" to clear a choice does not result
             #   in a long, long error message.
             self._valid_device_entities.append("")
 
             user_input = {
                 CONF_FOLLOW_PERSON_INTEGRATION: self._user_input.get(
                     CONF_FOLLOW_PERSON_INTEGRATION,
-                    self.integration_config_data.get(CONF_FOLLOW_PERSON_INTEGRATION, False)
+                    self.integration_config_data.get(
+                        CONF_FOLLOW_PERSON_INTEGRATION, False
+                    ),
                 ),
                 CONF_NEW_DEVICE: skip_add_device_choice,
-                CONF_NEW_PERSON_NAME: ""
+                CONF_NEW_PERSON_NAME: "",
             }
 
         else:
             # Persist follow_person_integration setting
             if CONF_FOLLOW_PERSON_INTEGRATION in user_input:
-                self._user_input[CONF_FOLLOW_PERSON_INTEGRATION] = user_input[CONF_FOLLOW_PERSON_INTEGRATION]
+                self._user_input[CONF_FOLLOW_PERSON_INTEGRATION] = user_input[
+                    CONF_FOLLOW_PERSON_INTEGRATION
+                ]
             else:
-                user_input[CONF_FOLLOW_PERSON_INTEGRATION] = self._user_input.get(CONF_FOLLOW_PERSON_INTEGRATION, False)
+                user_input[CONF_FOLLOW_PERSON_INTEGRATION] = self._user_input.get(
+                    CONF_FOLLOW_PERSON_INTEGRATION, False
+                )
 
             soft_return = False
 
             new_device = user_input.get(CONF_NEW_DEVICE, "").strip()
             new_person = user_input.get(CONF_NEW_PERSON_NAME, "").strip()
 
-            if CONF_NEW_DEVICE in user_input and new_device and new_device != skip_add_device_choice:
+            if (
+                CONF_NEW_DEVICE in user_input
+                and new_device
+                and new_device != skip_add_device_choice
+            ):
                 if new_device in devices.keys():
                     self._errors[CONF_NEW_DEVICE] = "duplicate_device"
                 elif not new_person:
@@ -452,8 +515,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 return await self.async_step_menu()
 
         existing_names = {
-            device: f"{device} = {devices[device]}"
-            for device in devices.keys()
+            device: f"{device} = {devices[device]}" for device in devices.keys()
         }
         _LOGGER.debug("[async_step_triggers] existing_names = %s", existing_names)
 
@@ -464,33 +526,43 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="triggers",
-            data_schema=vol.Schema({
-                vol.Optional(
-                    CONF_FOLLOW_PERSON_INTEGRATION,
-                    default=self._user_input.get(CONF_FOLLOW_PERSON_INTEGRATION, False)
-                ): bool,
-                vol.Optional(
-                    CONF_NEW_DEVICE,
-                    default=user_input[CONF_NEW_DEVICE],
-                ): vol.In(self._valid_device_entities),
-                vol.Optional(
-                    CONF_NEW_PERSON_NAME,
-                    default=user_input[CONF_NEW_PERSON_NAME],
-                ): str,
-                vol.Required("device_choice", default=return_to_menu): vol.In(choices),
-            }),
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        CONF_FOLLOW_PERSON_INTEGRATION,
+                        default=self._user_input.get(
+                            CONF_FOLLOW_PERSON_INTEGRATION, False
+                        ),
+                    ): bool,
+                    vol.Optional(
+                        CONF_NEW_DEVICE,
+                        default=user_input[CONF_NEW_DEVICE],
+                    ): vol.In(self._valid_device_entities),
+                    vol.Optional(
+                        CONF_NEW_PERSON_NAME,
+                        default=user_input[CONF_NEW_PERSON_NAME],
+                    ): str,
+                    vol.Required("device_choice", default=return_to_menu): vol.In(
+                        choices
+                    ),
+                }
+            ),
             description_placeholders={
-                "existing": ", ".join(existing_names.values()) if existing_names else "None"
+                "existing": ", ".join(existing_names.values())
+                if existing_names
+                else "None"
             },
             errors=self._errors,
         )
 
-    async def async_step_trigger_edit(self, user_input=None):
+    async def async_step_trigger_edit(self, user_input=None) -> FlowResult:
         """Edit an existing device (update/remove)."""
         _LOGGER.debug("[async_step_trigger_edit] user_input = %s", user_input)
 
         # Note: devices = dict of {entity_id: person_name}
-        devices = self._user_input.get(CONF_DEVICES, self.integration_config_data.get(CONF_DEVICES, []))
+        devices = self._user_input.get(
+            CONF_DEVICES, self.integration_config_data.get(CONF_DEVICES, [])
+        )
         device = self._device_to_edit
         if device not in devices:
             return await self.async_step_triggers()
@@ -501,26 +573,31 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is None:
             user_input = {
                 CONF_NEW_DEVICE: device,
-                CONF_NEW_PERSON_NAME: devices[device]
+                CONF_NEW_PERSON_NAME: devices[device],
             }
             # A non-existent device could come from YAML...
             self._valid_device_entities_plus_device_to_edit = []
-            self._valid_device_entities_plus_device_to_edit.extend(self._valid_device_entities)
+            self._valid_device_entities_plus_device_to_edit.extend(
+                self._valid_device_entities
+            )
             self._valid_device_entities_plus_device_to_edit.append(self._device_to_edit)
 
         else:
-
             new_device_name = user_input.get(CONF_NEW_DEVICE, "").strip()
             new_person_name = user_input.get(CONF_NEW_PERSON_NAME, "").strip()
 
             action = user_input.get("edit_action")
             if action == removeLabel:
                 old_device_entry = devices.pop(device)
-                _LOGGER.debug("[async_step_trigger_edit] devices after remove = %s", devices)
+                _LOGGER.debug(
+                    "[async_step_trigger_edit] devices after remove = %s", devices
+                )
             elif action == updateLabel:
                 x = devices.pop(device)
                 devices[new_device_name] = new_person_name
-                _LOGGER.debug("[async_step_trigger_edit] devices after update = %s", devices)
+                _LOGGER.debug(
+                    "[async_step_trigger_edit] devices after update = %s", devices
+                )
             self._user_input[CONF_DEVICES] = devices
             return await self.async_step_triggers()
 
@@ -528,10 +605,9 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="trigger_edit",
             data_schema=vol.Schema(
                 {
-                    vol.Required(
-                        "edit_action",
-                        default=updateLabel
-                    ): vol.In([updateLabel, removeLabel]),
+                    vol.Required("edit_action", default=updateLabel): vol.In(
+                        [updateLabel, removeLabel]
+                    ),
                     vol.Optional(
                         CONF_NEW_DEVICE,
                         default=user_input[CONF_NEW_DEVICE],
@@ -548,19 +624,21 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     # ----------------- Providers: Manage map cameras -----------------
 
-    async def async_step_providers(self, user_input=None):
+    async def async_step_providers(self, user_input=None) -> FlowResult:
         """Step: Manage providers list (structural)."""
         _LOGGER.debug("[async_step_providers] user_input = %s", user_input)
 
         # Note: providers = list of dicts with keys name, state, url
-        providers = self._user_input.get(CONF_PROVIDERS, self.integration_config_data.get(CONF_PROVIDERS, []))
+        providers = self._user_input.get(
+            CONF_PROVIDERS, self.integration_config_data.get(CONF_PROVIDERS, [])
+        )
         existing_names = {p["name"]: p["name"] for p in providers}
         _LOGGER.debug("[async_step_providers] providers = %s", providers)
         _LOGGER.debug("[async_step_providers] existing_names = %s", existing_names)
 
         cfg = self.hass.data[DOMAIN][DATA_CONFIGURATION]
         self._camera_template_variables = {
-            "parse_result": False,      # TODO: Investigate whether parse_result belongs here.
+            "parse_result": False,  # TODO: Investigate whether parse_result belongs here.
             "google_api_key": cfg[CONF_GOOGLE_API_KEY],
             "mapbox_api_key": cfg[CONF_MAPBOX_API_KEY],
             "mapquest_api_key": cfg[CONF_MAPQUEST_API_KEY],
@@ -597,16 +675,17 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             errors=self._errors,
         )
 
-    async def async_step_provider_add(self, user_input=None):
+    async def async_step_provider_add(self, user_input=None) -> FlowResult:
         """Add a new provider."""
-
         _LOGGER.debug("[async_step_provider_add] user_input = %s", user_input)
 
         errors = {}
         placeholders = {}
 
         # Note: providers = list of dicts with keys name, state, url
-        providers = self._user_input.get(CONF_PROVIDERS, self.integration_config_data.get(CONF_PROVIDERS, []))
+        providers = self._user_input.get(
+            CONF_PROVIDERS, self.integration_config_data.get(CONF_PROVIDERS, [])
+        )
 
         if user_input is None:
             user_input = {
@@ -615,24 +694,26 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_STILL_IMAGE_URL: "",
             }
         else:
-            new_provider_name = user_input.get(CONF_NAME,"").strip()
+            new_provider_name = user_input.get(CONF_NAME, "").strip()
 
             raw_provider_state = user_input.get(CONF_STATE, "")
             new_provider_state = normalize_template(raw_provider_state)
-            
+
             raw_provider_url = user_input.get(CONF_STILL_IMAGE_URL, "")
             new_provider_url = normalize_template(raw_provider_url)
 
-            if (new_provider_name or new_provider_state or new_provider_url):
+            if new_provider_name or new_provider_state or new_provider_url:
                 if not new_provider_name:
                     errors[CONF_NAME] = "missing_three"
-                elif any(p["name"].lower() == new_provider_name.lower() for p in providers):
+                elif any(
+                    p["name"].lower() == new_provider_name.lower() for p in providers
+                ):
                     errors[CONF_NAME] = "duplicate_name"
                 if not new_provider_state:
                     errors[CONF_STATE] = "missing_three"
                 if not new_provider_url:
                     errors[CONF_STILL_IMAGE_URL] = "missing_three"
-                
+
                 if not errors:
                     # Validate 'state' template
                     v1 = await validate_template(
@@ -646,7 +727,9 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                         placeholders["state_error"] = v1["error"]
                     elif v1["missing_entities"]:
                         # Not fatal, but useful feedback
-                        placeholders["state_missing"] = ", ".join(v1["missing_entities"])
+                        placeholders["state_missing"] = ", ".join(
+                            v1["missing_entities"]
+                        )
 
                     # Validate 'still_image_url' template as a URL
                     v2 = await validate_template(
@@ -660,7 +743,6 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                         placeholders["url_error"] = v2["error"]
 
                     if not errors:
-                    
                         self._provider_to_edit = new_provider_name
                         new_provider = {
                             CONF_NAME: user_input[CONF_NAME],
@@ -687,33 +769,37 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="provider_add",
-            data_schema=vol.Schema({
-                vol.Optional(CONF_NAME,
-                    default=user_input.get(CONF_NAME, "")
-                ): str,
-                vol.Optional(CONF_STATE,
-                    default=user_input.get(CONF_STATE, "")
-                ): selector.TextSelector(
-                    selector.TextSelectorConfig(multiline=True)
-                ),
-                vol.Optional(CONF_STILL_IMAGE_URL,
-                    default=user_input.get(CONF_STILL_IMAGE_URL, "")
-                ): selector.TextSelector(
-                    selector.TextSelectorConfig(multiline=True)
-                ),
-            }),
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(CONF_NAME, default=user_input.get(CONF_NAME, "")): str,
+                    vol.Optional(
+                        CONF_STATE, default=user_input.get(CONF_STATE, "")
+                    ): selector.TextSelector(
+                        selector.TextSelectorConfig(multiline=True)
+                    ),
+                    vol.Optional(
+                        CONF_STILL_IMAGE_URL,
+                        default=user_input.get(CONF_STILL_IMAGE_URL, ""),
+                    ): selector.TextSelector(
+                        selector.TextSelectorConfig(multiline=True)
+                    ),
+                }
+            ),
             description_placeholders=placeholders,
             errors=errors,
         )
 
-    async def async_step_provider_edit(self, user_input=None):
+    async def async_step_provider_edit(self, user_input=None) -> FlowResult:
         """Edit an existing map provider (update/remove)."""
-        
         _LOGGER.debug("[async_step_provider_edit] user_input = %s", user_input)
 
         # Note: providers = list of dicts with keys name, state, url
-        providers = self._user_input.get(CONF_PROVIDERS, self.integration_config_data.get(CONF_PROVIDERS, []))
-        provider = next((p for p in providers if p["name"] == self._provider_to_edit), None)
+        providers = self._user_input.get(
+            CONF_PROVIDERS, self.integration_config_data.get(CONF_PROVIDERS, [])
+        )
+        provider = next(
+            (p for p in providers if p["name"] == self._provider_to_edit), None
+        )
         if not provider:
             return await self.async_step_providers()
 
@@ -741,9 +827,13 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             if action == removeLabel:
                 providers.remove(provider)
             elif action == updateLabel:
-
                 # Validate 'state' template
-                v1 = await validate_template(self.hass,new_state,self._camera_template_variables, expected="text")
+                v1 = await validate_template(
+                    self.hass,
+                    new_state,
+                    self._camera_template_variables,
+                    expected="text",
+                )
                 if not v1["ok"]:
                     errors[CONF_STATE] = "invalid_state_template"
                     placeholders["state_error"] = v1["error"]
@@ -752,7 +842,12 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     placeholders["state_missing"] = ", ".join(v1["missing_entities"])
 
                 # Validate 'still_image_url' template as a URL
-                v2 = await validate_template(self.hass,new_still_image_url,self._camera_template_variables, expected="url")
+                v2 = await validate_template(
+                    self.hass,
+                    new_still_image_url,
+                    self._camera_template_variables,
+                    expected="url",
+                )
                 if not v2["ok"]:
                     errors[CONF_STILL_IMAGE_URL] = "invalid_url_template"
                     placeholders["url_error"] = v2["error"]
@@ -761,12 +856,10 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     placeholders["url_missing"] = ", ".join(v2["missing_entities"])
 
                 if not errors:
-
                     provider[CONF_STATE] = user_input[CONF_STATE]
                     provider[CONF_STILL_IMAGE_URL] = user_input[CONF_STILL_IMAGE_URL]
 
             if not errors:
-
                 self._user_input[CONF_PROVIDERS] = providers
                 return await self.async_step_provider_preview()
 
@@ -780,19 +873,17 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="provider_edit",
             data_schema=vol.Schema(
                 {
-                    vol.Required(
-                        "edit_action",
-                        default=action
-                    ): vol.In([updateLabel, removeLabel]),
+                    vol.Required("edit_action", default=action): vol.In(
+                        [updateLabel, removeLabel]
+                    ),
                     vol.Optional(
-                        CONF_STATE,
-                        default=user_input.get(CONF_STATE, "")
+                        CONF_STATE, default=user_input.get(CONF_STATE, "")
                     ): selector.TextSelector(
                         selector.TextSelectorConfig(multiline=True)
                     ),
                     vol.Optional(
                         CONF_STILL_IMAGE_URL,
-                        default=user_input.get(CONF_STILL_IMAGE_URL, "")
+                        default=user_input.get(CONF_STILL_IMAGE_URL, ""),
                     ): selector.TextSelector(
                         selector.TextSelectorConfig(multiline=True)
                     ),
@@ -802,18 +893,21 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_provider_preview(self, user_input=None):
+    async def async_step_provider_preview(self, user_input=None) -> FlowResult:
         """Preview an existing map provider."""
-        
         _LOGGER.debug("[async_step_provider_prieview] user_input = %s", user_input)
 
         # Note: providers = list of dicts with keys name, state, url
-        providers = self._user_input.get(CONF_PROVIDERS, self.integration_config_data.get(CONF_PROVIDERS, []))
-        provider = next((p for p in providers if p["name"] == self._provider_to_edit), None)
+        providers = self._user_input.get(
+            CONF_PROVIDERS, self.integration_config_data.get(CONF_PROVIDERS, [])
+        )
+        provider = next(
+            (p for p in providers if p["name"] == self._provider_to_edit), None
+        )
         if not provider:
             return await self.async_step_providers()
 
-        provider_name = provider.get(CONF_NAME,"")
+        provider_name = provider.get(CONF_NAME, "")
 
         raw_state = provider.get(CONF_STATE, "")
         provider_state = normalize_template(raw_state)
@@ -838,16 +932,16 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         }
         edit_this_provider = "__edit__"
         edit_this_provider_choice = "🖊️ Edit this provider"
-        
+
         add_new_provider = "__add__"
         add_new_provider_choice = "➕ Add new provider"
 
         return_to_menu = "__return__"
         return_to_menu_choice = "🔙 Return to Map Camera List"
-        
+
         return_to_main_menu = "__main__"
         return_to_main_menu_choice = "🔙 🔙 Return to Configuration Menu"
-        
+
         choices = {
             edit_this_provider: edit_this_provider_choice,
             add_new_provider: add_new_provider_choice,
@@ -856,7 +950,9 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         }
 
         # Validate 'state' template
-        v1 = await validate_template(self.hass,provider_state,self._camera_template_variables, expected="text")
+        v1 = await validate_template(
+            self.hass, provider_state, self._camera_template_variables, expected="text"
+        )
         if not v1["ok"]:
             errors[CONF_STATE] = "invalid_state_template"
             placeholders["provider_state_preview"] = v1["error"]
@@ -864,10 +960,14 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             placeholders["provider_state_preview"] = v1["rendered"]
             if v1["missing_entities"]:
                 # Not fatal, but useful feedback
-                placeholders["state_missing_entities"] = "⚠ Missing entities: " + ", ".join(v1["missing_entities"])
+                placeholders["state_missing_entities"] = (
+                    "⚠ Missing entities: " + ", ".join(v1["missing_entities"])
+                )
 
         # Validate 'still_image_url' template as a URL
-        v2 = await validate_template(self.hass,provider_url,self._camera_template_variables, expected="url")
+        v2 = await validate_template(
+            self.hass, provider_url, self._camera_template_variables, expected="url"
+        )
         if not v2["ok"]:
             errors[CONF_STILL_IMAGE_URL] = "invalid_url_template"
             placeholders["provider_url_preview"] = v2["error"]
@@ -875,7 +975,9 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             placeholders["provider_url_preview"] = v2["rendered"]
             if v2["missing_entities"]:
                 # Not fatal, but useful feedback
-                placeholders["url_missing_entities"] = "⚠ Missing entities: " + ", ".join(v2["missing_entities"])
+                placeholders["url_missing_entities"] = (
+                    "⚠ Missing entities: " + ", ".join(v2["missing_entities"])
+                )
 
         if user_input is None:
             user_input = {
@@ -894,7 +996,6 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     return await self.async_step_providers()
                 if action == return_to_main_menu:
                     return await self.async_step_menu()
-            
 
         _LOGGER.debug(
             "[async_step_provider_preview] user_input=%s, errors=%s, placeholders=%s",
@@ -907,10 +1008,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="provider_preview",
             data_schema=vol.Schema(
                 {
-                    vol.Required(
-                        "next_action",
-                        default=action
-                    ): vol.In(choices),
+                    vol.Required("next_action", default=action): vol.In(choices),
                 }
             ),
             description_placeholders=placeholders,
@@ -919,14 +1017,14 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     # ----------------- Helpers -----------------
 
-    def _load_previous_integration_config_data(self):
+    def _load_previous_integration_config_data(self) -> None:
         """Load any existing config entry data/options into memory."""
         entries = self._async_current_entries()
         if entries:
             _LOGGER.debug(
-                "[_load_previous_integration_config_data] loading config entry, " \
+                "[_load_previous_integration_config_data] loading config entry, "
                 "self.source = %s",
-                self.source
+                self.source,
             )
             self._source_create = False
             self.config_entry = entries[0]
@@ -934,41 +1032,47 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             self.config_entry_options = copy.deepcopy(dict(self.config_entry.options))
         else:
             _LOGGER.debug(
-                "[_load_previous_integration_config_data] No previous configuration, " \
+                "[_load_previous_integration_config_data] No previous configuration, "
                 "self.source = %s",
-                self.source
+                self.source,
             )
             self._source_create = True
             self.config_entry = None
 
             # Get YAML conf defaults
-            default_conf = CONFIG_SCHEMA({DOMAIN: {} })[DOMAIN]
+            default_conf = CONFIG_SCHEMA({DOMAIN: {}})[DOMAIN]
 
-            self.config_entry_data, self.config_entry_options = _split_conf_data_and_options(default_conf)
+            self.config_entry_data, self.config_entry_options = (
+                _split_conf_data_and_options(default_conf)
+            )
 
         _LOGGER.debug(
-            "[_load_previous_integration_config_data] " \
-            "self.config_entry_data = %s",
-            self.config_entry_data
+            "[_load_previous_integration_config_data] self.config_entry_data = %s",
+            self.config_entry_data,
         )
         _LOGGER.debug(
-            "[_load_previous_integration_config_data] " \
-            "self.config_entry_options = %s",
-            self.config_entry_options
+            "[_load_previous_integration_config_data] self.config_entry_options = %s",
+            self.config_entry_options,
         )
 
         if self.hass:
-            self.integration_config_data = self.hass.data.get(DOMAIN, {}).get(DATA_CONFIGURATION, {})
+            self.integration_config_data = self.hass.data.get(DOMAIN, {}).get(
+                DATA_CONFIGURATION, {}
+            )
         else:
             self.integration_config_data = {}
 
-    async def _async_save_integration_config_data(self):
+    async def _async_save_integration_config_data(self) -> None:
         """Save collected user_input into the config entry.
 
         - On first install: create a new entry
         - On reconfigure: update the existing entry
         """
-        if not self._source_create and self.config_entry and self.config_entry.title == TITLE_PERSON_LOCATION_CONFIG:
+        if (
+            not self._source_create
+            and self.config_entry
+            and self.config_entry.title == TITLE_PERSON_LOCATION_CONFIG
+        ):
             _LOGGER.debug(
                 "[_async_save_integration_config_data] updating existing entry, source=%s, entry_id=%s, data=%s",
                 self.source,
@@ -998,62 +1102,50 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 title=TITLE_PERSON_LOCATION_CONFIG,
                 data=self._user_input,
             )
-    
-    # ----------------- API Key Tests -----------------
 
-    async def _test_google_api_key(self, key):
+    # ----------------- API Key Validity Tests -----------------
 
+    async def _test_google_api_key(self, key: str) -> bool:
         if key == DEFAULT_API_KEY_NOT_SET:
             return True
-        try:
-            latitude = self.hass.config.latitude
-            longitude = self.hass.config.longitude
-            url = f"https://maps.googleapis.com/maps/api/geocode/json?latlng={latitude},{longitude}&key={key}"
-            session = async_create_clientsession(self.hass)
-            client = PersonLocation_aiohttp_Client(session)
-            resp = await client.async_get_data("get", url)
-            return resp.get("status") == "OK"
-        except Exception as e:
-            _LOGGER.debug("Google API key test failed: %s", e)
-        self._errors[CONF_GOOGLE_API_KEY] = "invalid_key"
-        return False
+        latitude = self.hass.config.latitude
+        longitude = self.hass.config.longitude
+        resp = await async_get_google_maps_geocoding(
+            self.hass, key, latitude, longitude
+        )
+        if resp.get("ok"):
+            return True
+        else:
+            self._errors[CONF_GOOGLE_API_KEY] = "invalid_key"
+            return False
 
-    async def _test_mapbox_api_key(self, key):
-
+    async def _test_mapbox_api_key(self, key: str) -> bool:
         if key == DEFAULT_API_KEY_NOT_SET:
             return True
-        try:
-            latitude = self.hass.config.latitude
-            longitude = self.hass.config.longitude
-            url = f"https://api.mapbox.com/styles/v1/mapbox/streets-v11/static/{longitude},{latitude},5,0/300x200?access_token={key}"
-            async_client = get_async_client(self.hass)
-            response = await async_client.get(url, timeout=GET_IMAGE_TIMEOUT)
-            response.raise_for_status()
-            await response.aclose()
+        latitude = self.hass.config.latitude
+        longitude = self.hass.config.longitude
+        resp = await async_get_mapbox_static_image(self.hass, key, latitude, longitude)
+        if resp.get("ok"):
             return True
-        except Exception as e:
-            _LOGGER.debug("Mapbox API key test failed: %s", e)
-        self._errors[CONF_MAPBOX_API_KEY] = "invalid_key"
-        return False
+        else:
+            self._errors[CONF_MAPBOX_API_KEY] = "invalid_key"
+            return False
 
-    async def _test_mapquest_api_key(self, key):
-
+    async def _test_mapquest_api_key(self, key: str) -> bool:
         if key == DEFAULT_API_KEY_NOT_SET:
             return True
-        try:
-            latitude = self.hass.config.latitude
-            longitude = self.hass.config.longitude
-            url = f"https://www.mapquestapi.com/geocoding/v1/reverse?location={latitude},{longitude}&thumbMaps=false&key={key}"
-            session = async_create_clientsession(self.hass)
-            client = PersonLocation_aiohttp_Client(session)
-            resp = await client.async_get_data("get", url)
-            return resp.get("info", {}).get("statuscode") == 0
-        except Exception as e:
-            _LOGGER.debug("MapQuest API key test failed: %s", e)
-        self._errors[CONF_MAPQUEST_API_KEY] = "invalid_key"
-        return False
+        latitude = self.hass.config.latitude
+        longitude = self.hass.config.longitude
+        resp = await async_get_mapquest_reverse_geocoding(
+            self.hass, key, latitude, longitude
+        )
+        if resp.get("ok"):
+            return True
+        else:
+            self._errors[CONF_MAPQUEST_API_KEY] = "invalid_key"
+            return False
 
-    async def _test_osm_api_key(self, key):
+    async def _test_osm_api_key(self, key: str) -> bool:
         import re
 
         if key == DEFAULT_API_KEY_NOT_SET:
@@ -1061,41 +1153,44 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         try:
             regex = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+$"
             if re.search(regex, key):
-                return True
+                latitude = self.hass.config.latitude
+                longitude = self.hass.config.longitude
+                resp = await async_get_open_street_map_reverse_geocoding(
+                    self.hass, key, latitude, longitude
+                )
+                if resp.get("ok"):
+                    return True
         except Exception as e:
-            _LOGGER.debug("OSM API key test failed: %s", e)
+            _LOGGER.debug("[_test_osm_api_key] Mail format failed: %s", e)
         self._errors[CONF_OSM_API_KEY] = "invalid_email"
         return False
 
-    async def _test_radar_api_key(self, key):
-
+    async def _test_radar_api_key(self, key: str) -> bool:
         if key == DEFAULT_API_KEY_NOT_SET:
             return True
-        try:
-            latitude = self.hass.config.latitude
-            longitude = self.hass.config.longitude
-            url = f"https://api.radar.io/v1/geocode/reverse?coordinates={latitude},{longitude}"
-            headers = {"Authorization": key, "Content-Type": "application/json"}
-            async_client = get_async_client(self.hass)
-            response = await async_client.get(url, timeout=GET_IMAGE_TIMEOUT, headers=headers)
-            response.raise_for_status()
-            await response.aclose()
+        latitude = self.hass.config.latitude
+        longitude = self.hass.config.longitude
+        resp = await async_get_radar_reverse_geocoding(
+            self.hass, key, latitude, longitude
+        )
+        if resp.get("ok"):
             return True
-        except Exception as e:
-            _LOGGER.debug("Radar API key test failed: %s", e)
-        self._errors[CONF_RADAR_API_KEY] = "invalid_key"
-        return False
+        else:
+            self._errors[CONF_RADAR_API_KEY] = "invalid_key"
+            return False
 
-# --------------------------- Options Factory ---------------------------
+    # --------------------------- Options Factory ---------------------------
 
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
         return PersonLocationOptionsFlowHandler()
 
+
 # ============================================================
 # OptionsFlow — handles OPTIONS (runtime behavior)
 # ============================================================
+
 
 class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle options flow for Person Location."""
@@ -1105,17 +1200,16 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self):
         self._errors = {}
 
-    async def async_step_init(self, user_input=None):
+    async def async_step_init(self, user_input=None) -> OptionsFlow:
         """Entry point for options flow."""
         _LOGGER.debug("[async_step_init] user_input = %s", user_input)
-        
+
         return await self.async_step_general()
-    
+
     # ----------------- General Options -----------------
 
-    async def async_step_general(self, user_input=None):
+    async def async_step_general(self, user_input=None) -> OptionsFlow:
         """General runtime options (thresholds, templates, UX toggles)."""
-
         from .helpers.template import test_friendly_name_template
 
         conf_preview_friendly_name = "_preview_friendly_name"
@@ -1124,33 +1218,26 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
         friendly_preview = "Preview after submit?"
 
         if user_input is None:
-
             user_input = {
                 CONF_HOURS_EXTENDED_AWAY: self.config_entry.options.get(
-                    CONF_HOURS_EXTENDED_AWAY,
-                    DEFAULT_HOURS_EXTENDED_AWAY
+                    CONF_HOURS_EXTENDED_AWAY, DEFAULT_HOURS_EXTENDED_AWAY
                 ),
                 CONF_MINUTES_JUST_ARRIVED: self.config_entry.options.get(
-                    CONF_MINUTES_JUST_ARRIVED,
-                    DEFAULT_MINUTES_JUST_ARRIVED
+                    CONF_MINUTES_JUST_ARRIVED, DEFAULT_MINUTES_JUST_ARRIVED
                 ),
                 CONF_MINUTES_JUST_LEFT: self.config_entry.options.get(
-                    CONF_MINUTES_JUST_LEFT,
-                    DEFAULT_MINUTES_JUST_LEFT
+                    CONF_MINUTES_JUST_LEFT, DEFAULT_MINUTES_JUST_LEFT
                 ),
                 CONF_SHOW_ZONE_WHEN_AWAY: self.config_entry.options.get(
-                    CONF_SHOW_ZONE_WHEN_AWAY,
-                    DEFAULT_SHOW_ZONE_WHEN_AWAY
+                    CONF_SHOW_ZONE_WHEN_AWAY, DEFAULT_SHOW_ZONE_WHEN_AWAY
                 ),
                 CONF_FRIENDLY_NAME_TEMPLATE: self.config_entry.options.get(
-                    CONF_FRIENDLY_NAME_TEMPLATE,
-                    DEFAULT_FRIENDLY_NAME_TEMPLATE
+                    CONF_FRIENDLY_NAME_TEMPLATE, DEFAULT_FRIENDLY_NAME_TEMPLATE
                 ),
                 conf_preview_friendly_name: False,
             }
 
         else:
-
             # Validate the friendly name template.
             template_str = user_input.get(CONF_FRIENDLY_NAME_TEMPLATE, "")
             if not template_str:
@@ -1210,7 +1297,7 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
                     ): str,
                     vol.Optional(
                         conf_preview_friendly_name,
-                        default=user_input[conf_preview_friendly_name]
+                        default=user_input[conf_preview_friendly_name],
                     ): cv.boolean,
                 }
             ),

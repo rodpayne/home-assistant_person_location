@@ -1,12 +1,12 @@
 """Constants and Classes for person_location integration."""
 
 import asyncio
+from datetime import datetime, timedelta
 import logging
 import threading
-from datetime import datetime, timedelta
 
-import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
+
 from homeassistant.components.mobile_app.const import ATTR_VERTICAL_ACCURACY
 from homeassistant.components.waze_travel_time.const import REGIONS as WAZE_REGIONS
 from homeassistant.components.zone.const import DOMAIN as ZONE_DOMAIN
@@ -23,54 +23,63 @@ from homeassistant.const import (
     STATE_ON,
     STATE_UNKNOWN,
 )
+from homeassistant.core import HomeAssistant
+import homeassistant.helpers.config_validation as cv
 from homeassistant.util.yaml.objects import (
     NodeListClass,
     NodeStrClass,
 )
 
 # Our info:
+
 DOMAIN = "person_location"
 API_STATE_OBJECT = DOMAIN + "." + DOMAIN + "_integration"
 INTEGRATION_NAME = "Person Location"
 ISSUE_URL = "https://github.com/rodpayne/home-assistant_person_location/issues"
-VERSION = "2025.11.29"
+
+VERSION = "2025.12.17"
 
 # Titles for the config entries:
-#TITLE_IMPORTED_YAML_CONFIG = "Imported YAML Config"
+
+# TITLE_IMPORTED_YAML_CONFIG = "Imported YAML Config"
 TITLE_IMPORTED_YAML_CONFIG = "Person Location Config"
 TITLE_PERSON_LOCATION_CONFIG = "Person Location Config"
 
 # Constants:
-METERS_PER_KM = 1000
-METERS_PER_MILE = 1609.34
+
 IC3_STATIONARY_STATE_PREFIX = "StatZon"
 IC3_STATIONARY_ZONE_PREFIX = "ic3_stationary_"
+METERS_PER_KM = 1000
+METERS_PER_MILE = 1609.34
 
 # Fixed parameters:
+
+FAR_AWAY_METERS = 400 * METERS_PER_KM
 MIN_DISTANCE_TRAVELLED_TO_GEOCODE = 5  # in km?
 THROTTLE_INTERVAL = timedelta(
     seconds=2
 )  # See https://operations.osmfoundation.org/policies/nominatim/ regarding throttling.
 WAZE_MIN_METERS_FROM_HOME = 500
-FAR_AWAY_METERS = 400 * METERS_PER_KM
 
 # Parameters that we may want to be configurable in the future:
+
 DEFAULT_LOCALITY_PRIORITY_OSM = (
-#    "neighbourhood",       # smallest urban division (e.g. block, named area)
-    "suburb",              # named area within a city
-    "hamlet",              # very small rural settlement
-    "village",             # small rural settlement
-    "town",                # larger than village, smaller than city
-    "city_district",       # administrative district within a city
-    "municipality",        # local government unit (varies by country)
-    "city",                # major urban center
-    "county",              # regional division (e.g. Utah County)
-    "state_district",      # sub-state division (used in some countries)
-    "state",               # e.g. Utah
-    "country",             # e.g. United States
+    # "neighbourhood", # ---- smallest urban division (e.g. block, named area)
+    "suburb",  # ------------ named area within a city
+    "hamlet",  # ------------ very small rural settlement
+    "village",  # ----------- small rural settlement
+    "town",  # -------------- larger than village, smaller than city
+    "city_district",  # ----- administrative district within a city
+    "municipality",  # ------ local government unit (varies by country)
+    "city",  # -------------- major urban center
+    "county",  # ------------ regional division (e.g. Utah County)
+    "state_district",  # ---- sub-state division (used in some countries)
+    "state",  # ------------- e.g. Utah
+    "country",  # ----------- e.g. United States
 )
 
 # Attribute names:
+
 ATTR_ALTITUDE = "altitude"
 ATTR_BREAD_CRUMBS = "bread_crumbs"
 ATTR_COMPASS_BEARING = "compass_bearing"
@@ -94,52 +103,16 @@ ATTR_OPEN_STREET_MAP = "Open_Street_Map"
 ATTR_RADAR = "Radar"
 
 # Items under target.this_entity_info:
+
 INFO_GEOCODE_COUNT = "geocode_count"
 INFO_LOCALITY = "locality"
 INFO_TRIGGER_COUNT = "trigger_count"
 INFO_LOCATION_LATITUDE = "location_latitide"
 INFO_LOCATION_LONGITUDE = "location_longitide"
 
-# Configuration Parameters:
-CONF_LANGUAGE = "language"
-DEFAULT_LANGUAGE = "en"
-
-CONF_FRIENDLY_NAME_TEMPLATE = "friendly_name_template"
-DEFAULT_FRIENDLY_NAME_TEMPLATE = (
-    "{{person_name}} ({{source.attributes.friendly_name}}) {{friendly_name_location}}"
-)
-
-CONF_HOURS_EXTENDED_AWAY = "extended_away"
-DEFAULT_HOURS_EXTENDED_AWAY = 48
-
-CONF_MINUTES_JUST_ARRIVED = "just_arrived"
-DEFAULT_MINUTES_JUST_ARRIVED = 3
-
-CONF_MINUTES_JUST_LEFT = "just_left"
-DEFAULT_MINUTES_JUST_LEFT = 3
-
-CONF_SHOW_ZONE_WHEN_AWAY = "show_zone_when_away"
-DEFAULT_SHOW_ZONE_WHEN_AWAY = False
-
-CONF_OUTPUT_PLATFORM = "platform"
-DEFAULT_OUTPUT_PLATFORM = "sensor"
-VALID_OUTPUT_PLATFORM = ["sensor", "device_tracker"]
-
-CONF_REGION = "region"
-DEFAULT_REGION = "US"
-
-CONF_DISTANCE_DURATION_SOURCE = "distance_duration_source"
-CONF_USE_WAZE = "use_waze"
-CONF_WAZE_REGION = "waze_region"
-
-CONF_GOOGLE_API_KEY = "google_api_key"
-CONF_MAPBOX_API_KEY = "mapbox_api_key"
-CONF_MAPQUEST_API_KEY = "mapquest_api_key"
-CONF_NAME = "name"
-CONF_OSM_API_KEY = "osm_api_key"
-CONF_RADAR_API_KEY = "radar_api_key"
-DEFAULT_API_KEY_NOT_SET = "not used"
-
+# --------------------------------------------
+#  Data (structural configuration parameters)
+# --------------------------------------------
 
 CONF_CREATE_SENSORS = "create_sensors"
 VALID_CREATE_SENSORS = [
@@ -161,23 +134,73 @@ CONF_DEVICES = "devices"
 VALID_ENTITY_DOMAINS = ("binary_sensor", "device_tracker", "person", "sensor")
 
 CONF_FROM_YAML = "configuration_from_yaml"
+CONF_DISTANCE_DURATION_SOURCE = "distance_duration_source"
+CONF_USE_WAZE = "use_waze"
+CONF_WAZE_REGION = "waze_region"
+
+CONF_LANGUAGE = "language"
+DEFAULT_LANGUAGE = "en"
+
+CONF_OUTPUT_PLATFORM = "platform"
+DEFAULT_OUTPUT_PLATFORM = "sensor"
+VALID_OUTPUT_PLATFORM = ["sensor", "device_tracker"]
+
+CONF_REGION = "region"
+DEFAULT_REGION = "US"
+
+CONF_GOOGLE_API_KEY = "google_api_key"
+CONF_MAPBOX_API_KEY = "mapbox_api_key"
+CONF_MAPQUEST_API_KEY = "mapquest_api_key"
+CONF_OSM_API_KEY = "osm_api_key"
+CONF_RADAR_API_KEY = "radar_api_key"
+DEFAULT_API_KEY_NOT_SET = "not used"
 
 # Camera provider fields
 
+CONF_CONTENT_TYPE = "content_type"
+CONF_NAME = "name"
 CONF_STATE = "state"
 CONF_STILL_IMAGE_URL = "still_image_url"
-CONF_CONTENT_TYPE = "content_type"
 CONF_VERIFY_SSL = "verify_ssl"
 
 # Camera provider management (OptionsFlow + config entry)
 
+CONF_DONE = "done"
+CONF_EDIT_PROVIDER = "edit_provider"
+CONF_NEW_PROVIDER_NAME = "new_provider_name"
+CONF_NEW_PROVIDER_STATE = "new_provider_state"
+CONF_NEW_PROVIDER_URL = "new_provider_url"
 CONF_PROVIDERS = "providers"
 CONF_REMOVE_PROVIDERS = "remove_providers"
-CONF_NEW_PROVIDER_NAME = "new_provider_name"
-CONF_NEW_PROVIDER_URL = "new_provider_url"
-CONF_NEW_PROVIDER_STATE = "new_provider_state"
-CONF_EDIT_PROVIDER = "edit_provider"
-CONF_DONE = "done"
+
+# -----------------------------------------------
+#  Options (behavioral configuration parameters)
+# -----------------------------------------------
+
+CONF_FRIENDLY_NAME_TEMPLATE = "friendly_name_template"
+DEFAULT_FRIENDLY_NAME_TEMPLATE = (
+    "{{person_name}} ({{source.attributes.friendly_name}}) {{friendly_name_location}}"
+)
+
+CONF_HOURS_EXTENDED_AWAY = "extended_away"
+DEFAULT_HOURS_EXTENDED_AWAY = 48
+
+CONF_MINUTES_JUST_ARRIVED = "just_arrived"
+DEFAULT_MINUTES_JUST_ARRIVED = 3
+
+CONF_MINUTES_JUST_LEFT = "just_left"
+DEFAULT_MINUTES_JUST_LEFT = 3
+
+CONF_SHOW_ZONE_WHEN_AWAY = "show_zone_when_away"
+DEFAULT_SHOW_ZONE_WHEN_AWAY = False
+
+ALLOWED_OPTIONS_KEYS = {
+    CONF_FRIENDLY_NAME_TEMPLATE,
+    CONF_HOURS_EXTENDED_AWAY,
+    CONF_MINUTES_JUST_ARRIVED,
+    CONF_MINUTES_JUST_LEFT,
+    CONF_SHOW_ZONE_WHEN_AWAY,
+}
 
 STARTUP_VERSION = """
 -------------------------------------------------------------------
@@ -205,7 +228,7 @@ CONFIG_SCHEMA = vol.Schema(
                 vol.Optional(CONF_CREATE_SENSORS, default=[]): vol.All(
                     cv.ensure_list,  # turn string into list
                     [vol.In(VALID_CREATE_SENSORS)],
-                    sorted           # ensures deterministic ordering
+                    sorted,  # ensures deterministic ordering
                 ),
                 vol.Optional(
                     CONF_HOURS_EXTENDED_AWAY, default=DEFAULT_HOURS_EXTENDED_AWAY
@@ -239,10 +262,8 @@ CONFIG_SCHEMA = vol.Schema(
                 vol.Optional(
                     CONF_RADAR_API_KEY, default=DEFAULT_API_KEY_NOT_SET
                 ): cv.string,
-                vol.Optional(CONF_FOLLOW_PERSON_INTEGRATION, default=False
-                ): cv.boolean,
-                vol.Optional(CONF_DISTANCE_DURATION_SOURCE, default="waze"
-                ): cv.string,
+                vol.Optional(CONF_FOLLOW_PERSON_INTEGRATION, default=False): cv.boolean,
+                vol.Optional(CONF_DISTANCE_DURATION_SOURCE, default="waze"): cv.string,
                 vol.Optional(CONF_PERSON_NAMES, default=[]): vol.All(
                     cv.ensure_list, [PERSON_SCHEMA]
                 ),
@@ -250,18 +271,11 @@ CONFIG_SCHEMA = vol.Schema(
             extra=vol.ALLOW_EXTRA,
         ),
     },
-    extra=vol.ALLOW_EXTRA,   
+    extra=vol.ALLOW_EXTRA,
 )
 
-ALLOWED_OPTIONS_KEYS = {
-    CONF_HOURS_EXTENDED_AWAY,
-    CONF_MINUTES_JUST_ARRIVED,
-    CONF_MINUTES_JUST_LEFT,
-    CONF_SHOW_ZONE_WHEN_AWAY,
-    CONF_FRIENDLY_NAME_TEMPLATE,
-}
-
 # Items under hass.data[DOMAIN]:
+
 DATA_STATE = "state"
 DATA_ATTRIBUTES = "attributes"
 DATA_CONFIG_ENTRY = "config_entry"
@@ -281,8 +295,9 @@ TARGET_ASYNCIO_LOCK = asyncio.Lock()
 
 _LOGGER = logging.getLogger(__name__)
 
+
 def get_waze_region(country_code: str) -> str:
-    """Determine Waze region from country code or Waze region setting"""
+    """Determine Waze region from country code or Waze region setting."""
     country_code = country_code.lower()
     if country_code in ("us", "ca", "mx"):
         return "us"
@@ -290,12 +305,12 @@ def get_waze_region(country_code: str) -> str:
         return country_code
     return "eu"
 
+
 class PERSON_LOCATION_INTEGRATION:
     """Class to represent the integration itself."""
 
-    def __init__(self, _entity_id, _hass):
+    def __init__(self, _entity_id, _hass: HomeAssistant) -> None:
         """Initialize the integration instance."""
-
         # Log startup message:
         _LOGGER.info(
             STARTUP_VERSION.format(name=DOMAIN, version=VERSION, issue_link=ISSUE_URL)
@@ -303,7 +318,7 @@ class PERSON_LOCATION_INTEGRATION:
 
         self.entity_id = _entity_id
         self.hass = _hass
-        #self.config = _config
+        # self.config = _config
         self.state = "on"
         self.attributes = {}
         self.attributes[ATTR_ICON] = "mdi:api"
@@ -311,7 +326,6 @@ class PERSON_LOCATION_INTEGRATION:
         self.configuration = {}
         self.entity_info = {}
         self._target_sensors_restored = []
-
 
         home_zone = "zone.home"
         self.attributes[ATTR_FRIENDLY_NAME] = f"{INTEGRATION_NAME} Service"
@@ -328,21 +342,20 @@ class PERSON_LOCATION_INTEGRATION:
         self.attributes["api_calls_throttled"] = 0
         self.attributes["startup"] = True
         self.attributes["waze_error_count"] = 0
-        self.attributes[
-            ATTR_ATTRIBUTION
-        ] = f"System information for the {INTEGRATION_NAME} integration \
+        self.attributes[ATTR_ATTRIBUTION] = (
+            f"System information for the {INTEGRATION_NAME} integration \
                 ({DOMAIN}), version {VERSION}."
-
+        )
 
         # ❌ self.set_state()
 
-    def set_state(self):
+    def set_state(self) -> None:
         """Schedule async_set_state safely from a thread or sync context."""
         self.hass.loop.call_soon_threadsafe(
             lambda: self.hass.async_create_task(self.async_set_state())
         )
 
-    async def async_set_state(self):
+    async def async_set_state(self) -> None:
         """Async-safe state setter."""
         integration_state_data = {
             DATA_STATE: self.state,
@@ -364,13 +377,13 @@ class PERSON_LOCATION_INTEGRATION:
             self.state,
             self.attributes,
         )
-        
+
+
 class PERSON_LOCATION_TRIGGER:
     """Class to represent device trackers that trigger us."""
 
-    def __init__(self, _entity_id, _pli):
+    def __init__(self, _entity_id, _pli: PERSON_LOCATION_INTEGRATION) -> None:
         """Initialize the entity instance."""
-
         _LOGGER.debug("[PERSON_LOCATION_TRIGGER] (%s) === __init__ ===", _entity_id)
 
         self.entity_id = _entity_id
@@ -382,9 +395,9 @@ class PERSON_LOCATION_TRIGGER:
         targetStateObject = self.hass.states.get(self.entity_id)
         if targetStateObject is not None:
             self.firstTime = False
-            if (targetStateObject.state.startswith(IC3_STATIONARY_STATE_PREFIX) 
-                    or 
-                targetStateObject.state == STATE_NOT_HOME
+            if (
+                targetStateObject.state.startswith(IC3_STATIONARY_STATE_PREFIX)
+                or targetStateObject.state == STATE_NOT_HOME
             ):
                 self.state = "Away"
             else:
@@ -423,7 +436,10 @@ class PERSON_LOCATION_TRIGGER:
             self.personName = self.attributes["account_name"]
         elif "owner_fullname" in self.attributes:
             self.personName = self.attributes["owner_fullname"].split()[0].lower()
-        elif "friendly_name" in self.attributes and self.entity_id.split(".")[0] == "person":
+        elif (
+            "friendly_name" in self.attributes
+            and self.entity_id.split(".")[0] == "person"
+        ):
             self.personName = self.attributes["friendly_name"]
         else:
             self.personName = self.entity_id.split(".")[1].split("_")[0].lower()

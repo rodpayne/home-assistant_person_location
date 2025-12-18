@@ -1,16 +1,14 @@
-""" helpers/template.py - Helpers for template validation """
+"""helpers/template.py - Helpers for template validation"""
 
 import logging
-import inspect
-from urllib.parse import urlparse
-from typing import Any, Dict, Optional
+from typing import Any
 
-from homeassistant.helpers.template import Template
-from homeassistant.exceptions import TemplateError
+from homeassistant.core import HomeAssistant
 
 _LOGGER = logging.getLogger(__name__)
 
 # ----------------- normalize_template -----------------
+
 
 def normalize_template(s: str) -> str:
     import re
@@ -18,56 +16,67 @@ def normalize_template(s: str) -> str:
     if not isinstance(s, str):
         return s
     # Replace literal backslash-n first (one or more in a row)
-    s = re.sub(r'(\\n)+', ' ', s)
+    s = re.sub(r"(\\n)+", " ", s)
     # Replace real newlines of any flavor
-    s = re.sub(r'[\r\n]+', ' ', s)
+    s = re.sub(r"[\r\n]+", " ", s)
     # Collapse runs of whitespace
-    s = re.sub(r'\s{2,}', ' ', s)
+    s = re.sub(r"\s{2,}", " ", s)
     return s.strip()
+
 
 # ----------------- validate_template -----------------
 
+
 async def validate_template(
-    hass,
+    hass: HomeAssistant,
     template_str: str,
     template_variables: dict,
     *,
-    expected: str = "text",                 # "text" or "url"
-    variables: Optional[Dict[str, Any]] = None,
+    expected: str = "text",  # "text" or "url"
+    variables: dict[str, Any] | None = None,
     check_entities: bool = True,
     strict: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Validate a Jinja template in HA.
 
-        Returns:
-            {
-            "ok": bool,
-            "error": Optional[str],
-            "rendered": Optional[str],
-            "entities": set[str],
-            "domains": set[str],
-            "all_states": bool,
-            "missing_entities": list[str]
-            }
+    Returns:
+        {
+        "ok": bool,
+        "error": Optional[str],
+        "rendered": Optional[str],
+        "entities": set[str],
+        "domains": set[str],
+        "all_states": bool,
+        "missing_entities": list[str]
+        }
     """
+    import inspect
+    from urllib.parse import urlparse
 
-    result: Dict[str, Any] = {
+    from homeassistant.exceptions import TemplateError
+    from homeassistant.helpers.template import Template
+
+    result: dict[str, Any] = {
         "ok": False,
         "error": None,
         "rendered": None,
         "entities": set(),
         "domains": set(),
         "all_states": False,
-        "missing_entities": []
+        "missing_entities": [],
     }
 
     # Note: always set `error` if returning `ok` False
 
     tpl_text = normalize_template(template_str)
-    tpl = Template(tpl_text, hass)  # HA's sandboxed Template class [1](https://deepwiki.com/home-assistant/core/2.3-event-system-and-templating)
+    tpl = Template(
+        tpl_text, hass
+    )  # HA's sandboxed Template class [1](https://deepwiki.com/home-assistant/core/2.3-event-system-and-templating)
     try:
         # Call once; if it's awaitable, await it; otherwise use it directly. For legacy Core versions.
-        maybe = tpl.async_render_to_info(variables=template_variables or {}, strict=strict)
+        maybe = tpl.async_render_to_info(
+            variables=template_variables or {}, strict=strict
+        )
         info = await maybe if inspect.isawaitable(maybe) else maybe
 
         # If the engine captured an exception, treat as failure
@@ -79,14 +88,14 @@ async def validate_template(
         # Result can be a method or an attribute depending on HA version
         rendered_attr = getattr(info, "result", None)
         if callable(rendered_attr):
-            rendered = rendered_attr()                       # result() method
+            rendered = rendered_attr()  # result() method
         elif rendered_attr is not None:
-            rendered = rendered_attr                         # result attribute
+            rendered = rendered_attr  # result attribute
         else:
-            rendered = getattr(info, "_result", None)        # legacy fallback
+            rendered = getattr(info, "_result", None)  # legacy fallback
         if isinstance(rendered, str):
             rendered = rendered.strip()
-    
+
         result.update(
             rendered=rendered,
             entities=set(getattr(info, "entities", set())),
@@ -108,31 +117,31 @@ async def validate_template(
             result["missing_entities"] = missing
 
         result["ok"] = True
-        _LOGGER.debug("[validate_template] result=%s",result)
+        _LOGGER.debug("[validate_template] result=%s", result)
         return result
 
     except TemplateError as te:
         # Jinja/HA template errors (syntax, undefined vars) bubble up as TemplateError
         first_line = str(te).splitlines()[0]
         result["error"] = f"{first_line}"
-        _LOGGER.debug("[validate_template] TemplateError result=%s",result)
+        _LOGGER.debug("[validate_template] TemplateError result=%s", result)
         return result
     except Exception as ex:
         result["error"] = f"{type(ex).__name__}: {ex}"
-        _LOGGER.debug("[validate_template] Exception result=%s",result)
+        _LOGGER.debug("[validate_template] Exception result=%s", result)
         return result
+
 
 # ----------------- Friendly Name Template Test -----------------
 
-async def test_friendly_name_template(hass, template_str: str) -> dict:
-    '''Render a preview of friendly_name for the supplied template_str'''
 
+async def test_friendly_name_template(hass: HomeAssistant, template_str: str) -> dict:
+    """Render a preview of friendly_name for the supplied template_str"""
     from homeassistant.core import State
     from homeassistant.helpers.template import Template as HATemplate
-    from homeassistant.exceptions import TemplateError
 
     _LOGGER.debug("HATemplate type = %s", type(HATemplate))
-    
+
     if not isinstance(template_str, str) or not template_str.strip():
         return None
 
@@ -143,8 +152,8 @@ async def test_friendly_name_template(hass, template_str: str) -> dict:
     friendly_name_location = "is in Spanish Fork"
 
     target = State(
-        "sensor.rod_location",          # entity_id
-        "Just Left",                    # state
+        "sensor.rod_location",  # entity_id
+        "Just Left",  # state
         {
             "source_type": "gps",
             "latitude": 40.12703438635704,
@@ -174,7 +183,7 @@ async def test_friendly_name_template(hass, template_str: str) -> dict:
             "driving_minutes": "5.2",
             "friendly_name": "Rod (Rod-iPhone-16) is in Spanish Fork",
             "speed": 1.0,
-        }
+        },
     )
 
     sourceObject = State(
@@ -191,7 +200,7 @@ async def test_friendly_name_template(hass, template_str: str) -> dict:
             "friendly_name": "Rod-iPhone-16",
             "person_name": "rod",
             "entity_picture": "/local/rod-phone.png",
-        }
+        },
     )
 
     friendly_name_variables = {

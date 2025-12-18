@@ -2,31 +2,33 @@
 
 import asyncio
 import logging
+
 import httpx
 
 from homeassistant.components.camera import Camera
 from homeassistant.const import STATE_PROBLEM, STATE_UNKNOWN
+from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import TemplateError
-from homeassistant.helpers.httpx_client import get_async_client
-from homeassistant.util import slugify
 from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.template import Template
+from homeassistant.util import slugify
 
 from .const import (
-    DOMAIN,
-    VERSION,
-    DATA_CONFIGURATION,
-    CONF_PROVIDERS,
-    CONF_NAME,
-    CONF_STATE,
-    CONF_STILL_IMAGE_URL,
     CONF_CONTENT_TYPE,
-    CONF_VERIFY_SSL,
     CONF_GOOGLE_API_KEY,
     CONF_MAPBOX_API_KEY,
     CONF_MAPQUEST_API_KEY,
+    CONF_NAME,
     CONF_OSM_API_KEY,
+    CONF_PROVIDERS,
     CONF_RADAR_API_KEY,
+    CONF_STATE,
+    CONF_STILL_IMAGE_URL,
+    CONF_VERIFY_SSL,
+    DATA_CONFIGURATION,
+    DOMAIN,
+    VERSION,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -39,7 +41,8 @@ CAMERA_PARENT_DEVICE = DeviceInfo(
     model="Map Camera Group",
 )
 
-def normalize_provider(hass, provider: dict) -> dict:
+
+def normalize_provider(hass: HomeAssistant, provider: dict) -> dict:
     """Ensure provider dict has Template objects and defaults."""
 
     def _as_template(value):
@@ -58,24 +61,31 @@ def normalize_provider(hass, provider: dict) -> dict:
         CONF_VERIFY_SSL: provider.get(CONF_VERIFY_SSL, True),
     }
 
-async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
+
+async def async_setup_platform(
+    hass, config, async_add_entities, discovery_info=None
+) -> None:
     """Set up cameras from YAML config."""
 
     _LOGGER.debug("async_setup_platform: config = %s", config)
     async_add_entities([PersonLocationCamera(hass, normalize_provider(hass, config))])
 
-async def async_setup_entry(hass, entry, async_add_entities):
+
+async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities) -> None:
     """Set up cameras from config entry providers."""
 
     _LOGGER.debug("[async_setup_entry] entry: %s", entry)
     providers = entry.data.get(CONF_PROVIDERS, [])
-    entities = [PersonLocationCamera(hass, normalize_provider(hass, p)) for p in providers]
+    entities = [
+        PersonLocationCamera(hass, normalize_provider(hass, p)) for p in providers
+    ]
     async_add_entities(entities, update_before_add=True)
+
 
 class PersonLocationCamera(Camera):
     """A person_location implementation of a map camera."""
 
-    def __init__(self, hass, provider):
+    def __init__(self, hass: HomeAssistant, provider) -> None:
         super().__init__()
         self.hass = hass
         self._name = provider[CONF_NAME]
@@ -107,14 +117,14 @@ class PersonLocationCamera(Camera):
         }
 
     @property
-    def name(self):
+    def name(self) -> str:
         return self._name
 
     @property
     def state(self):
         return self._state
 
-    async def async_camera_image(self, width=None, height=None):
+    async def async_camera_image(self, width=None, height=None) -> bytes | None:
         """Return bytes of camera image."""
         try:
             self._last_url, self._last_image = await asyncio.shield(
@@ -125,7 +135,7 @@ class PersonLocationCamera(Camera):
             raise err
         return self._last_image
 
-    async def _async_camera_image(self):
+    async def _async_camera_image(self) -> tuple[str | None, bytes | None]:
         """Return a still image response from the camera."""
         if not self.enabled:
             return self._last_url, self._last_image
@@ -133,13 +143,17 @@ class PersonLocationCamera(Camera):
         try:
             url = self._still_image_url.async_render(**self._template_variables)
         except TemplateError as err:
-            _LOGGER.error("Error parsing url template %s: %s", self._still_image_url, err)
+            _LOGGER.error(
+                "Error parsing url template %s: %s", self._still_image_url, err
+            )
             return self._last_url, self._last_image
 
         try:
             new_state = self._state_template.async_render(parse_result=False)
         except TemplateError as err:
-            _LOGGER.error("Error parsing state template %s: %s", self._state_template, err)
+            _LOGGER.error(
+                "Error parsing state template %s: %s", self._state_template, err
+            )
             new_state = STATE_PROBLEM
 
         if new_state != self._state:
@@ -152,7 +166,9 @@ class PersonLocationCamera(Camera):
         response = None
         try:
             async_client = get_async_client(self.hass, verify_ssl=self.verify_ssl)
-            response = await async_client.get(url, auth=self._auth, timeout=GET_IMAGE_TIMEOUT)
+            response = await async_client.get(
+                url, auth=self._auth, timeout=GET_IMAGE_TIMEOUT
+            )
             response.raise_for_status()
             image = response.content
         except httpx.TimeoutException:
@@ -168,4 +184,3 @@ class PersonLocationCamera(Camera):
                 await response.aclose()
 
         return url, image
-    

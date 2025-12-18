@@ -1,26 +1,24 @@
 """Person Location integration."""
 
-import logging
-import pprint
 from datetime import datetime, timedelta
 from functools import partial
+import logging
+import pprint
 
 import voluptuous as vol
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_OFF, STATE_ON, Platform
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant
-from homeassistant.helpers.event import (
-    async_track_state_change_event,
-    async_track_point_in_time,
-)
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers.event import (
+    async_track_point_in_time,
+    async_track_state_change_event,
+)
 
-from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers import entity_registry as er
-
-from .process_trigger import setup_process_trigger
-from .reverse_geocode import setup_reverse_geocode
 from .const import (
+    ALLOWED_OPTIONS_KEYS,
     API_STATE_OBJECT,
     CONF_CREATE_SENSORS,
     CONF_DEVICES,
@@ -31,7 +29,6 @@ from .const import (
     CONF_PERSON_NAMES,
     CONF_SHOW_ZONE_WHEN_AWAY,
     CONFIG_SCHEMA,
-    ALLOWED_OPTIONS_KEYS,
     DATA_ASYNC_SETUP_ENTRY,
     DATA_CONFIG_ENTRY,
     DATA_CONFIGURATION,
@@ -46,11 +43,13 @@ from .const import (
     PERSON_LOCATION_INTEGRATION,
     TITLE_PERSON_LOCATION_CONFIG,
 )
-
 from .helpers.entity import prune_orphan_template_entities
+from .process_trigger import setup_process_trigger
+from .reverse_geocode import setup_reverse_geocode
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS: list[Platform] = [Platform.CAMERA, Platform.SENSOR]
+
 
 def merge_entry_data(entry: ConfigEntry, conf: dict) -> tuple[dict, dict]:
     """Merge YAML conf into an existing ConfigEntry's data and options.
@@ -60,7 +59,6 @@ def merge_entry_data(entry: ConfigEntry, conf: dict) -> tuple[dict, dict]:
     - List keys (e.g. CONF_CREATE_SENSORS): merged with duplicates removed.
     - Other keys: entry values override YAML.
     """
-
     # Start with YAML (which has data + options), overlay with entry data + options
     updated_data_options_and_yaml = {**conf, **entry.data, **entry.options}
 
@@ -81,25 +79,66 @@ def merge_entry_data(entry: ConfigEntry, conf: dict) -> tuple[dict, dict]:
 
     # Pull out keys that should be in data only
     updated_data = {
-        key: value for key, value in updated_data_options_and_yaml.items() if key not in ALLOWED_OPTIONS_KEYS
+        key: value
+        for key, value in updated_data_options_and_yaml.items()
+        if key not in ALLOWED_OPTIONS_KEYS
     }
     _LOGGER.debug("[merge_entry_data] Parsed updated_data: %s", updated_data)
 
     # Pull out keys that should be in options only
     updated_options = {
-        key: value for key, value in updated_data_options_and_yaml.items() if key in ALLOWED_OPTIONS_KEYS
+        key: value
+        for key, value in updated_data_options_and_yaml.items()
+        if key in ALLOWED_OPTIONS_KEYS
     }
     _LOGGER.debug("[merge_entry_data] Parsed updated_options: %s", updated_options)
 
     return updated_data, updated_options
 
+
+async def _setup_services(
+    pli: PERSON_LOCATION_INTEGRATION, hass: HomeAssistant
+) -> None:
+    # Services: geocode on/off
+    async def handle_geocode_api_on(call) -> None:
+        _LOGGER.debug("[geocode_api_on] === Start ===")
+        with INTEGRATION_LOCK:
+            _LOGGER.debug("[geocode_api_on] INTEGRATION_LOCK obtained")
+            pli.state = STATE_ON
+            pli.attributes["icon"] = "mdi:api"
+            pli.async_set_state()
+            _LOGGER.debug("[geocode_api_on] INTEGRATION_LOCK release...")
+        _LOGGER.debug("[geocode_api_on] === Return ===")
+
+    async def handle_geocode_api_off(call) -> None:
+        _LOGGER.debug("[geocode_api_off] === Start ===")
+        with INTEGRATION_LOCK:
+            _LOGGER.debug("[geocode_api_off] INTEGRATION_LOCK obtained")
+            pli.state = STATE_OFF
+            pli.attributes["icon"] = "mdi:api-off"
+            pli.async_set_state()
+            _LOGGER.debug("[geocode_api_off] INTEGRATION_LOCK release...")
+        _LOGGER.debug("[geocode_api_off] === Return ===")
+
+    if not hass.services.has_service(DOMAIN, "geocode_api_on"):
+        hass.services.async_register(DOMAIN, "geocode_api_on", handle_geocode_api_on)
+    if not hass.services.has_service(DOMAIN, "geocode_api_off"):
+        hass.services.async_register(DOMAIN, "geocode_api_off", handle_geocode_api_off)
+
+    # Services: integration functionality
+    if not hass.services.has_service(DOMAIN, "reverse_geocode"):
+        setup_reverse_geocode(pli)
+    if not hass.services.has_service(DOMAIN, "process_trigger"):
+        setup_process_trigger(pli)
+
+
 # ------------------------------------------------------------------
 # YAML setup (bridges into config entries)
 # ------------------------------------------------------------------
 
+
 async def async_setup(hass: HomeAssistant, yaml_config: dict) -> bool:
     """Set up integration and bridge YAML into config entry."""
-
     hass.data.setdefault(DOMAIN, {})
 
     # Create integration object
@@ -111,20 +150,22 @@ async def async_setup(hass: HomeAssistant, yaml_config: dict) -> bool:
     # Some code references expect hass.data[DOMAIN]["integration"]
     hass.data[DOMAIN]["integration"] = pli
 
-    #------- get configuration from YAML -------
+    # ------- get configuration from YAML -------
 
-    default_conf = CONFIG_SCHEMA({DOMAIN: {} })[DOMAIN]
-    #LOGGER.debug("[async_setup] default_conf: %s", default_conf)
+    default_conf = CONFIG_SCHEMA({DOMAIN: {}})[DOMAIN]
+    # LOGGER.debug("[async_setup] default_conf: %s", default_conf)
     if not default_conf.get(CONF_DEVICES, {}):
         default_conf[CONF_DEVICES] = {}
- 
+
     if DOMAIN not in yaml_config:
-        _LOGGER.debug("[async_setup] %s not found in yaml_config. Supplying defaults only.", DOMAIN)
+        _LOGGER.debug(
+            "[async_setup] %s not found in yaml_config. Supplying defaults only.",
+            DOMAIN,
+        )
         conf_with_defaults = default_conf
         conf_with_defaults[CONF_FROM_YAML] = False
 
     else:
-
         raw_conf = yaml_config.get(DOMAIN)
         _LOGGER.debug("[async_setup] raw_conf: %s", raw_conf)
         try:
@@ -148,52 +189,26 @@ async def async_setup(hass: HomeAssistant, yaml_config: dict) -> bool:
             conf_with_defaults[CONF_DEVICES] = conf_devices
 
         # YAML schema allows a couple of different formats for the list
-        #conf_create_sensors = conf_with_defaults.pop(CONF_CREATE_SENSORS, [])
-        #conf_with_defaults[CONF_CREATE_SENSORS] = sorted(cv.ensure_list(conf_create_sensors))
+        # conf_create_sensors = conf_with_defaults.pop(CONF_CREATE_SENSORS, [])
+        # conf_with_defaults[CONF_CREATE_SENSORS] = sorted(cv.ensure_list(conf_create_sensors))
 
     if not pli.configuration:
         pli.DATA_CONFIGURATION = conf_with_defaults
 
-    #------- register services -------
+    # ------- register services -------
 
-    # Services: geocode on/off
-    async def handle_geocode_api_on(call):
-        _LOGGER.debug("[geocode_api_on] === Start ===")
-        with INTEGRATION_LOCK:
-            _LOGGER.debug("[geocode_api_on] INTEGRATION_LOCK obtained")
-            pli.state = STATE_ON
-            pli.attributes["icon"] = "mdi:api"
-            pli.async_set_state()
-            _LOGGER.debug("[geocode_api_on] INTEGRATION_LOCK release...")
-        _LOGGER.debug("[geocode_api_on] === Return ===")
+    await _setup_services(pli, hass)
 
-    async def handle_geocode_api_off(call):
-        _LOGGER.debug("[geocode_api_off] === Start ===")
-        with INTEGRATION_LOCK:
-            _LOGGER.debug("[geocode_api_off] INTEGRATION_LOCK obtained")
-            pli.state = STATE_OFF
-            pli.attributes["icon"] = "mdi:api-off"
-            pli.async_set_state()
-            _LOGGER.debug("[geocode_api_off] INTEGRATION_LOCK release...")
-        _LOGGER.debug("[geocode_api_off] === Return ===")
-
-    hass.services.async_register(DOMAIN, "geocode_api_on", handle_geocode_api_on)
-    hass.services.async_register(DOMAIN, "geocode_api_off", handle_geocode_api_off)
-
-    # Services: integration functionality
-    setup_reverse_geocode(pli)
-    setup_process_trigger(pli)
-
-    #------- update existing config entry or request a new one -------
+    # ------- update existing config entry or request a new one -------
 
     existing_entries = hass.config_entries.async_entries(DOMAIN)
     if existing_entries:
-        entry = existing_entries[0]  
+        entry = existing_entries[0]
         _LOGGER.debug("[async_setup] Updating existing entry %s", entry.entry_id)
         _LOGGER.debug("[async_setup] conf_with_defaults: %s", conf_with_defaults)
         _LOGGER.debug("[async_setup] entry.data: %s", entry.data)
         _LOGGER.debug("[async_setup] entry.options: %s", entry.options)
-        
+
         new_data, new_options = merge_entry_data(entry, conf_with_defaults)
         _LOGGER.debug("[async_setup] new_data: %s", new_data)
         _LOGGER.debug("[async_setup] new_options: %s", new_options)
@@ -205,7 +220,6 @@ async def async_setup(hass: HomeAssistant, yaml_config: dict) -> bool:
         )
 
     else:
-
         _LOGGER.debug("[async_setup] Initiating config flow to create entry")
         hass.async_create_task(
             hass.config_entries.flow.async_init(
@@ -217,24 +231,31 @@ async def async_setup(hass: HomeAssistant, yaml_config: dict) -> bool:
 
     return True
 
+
 # ------------------------------------------------------------------
 # Options update listener
 # ------------------------------------------------------------------
 
-async def async_options_update_listener(hass: HomeAssistant, entry: ConfigEntry):
-    """Handle config_flow options updates by reloading the entry cleanly."""
 
-    _LOGGER.debug("[async_options_update_listener] Reloading entry %s after options update", entry.entry_id)
+async def async_options_update_listener(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> bool:
+    """Handle config_flow options updates by reloading the entry cleanly."""
+    _LOGGER.debug(
+        "[async_options_update_listener] Reloading entry %s after options update",
+        entry.entry_id,
+    )
     await hass.config_entries.async_reload(entry.entry_id)
     return True
+
 
 # ------------------------------------------------------------------
 # Setup from Config Entry
 # ------------------------------------------------------------------
 
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up integration from a ConfigEntry."""
-
     _LOGGER.debug("[async_setup_entry] Setting up entry: %s", entry.entry_id)
 
     hass.data.setdefault(DOMAIN, {})
@@ -246,7 +267,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Store integration object for entry
     hass.data[DOMAIN][entry.entry_id] = pli
 
-    pli.config = entry.data # TODO: is this used anywhere?
+    pli.config = entry.data  # TODO: is this used anywhere?
     pli.async_set_state
 
     if DATA_UNDO_UPDATE_LISTENER not in hass.data[DOMAIN]:
@@ -280,9 +301,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         _LOGGER.debug("[_handle_device_tracker_state_change] === Return ===")
 
-    #track_state_change_event = threaded_listener_factory(async_track_state_change_event)
+    # track_state_change_event = threaded_listener_factory(async_track_state_change_event)
 
-    def _listen_for_device_tracker_state_changes(entity_id: str):
+    def _listen_for_device_tracker_state_changes(entity_id: str) -> None:
         """Register state listener for a device tracker entity."""
         if entity_id not in pli.entity_info:
             pli.entity_info[entity_id] = {}
@@ -299,7 +320,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     "[_listen_for_device_tracker_state_changes] Registered for %s",
                     entity_id,
                 )
-    def _listen_for_configured_entities(hass: HomeAssistant, pli_obj: PERSON_LOCATION_INTEGRATION):
+
+    def _listen_for_configured_entities(
+        hass: HomeAssistant, pli_obj: PERSON_LOCATION_INTEGRATION
+    ) -> None:
         """Register listeners for configured person/device entities."""
         _LOGGER.debug("[_listen_for_configured_entities] === Start ===")
 
@@ -328,6 +352,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             pprint.pformat(entry.options),
         )
 
+        # Register services (for update where async_setup does not get called)
+        await _setup_services(pli, hass)
+
+        # Determine if friendly name template is being changed
         friendly_name_template_changed = (
             (not pli.attributes.get("startup", True))
             and (CONF_FRIENDLY_NAME_TEMPLATE in entry.options)
@@ -386,9 +414,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Startup timer (defer wiring until HA finishes starting)
     # ------------------------------------------------------------------
 
-    def _handle_startup_is_done(now):
+    def _handle_startup_is_done(now) -> None:
         """Flip startup flag and rewire listeners when HA has started."""
-        
         _LOGGER.debug("[_handle_startup_is_done] === Start ===")
 
         # Still starting? Wait another minute
@@ -399,7 +426,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         pli.attributes["startup"] = False
         _listen_for_configured_entities(hass, pli)
-        
+
         # It should now be safe to expand template sensors for restored target sensors.
         if pli._target_sensors_restored:
             _LOGGER.debug("[_handle_startup_is_done] Running delayed reverse_geocode.")
@@ -413,15 +440,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     ),
                     "force_update": True,
                 }
-                pli.hass.services.call(
-                    DOMAIN, "reverse_geocode", service_data, False
-                )
-        
+                pli.hass.services.call(DOMAIN, "reverse_geocode", service_data, False)
+
         _LOGGER.debug(
             "[_handle_startup_is_done] === Return === startup flag is turned off"
         )
 
-    def _set_timer_startup_is_done(minutes: int):
+    def _set_timer_startup_is_done(minutes: int) -> None:
         """Start a timer for 'startup is done'."""
         point_in_time = datetime.now() + timedelta(minutes=minutes)
         async_track_point_in_time(
@@ -432,7 +457,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Initial listener wiring and startup timer
     _listen_for_configured_entities(hass, pli)
-    _set_timer_startup_is_done(2)
+    _set_timer_startup_is_done(1)
 
     # Async state set (avoid sync set_state during startup)
     hass.loop.call_soon_threadsafe(
@@ -442,19 +467,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _LOGGER.debug("[async_setup_entry] === Return ===")
     return True
 
+
 # ------------------------------------------------------------------
 # Unload entry (cleanup symmetry)
 # ------------------------------------------------------------------
 
+
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry and clean up orphaned devices/entities."""
-
     _LOGGER.debug("[async_unload_entry] Unloading entry: %s", entry.entry_id)
 
     # Get template sensor names that are still valid
-    create_sensors_list = (
-        hass.data[DOMAIN][DATA_CONFIGURATION][CONF_CREATE_SENSORS]
-    )
+    create_sensors_list = hass.data[DOMAIN][DATA_CONFIGURATION][CONF_CREATE_SENSORS]
 
     # Remove template sensors that are no longer needed
     removed = await prune_orphan_template_entities(
@@ -464,7 +488,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         allowed_suffixes=create_sensors_list,
     )
     if removed:
-        _LOGGER.debug("[async_unload_entry] Removed orphan template entities: %s", removed)
+        _LOGGER.debug(
+            "[async_unload_entry] Removed orphan template entities: %s", removed
+        )
 
     # Unload platforms
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
@@ -476,6 +502,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_remove(DOMAIN, "geocode_api_on")
     if hass.services.has_service(DOMAIN, "geocode_api_off"):
         hass.services.async_remove(DOMAIN, "geocode_api_off")
+    if hass.services.has_service(DOMAIN, "process_trigger"):
+        hass.services.async_remove(DOMAIN, "process_trigger")
+    if hass.services.has_service(DOMAIN, "reverse_geocode"):
+        hass.services.async_remove(DOMAIN, "reverse_geocode")
 
     # Remove integration object and undo listeners
     pli = hass.data[DOMAIN].pop(entry.entry_id, None)
@@ -493,7 +523,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     dev_reg = dr.async_get(hass)
     ent_reg = er.async_get(hass)
 
-    devices = [d for d in dev_reg.devices.values() if entry.entry_id in d.config_entries]
+    devices = [
+        d for d in dev_reg.devices.values() if entry.entry_id in d.config_entries
+    ]
     for device in devices:
         entities = [e for e in ent_reg.entities.values() if e.device_id == device.id]
         if not entities:
@@ -509,6 +541,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _LOGGER.debug("[async_unload_entry] === Return ===")
     return True
 
+
 # ------------------------------------------------------------------
 # Migration
 # ------------------------------------------------------------------
@@ -516,6 +549,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 # Note: Update MIGRATION_SCHEMA_VERSION if integration can't be reverted without restore
 MIGRATION_SCHEMA_VERSION = 2
 MIGRATION_SCHEMA_MINOR = 1
+
 
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Migrate old configuration entry."""
@@ -525,9 +559,9 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
         config_entry.version,
         config_entry.minor_version,
     )
-    
+
     # TODO: add this test when there is a migration that can't be reverted
-    #if str(config_entry.version) > MIGRATION_SCHEMA_VERSION:
+    # if str(config_entry.version) > MIGRATION_SCHEMA_VERSION:
     #    _LOGGER.error(
     #        "Component has been downgraded without restoring configuration from backup"
     #    )
@@ -540,7 +574,9 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
         if str(config_entry.minor_version) < "2":
             if CONF_FRIENDLY_NAME_TEMPLATE not in new_options:
                 _LOGGER.debug("Adding %s", CONF_FRIENDLY_NAME_TEMPLATE)
-                new_options[CONF_FRIENDLY_NAME_TEMPLATE] = DEFAULT_FRIENDLY_NAME_TEMPLATE
+                new_options[CONF_FRIENDLY_NAME_TEMPLATE] = (
+                    DEFAULT_FRIENDLY_NAME_TEMPLATE
+                )
             if CONF_SHOW_ZONE_WHEN_AWAY not in new_options:
                 _LOGGER.debug("Adding %s", CONF_SHOW_ZONE_WHEN_AWAY)
                 new_options[CONF_SHOW_ZONE_WHEN_AWAY] = DEFAULT_SHOW_ZONE_WHEN_AWAY

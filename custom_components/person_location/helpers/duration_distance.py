@@ -1,14 +1,14 @@
-
-import aiohttp
 import asyncio
 import logging
 import os
 import random
 import traceback
 
+import aiohttp
+from pywaze.route_calculator import WazeRouteCalculator
+
 from homeassistant.exceptions import ServiceNotFound
 from homeassistant.helpers.httpx_client import get_async_client
-from pywaze.route_calculator import WazeRouteCalculator
 
 from ..const import (
     ATTR_ATTRIBUTION,
@@ -19,35 +19,32 @@ from ..const import (
     CONF_DISTANCE_DURATION_SOURCE,
     CONF_GOOGLE_API_KEY,
     CONF_LANGUAGE,
-    CONF_MAPQUEST_API_KEY,
     CONF_MAPBOX_API_KEY,
+    CONF_MAPQUEST_API_KEY,
     CONF_OSM_API_KEY,
     CONF_RADAR_API_KEY,
     CONF_REGION,
     DEFAULT_API_KEY_NOT_SET,
-    FAR_AWAY_METERS,
-    get_waze_region,
-    INFO_LOCATION_LATITUDE,
-    INFO_LOCATION_LONGITUDE,
     METERS_PER_KM,
     METERS_PER_MILE,
-    MIN_DISTANCE_TRAVELLED_TO_GEOCODE,
-    THROTTLE_INTERVAL,
+    PERSON_LOCATION_INTEGRATION,
     WAZE_MIN_METERS_FROM_HOME,
+    get_waze_region,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
-RADAR_BASE_URL = "https://api.radar.io/v1/route/distance"
 
 async def update_driving_miles_and_minutes(
-    pli,
+    pli: PERSON_LOCATION_INTEGRATION,
     target,
-    new_latitude,
-    new_longitude,
-    waze_country_code,
-):
-    """ 
+    new_latitude: str,
+    new_longitude: str,
+    waze_country_code: str,
+) -> None:
+    """
+    Update driving duration and distance.
+
     Input target._attr_extra_state_attributes:
         ATTR_METERS_FROM_HOME
         ATTR_MILES_FROM_HOME
@@ -60,45 +57,56 @@ async def update_driving_miles_and_minutes(
     May update pli.attributes:
         "waze_error_count"
     """
-
     try:
         distance_duration_source = pli.configuration[CONF_DISTANCE_DURATION_SOURCE]
         entity_id = target.entity_id
 
-        _LOGGER.debug("[update_driving_miles_and_minutes] (%s) Source=%s",
+        _LOGGER.debug(
+            "[update_driving_miles_and_minutes] (%s) Source=%s",
             entity_id,
             distance_duration_source,
-            )
+        )
 
         if distance_duration_source == "none":
             return
 
         # If we’re already “home,” skip routing
-        if target._attr_extra_state_attributes[ATTR_METERS_FROM_HOME] < WAZE_MIN_METERS_FROM_HOME:
-            target._attr_extra_state_attributes[ATTR_DRIVING_MILES] = target._attr_extra_state_attributes[ATTR_MILES_FROM_HOME]
+        if (
+            target._attr_extra_state_attributes[ATTR_METERS_FROM_HOME]
+            < WAZE_MIN_METERS_FROM_HOME
+        ):
+            target._attr_extra_state_attributes[ATTR_DRIVING_MILES] = (
+                target._attr_extra_state_attributes[ATTR_MILES_FROM_HOME]
+            )
             target._attr_extra_state_attributes[ATTR_DRIVING_MINUTES] = "0"
-            _LOGGER.debug("[update_driving_miles_and_minutes] Too close to home for lookup to matter.")
+            _LOGGER.debug(
+                "[update_driving_miles_and_minutes] Too close to home for lookup to matter."
+            )
             return
 
         from_location = f"{new_latitude},{new_longitude}"
-        _LOGGER.debug("[update_driving_miles_and_minutes] from_location: " + from_location)
+        _LOGGER.debug(
+            "[update_driving_miles_and_minutes] from_location: " + from_location
+        )
 
         to_location = (
-            f"{pli.attributes['home_latitude']},"
-            f"{pli.attributes['home_longitude']}"
+            f"{pli.attributes['home_latitude']},{pli.attributes['home_longitude']}"
         )
         _LOGGER.debug("[update_driving_miles_and_minutes] to_location: " + to_location)
 
-        #------- Waze --------------------------------------------------
+        # ------- Waze --------------------------------------------------
 
         if distance_duration_source == "waze":
-
             waze_region = get_waze_region(waze_country_code)
-            _LOGGER.debug("[update_driving_miles_and_minutes] waze_region: " + waze_region)
+            _LOGGER.debug(
+                "[update_driving_miles_and_minutes] waze_region: " + waze_region
+            )
 
             # First attempt: HA-managed service
             try:
-                if not pli.hass.services.has_service("waze_travel_time", "get_travel_times"):
+                if not pli.hass.services.has_service(
+                    "waze_travel_time", "get_travel_times"
+                ):
                     raise ServiceNotFound("waze_travel_time", "get_travel_times")
 
                 data = await pli.hass.services.async_call(
@@ -172,29 +180,44 @@ async def update_driving_miles_and_minutes(
                     pli.attributes["waze_error_count"] = (
                         pli.attributes.get("waze_error_count", 0) + 1
                     )
-                    target._attr_extra_state_attributes[ATTR_DRIVING_MILES] = target._attr_extra_state_attributes[ATTR_MILES_FROM_HOME]
+                    target._attr_extra_state_attributes[ATTR_DRIVING_MILES] = (
+                        target._attr_extra_state_attributes[ATTR_MILES_FROM_HOME]
+                    )
                     return
             # Waze was not used in reverse_geocode, so give attribution if used here
-            target._attr_extra_state_attributes[ATTR_ATTRIBUTION] += '"Data by Waze App. https://waze.com"; '
+            target._attr_extra_state_attributes[ATTR_ATTRIBUTION] += (
+                '"Data by Waze App. https://waze.com"; '
+            )
 
-        #------- Radar -------------------------------------------------
+        # ------- Radar -------------------------------------------------
 
         elif distance_duration_source == "radar":
-
             async with aiohttp.ClientSession() as session:
-                data = await radar_calc_distance(pli,from_location, to_location, modes="car", units="metric", session=session)
+                data = await radar_calc_distance(
+                    pli,
+                    from_location,
+                    to_location,
+                    modes="car",
+                    units="metric",
+                    session=session,
+                )
                 duration_min, distance_m = extract_duration_distance(data)
             distance_km = distance_m / METERS_PER_KM
 
         # ------- Google --------------------------------------------------
 
         elif distance_duration_source == "google_maps":
+            GOOGLE_DISTANCE_MATRIX_URL = (
+                "https://maps.googleapis.com/maps/api/distancematrix/json"
+            )
 
-            GOOGLE_DISTANCE_MATRIX_URL = "https://maps.googleapis.com/maps/api/distancematrix/json"
-
-            api_key = pli.configuration.get(CONF_GOOGLE_API_KEY, DEFAULT_API_KEY_NOT_SET)
+            api_key = pli.configuration.get(
+                CONF_GOOGLE_API_KEY, DEFAULT_API_KEY_NOT_SET
+            )
             if not api_key or api_key == DEFAULT_API_KEY_NOT_SET:
-                _LOGGER.error("[update_driving_miles_and_minutes] CONF_GOOGLE_API_KEY not set")
+                _LOGGER.error(
+                    "[update_driving_miles_and_minutes] CONF_GOOGLE_API_KEY not set"
+                )
                 return
 
             async with aiohttp.ClientSession() as session:
@@ -205,7 +228,9 @@ async def update_driving_miles_and_minutes(
                     "units": "metric",
                     "key": api_key,
                 }
-                async with session.get(GOOGLE_DISTANCE_MATRIX_URL, params=params) as resp:
+                async with session.get(
+                    GOOGLE_DISTANCE_MATRIX_URL, params=params
+                ) as resp:
                     if resp.status != 200:
                         text = await resp.text()
                         raise RuntimeError(f"Google API error {resp.status}: {text}")
@@ -215,8 +240,8 @@ async def update_driving_miles_and_minutes(
                         raise ValueError("No routes returned by Google API")
 
                     element = rows[0]["elements"][0]
-                    duration_sec = element["duration"]["value"]   # seconds
-                    distance_m = element["distance"]["value"]     # meters
+                    duration_sec = element["duration"]["value"]  # seconds
+                    distance_m = element["distance"]["value"]  # meters
 
                     duration_min = duration_sec / 60.0
                     distance_km = distance_m / 1000.0
@@ -224,22 +249,23 @@ async def update_driving_miles_and_minutes(
         # ------- Mapbox --------------------------------------------------
 
         elif distance_duration_source == "mapbox":
-
             async with aiohttp.ClientSession() as session:
-                minutes, km = await mapbox_calc_distance(pli, from_location, to_location, session=session)
+                minutes, km = await mapbox_calc_distance(
+                    pli, from_location, to_location, session=session
+                )
                 duration_min = minutes
                 distance_km = km
 
-        #------- Unknown -------------------------------------------------
+        # ------- Unknown -------------------------------------------------
 
         else:
-
-            _LOGGER.debug("[update_driving_miles_and_minutes] Source (%s) not handled.",
+            _LOGGER.debug(
+                "[update_driving_miles_and_minutes] Source (%s) not handled.",
                 distance_duration_source,
-                )
+            )
             return
 
-        #------- Common post‐processing
+        # ------- Common post‐processing
 
         miles = distance_km * METERS_PER_KM / METERS_PER_MILE
         if miles <= 0:
@@ -252,7 +278,9 @@ async def update_driving_miles_and_minutes(
             display_miles = round(miles, 2)
 
         target._attr_extra_state_attributes[ATTR_DRIVING_MILES] = str(display_miles)
-        target._attr_extra_state_attributes[ATTR_DRIVING_MINUTES] = str(round(duration_min, 1))
+        target._attr_extra_state_attributes[ATTR_DRIVING_MINUTES] = str(
+            round(duration_min, 1)
+        )
 
         _LOGGER.debug(
             "[update_driving_miles_and_minutes] %s returned duration=%.1f minutes, distance=%s miles",
@@ -263,15 +291,19 @@ async def update_driving_miles_and_minutes(
 
     except Exception as e:
         _LOGGER.error(
-            "[update_driving_miles_and_minutes] Exception %s: %s" % (type(e).__name__, str(e))
+            "[update_driving_miles_and_minutes] Exception %s: %s",
+            type(e).__name__,
+            str(e),
         )
         _LOGGER.debug(traceback.format_exc())
         pli.attributes["api_error_count"] += 1
 
-#------- Radar -------------------------------------------------
+
+# ------- Radar -------------------------------------------------
+
 
 async def radar_calc_distance(
-    pli,
+    pli: PERSON_LOCATION_INTEGRATION,
     origin: str,
     destination: str,
     modes: str = "car",
@@ -282,9 +314,11 @@ async def radar_calc_distance(
 ) -> dict:
     """
     Async Radar Distance API call with retry/backoff for 429 and network errors.
+
     Returns JSON with duration and distance for the given mode.
     """
-    
+    RADAR_BASE_URL = "https://api.radar.io/v1/route/distance"
+
     api_key = pli.configuration.get(CONF_RADAR_API_KEY, DEFAULT_API_KEY_NOT_SET)
 
     if not api_key or api_key == DEFAULT_API_KEY_NOT_SET:
@@ -306,20 +340,24 @@ async def radar_calc_distance(
     try:
         for attempt in range(max_retries):
             try:
-                async with session.get(RADAR_BASE_URL, headers=headers, params=params) as resp:
+                async with session.get(
+                    RADAR_BASE_URL, headers=headers, params=params
+                ) as resp:
                     if resp.status == 200:
                         return await resp.json()
                     elif resp.status == 429:
                         # Rate limit: exponential backoff with jitter
-                        wait = base_backoff * (2 ** attempt) + random.uniform(0, 0.5)
-                        print(f"Radar API rate-limited (429). Retrying in {wait:.1f}s...")
+                        wait = base_backoff * (2**attempt) + random.uniform(0, 0.5)
+                        print(
+                            f"Radar API rate-limited (429). Retrying in {wait:.1f}s..."
+                        )
                         await asyncio.sleep(wait)
                     else:
                         text = await resp.text()
                         raise RuntimeError(f"Radar API error {resp.status}: {text}")
-            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            except (TimeoutError, aiohttp.ClientError) as e:
                 # Network error: retry with backoff
-                wait = base_backoff * (2 ** attempt) + random.uniform(0, 0.5)
+                wait = base_backoff * (2**attempt) + random.uniform(0, 0.5)
                 print(f"Network error: {e}. Retrying in {wait:.1f}s...")
                 await asyncio.sleep(wait)
         raise RuntimeError("Radar API request failed after retries.")
@@ -329,19 +367,19 @@ async def radar_calc_distance(
 
 
 def extract_duration_distance(data: dict, mode: str = "car") -> tuple:
-    """
-    Extract duration (seconds) and distance (meters) from Radar Distance API response.
-    """
+    """Extract duration (seconds) and distance (meters) from Radar API response."""
     routes = data.get("routes", {})
     mode_obj = routes.get(mode, {})
     duration = (mode_obj.get("duration") or {}).get("value", 0.0)  # minutes
     distance = (mode_obj.get("distance") or {}).get("value", 0.0)  # meters
     return duration, distance
 
+
 # ------- Mapbox --------------------------------------------------
 
+
 async def mapbox_calc_distance(
-    pli,
+    pli: PERSON_LOCATION_INTEGRATION,
     origin: str,
     destination: str,
     profile: str = "driving",
@@ -349,12 +387,12 @@ async def mapbox_calc_distance(
 ) -> tuple:
     """
     Query Mapbox Directions API for duration and distance.
+
     Returns (minutes, kilometers).
     """
-    
     MAPBOX_DIRECTIONS_URL = "https://api.mapbox.com/directions/v5/mapbox"
 
-    api_key = pli.configuration.get(CONF_MAPBOX_API_KEY,DEFAULT_API_KEY_NOT_SET)
+    api_key = pli.configuration.get(CONF_MAPBOX_API_KEY, DEFAULT_API_KEY_NOT_SET)
     if not api_key or api_key == DEFAULT_API_KEY_NOT_SET:
         _LOGGER.error("[update_driving_miles_and_minutes] Mapbox API key not set")
         return
@@ -388,8 +426,8 @@ async def mapbox_calc_distance(
                 raise ValueError("No routes returned by Mapbox API")
 
             route = routes[0]
-            duration_sec = route["duration"]   # seconds
-            distance_m = route["distance"]     # meters
+            duration_sec = route["duration"]  # seconds
+            distance_m = route["distance"]  # meters
 
             minutes = duration_sec / 60.0
             kilometers = distance_m / 1000.0
