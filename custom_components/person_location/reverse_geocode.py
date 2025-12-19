@@ -187,9 +187,9 @@ def setup_reverse_geocode(pli: PERSON_LOCATION_INTEGRATION) -> bool:
         """Call the Google Maps Reverse Geocoding API."""
         """https://developers.google.com/maps/documentation/geocoding/overview?hl=en_US#ReverseGeocoding"""
 
-        nonlocal new_latitude
-        nonlocal new_longitude
-        nonlocal new_location_time
+        # nonlocal new_latitude
+        # nonlocal new_longitude
+        # nonlocal new_location_time
         nonlocal new_locality
         nonlocal waze_country_code
 
@@ -284,9 +284,9 @@ def setup_reverse_geocode(pli: PERSON_LOCATION_INTEGRATION) -> bool:
         """Call the Mapquest Reverse Geocoding API."""
         """https://developer.mapquest.com/documentation/geocoding-api/reverse/get/"""
 
-        nonlocal new_latitude
-        nonlocal new_longitude
-        nonlocal new_location_time
+        # nonlocal new_latitude
+        # nonlocal new_longitude
+        # nonlocal new_location_time
         nonlocal new_locality
         nonlocal waze_country_code
 
@@ -412,9 +412,9 @@ def setup_reverse_geocode(pli: PERSON_LOCATION_INTEGRATION) -> bool:
         target: PERSON_LOCATION_TARGET,
     ) -> None:
         """Call the Nominatim Reverse Geocoding (OpenStreetMap) API."""
-        nonlocal new_latitude
-        nonlocal new_longitude
-        nonlocal new_location_time
+        # nonlocal new_latitude
+        # nonlocal new_longitude
+        # nonlocal new_location_time
         nonlocal new_locality
         nonlocal waze_country_code
 
@@ -495,9 +495,9 @@ def setup_reverse_geocode(pli: PERSON_LOCATION_INTEGRATION) -> bool:
         target: PERSON_LOCATION_TARGET,
     ) -> None:
         """Call the Radar Reverse Geocoding API."""
-        nonlocal new_latitude
-        nonlocal new_longitude
-        nonlocal new_location_time
+        # nonlocal new_latitude
+        # nonlocal new_longitude
+        # nonlocal new_location_time
         nonlocal new_locality
         nonlocal waze_country_code
 
