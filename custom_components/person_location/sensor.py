@@ -50,6 +50,7 @@ from .const import (
     CONF_RADAR_API_KEY,
     CONF_SHOW_ZONE_WHEN_AWAY,
     DATA_CONFIGURATION,
+    DATA_INTEGRATION,
     DEFAULT_API_KEY_NOT_SET,
     DOMAIN,
     IC3_STATIONARY_ZONE_PREFIX,
@@ -406,7 +407,7 @@ class PERSON_LOCATION_TARGET(SensorEntity, RestoreEntity):
                     type(supplementalAttribute),
                 )
         templateAttributes[ATTR_PERSON_NAME] = self._person_name
-        target = self._pli.hass.data[DOMAIN]["entities"].get(self._entity_id)
+        target = get_target_entity(self._pli, self.entity_id)
         create_and_register_template_sensor(
             self._pli.hass, target, attributeName, templateState, templateAttributes
         )
@@ -564,7 +565,7 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities) -> N
     entry_devices = entry.data.get("devices", {})
     _LOGGER.debug("[async_setup_entry] entry.data.devices: %s", entry_devices)
 
-    pli = hass.data[DOMAIN].get("integration")
+    pli = hass.data[DOMAIN].get(DATA_INTEGRATION)
     if pli:
         entities = hass.data[DOMAIN].setdefault("entities", {})
         new_entities = []

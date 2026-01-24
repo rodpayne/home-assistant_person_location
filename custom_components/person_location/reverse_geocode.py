@@ -1,4 +1,4 @@
-"""The person_location integration reverse_geocode service."""
+"""reverse_geocode.py - The person_location integration reverse_geocode service."""
 
 import asyncio
 from datetime import datetime
@@ -63,9 +63,15 @@ from .const import (
     METERS_PER_MILE,
     MIN_DISTANCE_TRAVELLED_TO_GEOCODE,
     PERSON_LOCATION_INTEGRATION,
+    SWITCH_GOOGLE_GEOCODING_API,
+    SWITCH_MAPBOX_STATIC_IMAGE_API,
+    SWITCH_MAPQUEST_GEOCODING_API,
+    SWITCH_OSM_NOMINATIM_GEOCODING_API,
+    SWITCH_RADAR_GEOCODING_API,
     TARGET_ASYNCIO_LOCK,
     THROTTLE_INTERVAL,
     ZONE_DOMAIN,
+    get_home_coordinates,
 )
 from .helpers.api import (
     async_get_google_maps_geocoding,
@@ -80,6 +86,11 @@ from .sensor import (
     PERSON_LOCATION_TARGET,
     create_and_register_template_sensor,
     get_target_entity,
+)
+from .switch import (
+    is_provider_enabled,
+    # record_api_error,
+    # record_api_request,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -175,6 +186,8 @@ def setup_reverse_geocode(pli: PERSON_LOCATION_INTEGRATION) -> bool:
     #       async_call_radar_reverse_geocoding
     # ---------------------------------------------------------------
 
+    home_latitude: str = None
+    home_longitude: str = None
     new_latitude: str = None
     new_longitude: str = None
     new_location_time: str = None
@@ -204,7 +217,7 @@ def setup_reverse_geocode(pli: PERSON_LOCATION_INTEGRATION) -> bool:
         )
         if not google_response.get("ok"):
             _LOGGER.warning(
-                "[async_call_open_street_map_reverse_geocoding] %s",
+                "[async_call_google_maps_geocoding] %s",
                 google_response.get("error"),
             )
             return
@@ -432,6 +445,21 @@ def setup_reverse_geocode(pli: PERSON_LOCATION_INTEGRATION) -> bool:
             return
 
         osm_decoded = osm_response["data"]
+
+        # Save home_state and home_countryCode for later comparisons
+        if new_latitude == home_latitude and new_longitude == home_longitude:
+            if (
+                "country_code" in osm_decoded["address"]
+                and "state" in osm_decoded["address"]
+            ):
+                home_country_code = osm_decoded["address"]["country_code"].upper()
+                home_state = osm_decoded["address"]["state"]
+                _LOGGER.debug(
+                    "(%s) OSM home_state = %s, home_country_code = %s",
+                    entity_id,
+                    home_state,
+                    home_country_code,
+                )
 
         for key in DEFAULT_LOCALITY_PRIORITY_OSM:
             if key in osm_decoded["address"]:
@@ -695,6 +723,8 @@ def setup_reverse_geocode(pli: PERSON_LOCATION_INTEGRATION) -> bool:
                             _LOGGER.warning("No target sensor found for %s", entity_id)
                             return False
 
+                        home_latitude, home_longitude = get_home_coordinates(pli.hass)
+
                         # Reset attribution before updating
                         target._attr_extra_state_attributes[ATTR_ATTRIBUTION] = ""
 
@@ -739,17 +769,13 @@ def setup_reverse_geocode(pli: PERSON_LOCATION_INTEGRATION) -> bool:
                                 ),
                                 3,
                             )
-
-                            if (
-                                pli.attributes["home_latitude"] != "None"
-                                and pli.attributes["home_longitude"] != "None"
-                            ):
+                            if home_latitude and home_longitude:
                                 old_distance_from_home = round(
                                     distance(
                                         float(old_latitude),
                                         float(old_longitude),
-                                        float(pli.attributes["home_latitude"]),
-                                        float(pli.attributes["home_longitude"]),
+                                        float(home_latitude),
+                                        float(home_longitude),
                                     ),
                                     3,
                                 )
@@ -875,15 +901,15 @@ def setup_reverse_geocode(pli: PERSON_LOCATION_INTEGRATION) -> bool:
                             elif (
                                 new_latitude != "None"
                                 and new_longitude != "None"
-                                and pli.attributes["home_latitude"] != "None"
-                                and pli.attributes["home_longitude"] != "None"
+                                and home_latitude
+                                and home_longitude
                             ):
                                 distance_from_home = round(
                                     distance(
                                         float(new_latitude),
                                         float(new_longitude),
-                                        float(pli.attributes["home_latitude"]),
-                                        float(pli.attributes["home_longitude"]),
+                                        home_latitude,
+                                        home_longitude,
                                     ),
                                     3,
                                 )
@@ -924,37 +950,73 @@ def setup_reverse_geocode(pli: PERSON_LOCATION_INTEGRATION) -> bool:
 
                             # ------- Radar -------------------------------------------
 
-                            if (
-                                pli.configuration[CONF_RADAR_API_KEY]
-                                != DEFAULT_API_KEY_NOT_SET
+                            if is_provider_enabled(
+                                pli.hass, SWITCH_RADAR_GEOCODING_API
                             ):
                                 await async_call_radar_reverse_geocoding(target)
+                            else:
+                                # Remove the soon-to-be outdated information.
+                                previous = target._attr_extra_state_attributes.pop(
+                                    ATTR_RADAR, None
+                                )
+                                if previous:
+                                    # TODO: remove the geocode template sensor if it exists
+                                    _LOGGER.debug(
+                                        "[handle_reverse_geocode] Removing attribute ATTR_RADAR"
+                                    )
 
                             # ------- Open Street Map ---------------------------------
 
-                            if (
-                                pli.configuration[CONF_OSM_API_KEY]
-                                != DEFAULT_API_KEY_NOT_SET
+                            if is_provider_enabled(
+                                pli.hass, SWITCH_OSM_NOMINATIM_GEOCODING_API
                             ):
                                 await async_call_open_street_map_reverse_geocoding(
                                     target
                                 )
+                            else:
+                                # Remove the soon-to-be outdated information.
+                                previous = target._attr_extra_state_attributes.pop(
+                                    ATTR_OPEN_STREET_MAP, None
+                                )
+                                if previous:
+                                    # TODO: remove the geocode template sensor if it exists
+                                    _LOGGER.debug(
+                                        "[handle_reverse_geocode] Removing attribute ATTR_OPEN_STREET_MAP"
+                                    )
 
                             # ------- Google Maps -------------------------------------
 
-                            if (
-                                pli.configuration[CONF_GOOGLE_API_KEY]
-                                != DEFAULT_API_KEY_NOT_SET
+                            if is_provider_enabled(
+                                pli.hass, SWITCH_GOOGLE_GEOCODING_API
                             ):
                                 await async_call_google_maps_geocoding(target)
+                            else:
+                                # Remove the soon-to-be outdated information.
+                                previous = target._attr_extra_state_attributes.pop(
+                                    ATTR_GOOGLE_MAPS, None
+                                )
+                                if previous:
+                                    # TODO: remove the geocode template sensor if it exists
+                                    _LOGGER.debug(
+                                        "[handle_reverse_geocode] Removing attribute ATTR_GOOGLE_MAPS"
+                                    )
 
                             # ------- Mapquest ----------------------------------------
 
-                            if (
-                                pli.configuration[CONF_MAPQUEST_API_KEY]
-                                != DEFAULT_API_KEY_NOT_SET
+                            if is_provider_enabled(
+                                pli.hass, SWITCH_MAPQUEST_GEOCODING_API
                             ):
                                 await async_call_mapquest_reverse_geocoding(target)
+                            else:
+                                # Remove the soon-to-be outdated information.
+                                previous = target._attr_extra_state_attributes.pop(
+                                    ATTR_MAPQUEST, None
+                                )
+                                if previous:
+                                    # TODO: remove the geocode template sensor if it exists
+                                    _LOGGER.debug(
+                                        "[handle_reverse_geocode] Removing attribute ATTR_MAPQUEST"
+                                    )
 
                             # ------- All ---------------------------------------------
 
@@ -1137,7 +1199,7 @@ def setup_reverse_geocode(pli: PERSON_LOCATION_INTEGRATION) -> bool:
                     "(%s) Exception %s: %s", entity_id, type(e).__name__, str(e)
                 )
                 _LOGGER.debug(traceback.format_exc())
-                pli.attributes["api_error_count"] += 1
+                pli.attributes["api_exception_count"] += 1
 
             pli.set_state()
             _LOGGER.debug("INTEGRATION_ASYNCIO_LOCK release...")

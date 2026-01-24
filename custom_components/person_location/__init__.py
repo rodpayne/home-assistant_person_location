@@ -25,14 +25,20 @@ from .const import (
     CONF_FOLLOW_PERSON_INTEGRATION,
     CONF_FRIENDLY_NAME_TEMPLATE,
     CONF_FROM_YAML,
+    CONF_GOOGLE_API_KEY,
+    CONF_MAPBOX_API_KEY,
+    CONF_MAPQUEST_API_KEY,
     CONF_NAME,
+    CONF_OSM_API_KEY,
     CONF_PERSON_NAMES,
+    CONF_RADAR_API_KEY,
     CONF_SHOW_ZONE_WHEN_AWAY,
     CONFIG_SCHEMA,
     DATA_ASYNC_SETUP_ENTRY,
     DATA_CONFIG_ENTRY,
     DATA_CONFIGURATION,
     DATA_ENTITY_INFO,
+    DATA_INTEGRATION,
     DATA_UNDO_STATE_LISTENER,
     DATA_UNDO_UPDATE_LISTENER,
     DEFAULT_FRIENDLY_NAME_TEMPLATE,
@@ -43,12 +49,19 @@ from .const import (
     PERSON_LOCATION_INTEGRATION,
     TITLE_PERSON_LOCATION_CONFIG,
 )
+from .helpers.api import (
+    async_test_google_api_key,
+    async_test_mapbox_api_key,
+    async_test_mapquest_api_key,
+    async_test_osm_api_key,
+    async_test_radar_api_key,
+)
 from .helpers.entity import prune_orphan_template_entities
 from .process_trigger import setup_process_trigger
 from .reverse_geocode import setup_reverse_geocode
 
 _LOGGER = logging.getLogger(__name__)
-PLATFORMS: list[Platform] = [Platform.CAMERA, Platform.SENSOR]
+PLATFORMS: list[Platform] = [Platform.CAMERA, Platform.SENSOR, Platform.SWITCH]
 
 
 def merge_entry_data(entry: ConfigEntry, conf: dict) -> tuple[dict, dict]:
@@ -147,8 +160,8 @@ async def async_setup(hass: HomeAssistant, yaml_config: dict) -> bool:
     # Explicit startup flag so logic downstream is predictable
     pli.attributes.setdefault("startup", True)
 
-    # Some code references expect hass.data[DOMAIN]["integration"]
-    hass.data[DOMAIN]["integration"] = pli
+    # Some code references expect hass.data[DOMAIN][DATA_INTEGRATION]
+    hass.data[DOMAIN][DATA_INTEGRATION] = pli
 
     # ------- get configuration from YAML -------
 
@@ -262,7 +275,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][DATA_CONFIG_ENTRY] = entry
 
     # Get integration object
-    pli = hass.data[DOMAIN]["integration"]
+    if DATA_INTEGRATION in hass.data[DOMAIN]:
+        pli = hass.data[DOMAIN][DATA_INTEGRATION]
+    else:
+        _LOGGER.debug("[async_setup_entry} Apparently async_setup did not run")
+        # Create integration object
+        pli = PERSON_LOCATION_INTEGRATION(f"{DOMAIN}.integration", hass)
+        hass.data[DOMAIN][DATA_INTEGRATION] = pli
+        # Register services
+        await _setup_services(pli, hass)
 
     # Store integration object for entry
     hass.data[DOMAIN][entry.entry_id] = pli
@@ -381,6 +402,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # Wire listeners based on updated configuration
         _listen_for_configured_entities(hass, pli)
 
+        # Validate the API keys.
+        valid1 = await async_test_google_api_key(
+            hass, pli.configuration[CONF_GOOGLE_API_KEY]
+        )
+        valid2 = await async_test_mapquest_api_key(
+            hass, pli.configuration[CONF_MAPQUEST_API_KEY]
+        )
+        valid3 = await async_test_osm_api_key(hass, pli.configuration[CONF_OSM_API_KEY])
+        valid4 = await async_test_mapbox_api_key(
+            hass, pli.configuration[CONF_MAPBOX_API_KEY]
+        )
+        valid5 = await async_test_radar_api_key(
+            hass, pli.configuration[CONF_RADAR_API_KEY]
+        )
+        if all([valid1, valid2, valid3, valid4, valid5]):
+            _LOGGER.debug("All configured API keys have passed validation")
+
         # Re-apply friendly names if template changed
         if friendly_name_template_changed:
             try:
@@ -425,8 +463,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             return
 
         pli.attributes["startup"] = False
-        _listen_for_configured_entities(hass, pli)
-
         # It should now be safe to expand template sensors for restored target sensors.
         if pli._target_sensors_restored:
             _LOGGER.debug("[_handle_startup_is_done] Running delayed reverse_geocode.")
@@ -440,7 +476,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     ),
                     "force_update": True,
                 }
-                pli.hass.services.call(DOMAIN, "reverse_geocode", service_data, False)
+                hass.services.call(DOMAIN, "reverse_geocode", service_data, False)
 
         _LOGGER.debug(
             "[_handle_startup_is_done] === Return === startup flag is turned off"
@@ -477,25 +513,27 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry and clean up orphaned devices/entities."""
     _LOGGER.debug("[async_unload_entry] Unloading entry: %s", entry.entry_id)
 
-    # Get template sensor names that are still valid
-    create_sensors_list = hass.data[DOMAIN][DATA_CONFIGURATION][CONF_CREATE_SENSORS]
+    # Unload platforms
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if not unload_ok:
+        _LOGGER.debug("[async_unload_entry] async_unload_platforms failed")
+        return False
 
     # Remove template sensors that are no longer needed
-    removed = await prune_orphan_template_entities(
-        hass,
-        platform_domain=DOMAIN,
-        entity_domain="sensor",
-        allowed_suffixes=create_sensors_list,
-    )
+    removed = await prune_orphan_template_entities(hass)
     if removed:
         _LOGGER.debug(
             "[async_unload_entry] Removed orphan template entities: %s", removed
         )
 
-    # Unload platforms
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if not unload_ok:
-        return False
+    # Unload switches
+    ent_reg = er.async_get(hass)
+    removed_count = 0
+    for entity in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
+        if entity.domain == "switch":
+            ent_reg.async_remove(entity.entity_id)
+            removed_count = removed_count + 1
+    _LOGGER.debug("[async_unload_entry] Removed %d API switch entities", removed_count)
 
     # Remove services registered by this integration
     if hass.services.has_service(DOMAIN, "geocode_api_on"):
@@ -508,7 +546,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_remove(DOMAIN, "reverse_geocode")
 
     # Remove integration object and undo listeners
-    pli = hass.data[DOMAIN].pop(entry.entry_id, None)
+    pli = hass.data[DOMAIN].pop(DATA_INTEGRATION, None)
     if pli:
         for entity_id, info in list(pli.entity_info.items()):
             undo = info.get(DATA_UNDO_STATE_LISTENER)
@@ -530,7 +568,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entities = [e for e in ent_reg.entities.values() if e.device_id == device.id]
         if not entities:
             dev_reg.async_remove_device(device.id)
-            _LOGGER.info("[async_unload_entry] Removed orphaned device %s", device.name)
+            _LOGGER.debug(
+                "[async_unload_entry] Removed orphaned device %s", device.name
+            )
 
     # Optional: clear per-domain bookkeeping
     hass.data[DOMAIN].pop(DATA_CONFIG_ENTRY, None)

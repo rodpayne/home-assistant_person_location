@@ -60,11 +60,11 @@ from .const import (
     VALID_OUTPUT_PLATFORM,
 )
 from .helpers.api import (
-    async_get_google_maps_geocoding,
-    async_get_mapbox_static_image,
-    async_get_mapquest_reverse_geocoding,
-    async_get_open_street_map_reverse_geocoding,
-    async_get_radar_reverse_geocoding,
+    async_test_google_api_key,
+    async_test_mapbox_api_key,
+    async_test_mapquest_api_key,
+    async_test_osm_api_key,
+    async_test_radar_api_key,
 )
 from .helpers.template import normalize_template, validate_template
 
@@ -104,7 +104,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         self._last_step = None  # Tracks last completed step
         self._step_order = ["geocode", "sensors", "triggers", "providers", "done"]
 
-    async def async_step_user(self, user_input=None) -> FlowResult:
+    async def async_step_user(self, user_input: dict = None) -> FlowResult:
         """Handle first configuration or when Add Service is clicked."""
         _LOGGER.debug("[async_step_user] user_input = %s", user_input)
 
@@ -113,7 +113,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
         return await self.async_step_menu(user_input)
 
-    async def async_step_reconfigure(self, user_input=None) -> FlowResult:
+    async def async_step_reconfigure(self, user_input: dict = None) -> FlowResult:
         """Handle reconfigure initiated from the three-dot menu."""
         _LOGGER.debug("[async_step_reconfigure] user_input = %s", user_input)
 
@@ -151,7 +151,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     # ----------------- Menu for Configuration Steps -----------------
 
-    async def async_step_menu(self, user_input=None) -> FlowResult:
+    async def async_step_menu(self, user_input: dict = None) -> FlowResult:
         """Present initial menu for ConfigFlow."""
         _LOGGER.debug("[async_step_menu] user_input = %s", user_input)
 
@@ -203,20 +203,42 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     # ----------------- Geocode: API keys, region, language -----------------
 
-    async def async_step_geocode(self, user_input=None) -> FlowResult:
+    async def async_step_geocode(self, user_input: dict = None) -> FlowResult:
         """Step: Collect API keys, region, language."""
         _LOGGER.debug("[async_step_geocode] user_input = %s", user_input)
 
         self._errors = {}
 
         if user_input is not None:
-            valid1 = await self._test_google_api_key(user_input[CONF_GOOGLE_API_KEY])
-            valid2 = await self._test_mapquest_api_key(
-                user_input[CONF_MAPQUEST_API_KEY]
+            valid1 = await async_test_google_api_key(
+                self.hass, user_input[CONF_GOOGLE_API_KEY]
             )
-            valid3 = await self._test_osm_api_key(user_input[CONF_OSM_API_KEY])
-            valid4 = await self._test_mapbox_api_key(user_input[CONF_MAPBOX_API_KEY])
-            valid5 = await self._test_radar_api_key(user_input[CONF_RADAR_API_KEY])
+            if not valid1:
+                self._errors[CONF_GOOGLE_API_KEY] = "invalid_key"
+
+            valid2 = await async_test_mapquest_api_key(
+                self.hass, user_input[CONF_MAPQUEST_API_KEY]
+            )
+            if not valid2:
+                self._errors[CONF_MAPQUEST_API_KEY] = "invalid_key"
+
+            valid3 = await async_test_osm_api_key(
+                self.hass, user_input[CONF_OSM_API_KEY]
+            )
+            if not valid3:
+                self._errors[CONF_OSM_API_KEY] = "invalid_key"
+
+            valid4 = await async_test_mapbox_api_key(
+                self.hass, user_input[CONF_MAPBOX_API_KEY]
+            )
+            if not valid4:
+                self._errors[CONF_MAPBOX_API_KEY] = "invalid_key"
+
+            valid5 = await async_test_radar_api_key(
+                self.hass, user_input[CONF_RADAR_API_KEY]
+            )
+            if not valid5:
+                self._errors[CONF_RADAR_API_KEY] = "invalid_key"
 
             if all([valid1, valid2, valid3, valid4, valid5]):
                 self._user_input.update(user_input)
@@ -274,7 +296,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             errors=self._errors,
         )
 
-    async def async_step_source(self, user_input=None) -> FlowResult:
+    async def async_step_source(self, user_input: dict = None) -> FlowResult:
         """Step: Select source for driving distance and duration."""
         _LOGGER.debug("[async_step_source] user_input = %s", user_input)
 
@@ -327,7 +349,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     # ----------------- Sensors to be created -----------------
 
-    async def async_step_sensors(self, user_input=None) -> FlowResult:
+    async def async_step_sensors(self, user_input: dict = None) -> FlowResult:
         """Step: Collect sensor creation and output platform, with cleanup support."""
         _LOGGER.debug("[async_step_sensors] user_input = %s", user_input)
 
@@ -423,7 +445,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     # ----------------- Triggers: Manage triggers/devices -----------------
 
-    async def async_step_triggers(self, user_input=None) -> FlowResult:
+    async def async_step_triggers(self, user_input: dict = None) -> FlowResult:
         """Manage triggers list: pairs of device entities/person names."""
         _LOGGER.debug("[async_step_triggers] user_input = %s", user_input)
 
@@ -555,7 +577,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             errors=self._errors,
         )
 
-    async def async_step_trigger_edit(self, user_input=None) -> FlowResult:
+    async def async_step_trigger_edit(self, user_input: dict = None) -> FlowResult:
         """Edit an existing device (update/remove)."""
         _LOGGER.debug("[async_step_trigger_edit] user_input = %s", user_input)
 
@@ -624,7 +646,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     # ----------------- Providers: Manage map cameras -----------------
 
-    async def async_step_providers(self, user_input=None) -> FlowResult:
+    async def async_step_providers(self, user_input: dict = None) -> FlowResult:
         """Step: Manage providers list (structural)."""
         _LOGGER.debug("[async_step_providers] user_input = %s", user_input)
 
@@ -638,12 +660,11 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
         cfg = self.hass.data[DOMAIN][DATA_CONFIGURATION]
         self._camera_template_variables = {
-            "parse_result": False,  # TODO: Investigate whether parse_result belongs here.
-            "google_api_key": cfg[CONF_GOOGLE_API_KEY],
-            "mapbox_api_key": cfg[CONF_MAPBOX_API_KEY],
-            "mapquest_api_key": cfg[CONF_MAPQUEST_API_KEY],
-            "osm_api_key": cfg[CONF_OSM_API_KEY],
-            "radar_api_key": cfg[CONF_RADAR_API_KEY],
+            CONF_GOOGLE_API_KEY: cfg[CONF_GOOGLE_API_KEY],
+            CONF_MAPBOX_API_KEY: cfg[CONF_MAPBOX_API_KEY],
+            CONF_MAPQUEST_API_KEY: cfg[CONF_MAPQUEST_API_KEY],
+            CONF_OSM_API_KEY: cfg[CONF_OSM_API_KEY],
+            CONF_RADAR_API_KEY: cfg[CONF_RADAR_API_KEY],
         }
 
         if not existing_names:
@@ -675,7 +696,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             errors=self._errors,
         )
 
-    async def async_step_provider_add(self, user_input=None) -> FlowResult:
+    async def async_step_provider_add(self, user_input: dict = None) -> FlowResult:
         """Add a new provider."""
         _LOGGER.debug("[async_step_provider_add] user_input = %s", user_input)
 
@@ -789,7 +810,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_provider_edit(self, user_input=None) -> FlowResult:
+    async def async_step_provider_edit(self, user_input: dict = None) -> FlowResult:
         """Edit an existing map provider (update/remove)."""
         _LOGGER.debug("[async_step_provider_edit] user_input = %s", user_input)
 
@@ -893,7 +914,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_provider_preview(self, user_input=None) -> FlowResult:
+    async def async_step_provider_preview(self, user_input: dict = None) -> FlowResult:
         """Preview an existing map provider."""
         _LOGGER.debug("[async_step_provider_prieview] user_input = %s", user_input)
 
@@ -1103,82 +1124,6 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 data=self._user_input,
             )
 
-    # ----------------- API Key Validity Tests -----------------
-
-    async def _test_google_api_key(self, key: str) -> bool:
-        if key == DEFAULT_API_KEY_NOT_SET:
-            return True
-        latitude = self.hass.config.latitude
-        longitude = self.hass.config.longitude
-        resp = await async_get_google_maps_geocoding(
-            self.hass, key, latitude, longitude
-        )
-        if resp.get("ok"):
-            return True
-        else:
-            self._errors[CONF_GOOGLE_API_KEY] = "invalid_key"
-            return False
-
-    async def _test_mapbox_api_key(self, key: str) -> bool:
-        if key == DEFAULT_API_KEY_NOT_SET:
-            return True
-        latitude = self.hass.config.latitude
-        longitude = self.hass.config.longitude
-        resp = await async_get_mapbox_static_image(self.hass, key, latitude, longitude)
-        if resp.get("ok"):
-            return True
-        else:
-            self._errors[CONF_MAPBOX_API_KEY] = "invalid_key"
-            return False
-
-    async def _test_mapquest_api_key(self, key: str) -> bool:
-        if key == DEFAULT_API_KEY_NOT_SET:
-            return True
-        latitude = self.hass.config.latitude
-        longitude = self.hass.config.longitude
-        resp = await async_get_mapquest_reverse_geocoding(
-            self.hass, key, latitude, longitude
-        )
-        if resp.get("ok"):
-            return True
-        else:
-            self._errors[CONF_MAPQUEST_API_KEY] = "invalid_key"
-            return False
-
-    async def _test_osm_api_key(self, key: str) -> bool:
-        import re
-
-        if key == DEFAULT_API_KEY_NOT_SET:
-            return True
-        try:
-            regex = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+$"
-            if re.search(regex, key):
-                latitude = self.hass.config.latitude
-                longitude = self.hass.config.longitude
-                resp = await async_get_open_street_map_reverse_geocoding(
-                    self.hass, key, latitude, longitude
-                )
-                if resp.get("ok"):
-                    return True
-        except Exception as e:
-            _LOGGER.debug("[_test_osm_api_key] Mail format failed: %s", e)
-        self._errors[CONF_OSM_API_KEY] = "invalid_email"
-        return False
-
-    async def _test_radar_api_key(self, key: str) -> bool:
-        if key == DEFAULT_API_KEY_NOT_SET:
-            return True
-        latitude = self.hass.config.latitude
-        longitude = self.hass.config.longitude
-        resp = await async_get_radar_reverse_geocoding(
-            self.hass, key, latitude, longitude
-        )
-        if resp.get("ok"):
-            return True
-        else:
-            self._errors[CONF_RADAR_API_KEY] = "invalid_key"
-            return False
-
     # --------------------------- Options Factory ---------------------------
 
     @staticmethod
@@ -1200,7 +1145,7 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self):
         self._errors = {}
 
-    async def async_step_init(self, user_input=None) -> OptionsFlow:
+    async def async_step_init(self, user_input: dict = None) -> OptionsFlow:
         """Entry point for options flow."""
         _LOGGER.debug("[async_step_init] user_input = %s", user_input)
 
@@ -1208,7 +1153,7 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
 
     # ----------------- General Options -----------------
 
-    async def async_step_general(self, user_input=None) -> OptionsFlow:
+    async def async_step_general(self, user_input: dict = None) -> OptionsFlow:
         """General runtime options (thresholds, templates, UX toggles)."""
         from .helpers.template import test_friendly_name_template
 

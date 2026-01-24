@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from typing import Any
 
 import httpx
 
@@ -28,10 +29,18 @@ from .const import (
     CONF_VERIFY_SSL,
     DATA_CONFIGURATION,
     DOMAIN,
+    IMAGE_API_PROVIDER_SWITCHES,
     VERSION,
+)
+from .switch import (
+    is_provider_enabled,
+    provider_error_count,
+    record_api_error,
+    record_api_success,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
 GET_IMAGE_TIMEOUT = 10
 
 CAMERA_PARENT_DEVICE = DeviceInfo(
@@ -73,13 +82,34 @@ async def async_setup_platform(
 
 async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities) -> None:
     """Set up cameras from config entry providers."""
-
     _LOGGER.debug("[async_setup_entry] entry: %s", entry)
     providers = entry.data.get(CONF_PROVIDERS, [])
     entities = [
         PersonLocationCamera(hass, normalize_provider(hass, p)) for p in providers
     ]
     async_add_entities(entities, update_before_add=True)
+
+
+def find_api_key_in_template(
+    template_obj: Template | str, variables: dict
+) -> str | None:
+    """Find API key in template or string."""
+    if hasattr(template_obj, "template"):
+        template_str = template_obj.template
+    else:
+        template_str = str(template_obj)
+
+    for key in variables:
+        if key in template_str:
+            return key
+
+    return None
+
+
+def provider_for_key(key_used: str) -> str | None:
+    """Return provider switch ID that uses the given API key."""
+    # return [provider for provider, key in API_PROVIDER_SWITCHES if key == key_used]
+    return IMAGE_API_PROVIDER_SWITCHES.get(key_used, None)
 
 
 class PersonLocationCamera(Camera):
@@ -108,12 +138,21 @@ class PersonLocationCamera(Camera):
 
         cfg = self.hass.data[DOMAIN][DATA_CONFIGURATION]
         self._template_variables = {
-            "parse_result": False,
-            "google_api_key": cfg[CONF_GOOGLE_API_KEY],
-            "mapbox_api_key": cfg[CONF_MAPBOX_API_KEY],
-            "mapquest_api_key": cfg[CONF_MAPQUEST_API_KEY],
-            "osm_api_key": cfg[CONF_OSM_API_KEY],
-            "radar_api_key": cfg[CONF_RADAR_API_KEY],
+            CONF_GOOGLE_API_KEY: cfg[CONF_GOOGLE_API_KEY],
+            CONF_MAPBOX_API_KEY: cfg[CONF_MAPBOX_API_KEY],
+            CONF_MAPQUEST_API_KEY: cfg[CONF_MAPQUEST_API_KEY],
+            CONF_OSM_API_KEY: cfg[CONF_OSM_API_KEY],
+            CONF_RADAR_API_KEY: cfg[CONF_RADAR_API_KEY],
+        }
+        self._key_used = find_api_key_in_template(
+            self._still_image_url, self._template_variables
+        )
+        self._api_key = cfg[self._key_used]
+        self._api_provider = provider_for_key(self._key_used)
+
+        self._attr_extra_state_attributes = {
+            "key_used": self._key_used,
+            "api_provider": self._api_provider,
         }
 
     @property
@@ -126,20 +165,36 @@ class PersonLocationCamera(Camera):
 
     async def async_camera_image(self, width=None, height=None) -> bytes | None:
         """Return bytes of camera image."""
+        provider_id = self._attr_extra_state_attributes["api_provider"]
+        if not is_provider_enabled(self.hass, provider_id):
+            _LOGGER.debug(
+                "[async_camera_image] %s not enabled",
+                provider_id,
+            )
+            self._state = STATE_PROBLEM
+            return None
+
+        _LOGGER.debug(
+            "[async_camera_image] %s is being updated",
+            provider_id,
+        )
+
         try:
             self._last_url, self._last_image = await asyncio.shield(
                 self._async_camera_image()
             )
         except asyncio.CancelledError as err:
-            _LOGGER.warning("Timeout getting camera image from %s", self._name)
+            _LOGGER.warning("Task cancelled getting camera image from %s", self._name)
             raise err
+
         return self._last_image
 
     async def _async_camera_image(self) -> tuple[str | None, bytes | None]:
         """Return a still image response from the camera."""
+        provider_id = self._attr_extra_state_attributes["api_provider"]
         if not self.enabled:
+            self._state = STATE_PROBLEM
             return self._last_url, self._last_image
-
         try:
             url = self._still_image_url.async_render(**self._template_variables)
         except TemplateError as err:
@@ -163,6 +218,11 @@ class PersonLocationCamera(Camera):
         if (url == self._last_url) or url == "None":
             return self._last_url, self._last_image
 
+        error_message = None
+        if provider_error_count(self.hass, provider_id) >= 10:
+            turn_off = True
+        else:
+            turn_off = False
         response = None
         try:
             async_client = get_async_client(self.hass, verify_ssl=self.verify_ssl)
@@ -170,17 +230,39 @@ class PersonLocationCamera(Camera):
                 url, auth=self._auth, timeout=GET_IMAGE_TIMEOUT
             )
             response.raise_for_status()
+
             image = response.content
+            record_api_success(self.hass, provider_id)
+            return url, image
+
+        except asyncio.CancelledError:
+            error_message = f"Task cancelled getting camera image from {self._name}"
         except httpx.TimeoutException:
-            _LOGGER.error("Timeout getting camera image from %s", self._name)
-            self._state = STATE_PROBLEM
-            return self._last_url, self._last_image
-        except (httpx.RequestError, httpx.HTTPStatusError) as err:
-            _LOGGER.error("Error getting new camera image from %s: %s", self._name, err)
-            self._state = STATE_PROBLEM
-            return self._last_url, self._last_image
+            error_message = f"Timeout getting camera image from {self._name}"
+        except httpx.RequestError as err:
+            error_message = err.message
+        except httpx.HTTPStatusError as err:
+            error_message = f"{err}"
+            if err.response.status_code == 401:
+                turn_off = True
         finally:
             if response:
                 await response.aclose()
 
-        return url, image
+        record_api_error(
+            self.hass,
+            provider_id,
+            error_message.replace(self._api_key, "**redacted**"),
+            turn_off=turn_off,
+        )
+
+        self._state = STATE_PROBLEM
+        # return self._last_url, self._last_image
+        return None, None
+
+    async def async_added_to_hass(self) -> None:
+        """Update to expose self._attr_extra_state_attributes."""
+        await super().async_added_to_hass()
+        _LOGGER.debug("(%s) added to HASS", self.name)
+
+        self.async_write_ha_state()

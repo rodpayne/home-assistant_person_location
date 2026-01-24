@@ -24,6 +24,7 @@ from homeassistant.const import (
     STATE_UNKNOWN,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 import homeassistant.helpers.config_validation as cv
 from homeassistant.util.yaml.objects import (
     NodeListClass,
@@ -148,12 +149,117 @@ VALID_OUTPUT_PLATFORM = ["sensor", "device_tracker"]
 CONF_REGION = "region"
 DEFAULT_REGION = "US"
 
+# API keys
 CONF_GOOGLE_API_KEY = "google_api_key"
 CONF_MAPBOX_API_KEY = "mapbox_api_key"
 CONF_MAPQUEST_API_KEY = "mapquest_api_key"
 CONF_OSM_API_KEY = "osm_api_key"
 CONF_RADAR_API_KEY = "radar_api_key"
 DEFAULT_API_KEY_NOT_SET = "not used"
+REDACT_KEYS = {
+    CONF_GOOGLE_API_KEY,
+    CONF_MAPBOX_API_KEY,
+    CONF_MAPQUEST_API_KEY,
+    CONF_OSM_API_KEY,
+    CONF_RADAR_API_KEY,
+}
+
+# API providers
+SWITCH_GOOGLE_GEOCODING_API = "google_geocoding_api"
+SWITCH_GOOGLE_DISTANCE_API = "google_distance_matrix_api"
+SWITCH_MAPBOX_DIRECTIONS_API = "mapbox_directions_api"
+SWITCH_MAPBOX_STATIC_IMAGE_API = "mapbox_static_image_api"
+SWITCH_MAPQUEST_GEOCODING_API = "mapquest_geocoding_api"
+SWITCH_OSM_NOMINATIM_GEOCODING_API = "nominatim_geocoding_api"
+SWITCH_RADAR_GEOCODING_API = "radar_geocoding_api"
+SWITCH_RADAR_DISTANCE_API = "radar_routing_distance_api"
+SWITCH_WAZE_TRAVEL_TIME = "waze_travel_time"
+
+# API providers for images
+SWITCH_GOOGLE_MAPS_STATIC_API = "google_maps_static_api"
+SWITCH_MAPBOX_STATIC_IMAGE_API = "mapbox_static_image_api"
+SWITCH_MAPQUEST_STATIC_MAP_API = "mapquest_static_map_api"
+SWITCH_RADAR_STATIC_MAPS_API = "radar_static_maps_api"
+
+# API providers and their keys
+API_PROVIDER_SWITCHES = [
+    (SWITCH_GOOGLE_GEOCODING_API, CONF_GOOGLE_API_KEY),
+    (SWITCH_GOOGLE_DISTANCE_API, CONF_GOOGLE_API_KEY),
+    (SWITCH_GOOGLE_MAPS_STATIC_API, CONF_GOOGLE_API_KEY),
+    (SWITCH_MAPBOX_DIRECTIONS_API, CONF_MAPBOX_API_KEY),
+    (SWITCH_MAPBOX_STATIC_IMAGE_API, CONF_MAPBOX_API_KEY),
+    (SWITCH_MAPQUEST_GEOCODING_API, CONF_MAPQUEST_API_KEY),
+    (SWITCH_MAPQUEST_STATIC_MAP_API, CONF_MAPQUEST_API_KEY),
+    (SWITCH_OSM_NOMINATIM_GEOCODING_API, CONF_OSM_API_KEY),
+    (SWITCH_RADAR_GEOCODING_API, CONF_RADAR_API_KEY),
+    (SWITCH_RADAR_DISTANCE_API, CONF_RADAR_API_KEY),
+    (SWITCH_RADAR_STATIC_MAPS_API, CONF_RADAR_API_KEY),
+    (SWITCH_WAZE_TRAVEL_TIME, None),
+]
+
+# Image API providers by key
+IMAGE_API_PROVIDER_SWITCHES = {
+    CONF_GOOGLE_API_KEY: SWITCH_GOOGLE_MAPS_STATIC_API,
+    CONF_MAPBOX_API_KEY: SWITCH_MAPBOX_STATIC_IMAGE_API,
+    CONF_MAPQUEST_API_KEY: SWITCH_MAPQUEST_STATIC_MAP_API,
+    CONF_RADAR_API_KEY: SWITCH_RADAR_STATIC_MAPS_API,
+}
+
+# State abbreviation dictionary
+
+STATE_ABBREVIATIONS = {
+    "AL": "Alabama",
+    "AK": "Alaska",
+    "AZ": "Arizona",
+    "AR": "Arkansas",
+    "CA": "California",
+    "CO": "Colorado",
+    "CT": "Connecticut",
+    "DE": "Delaware",
+    "FL": "Florida",
+    "GA": "Georgia",
+    "HI": "Hawaii",
+    "ID": "Idaho",
+    "IL": "Illinois",
+    "IN": "Indiana",
+    "IA": "Iowa",
+    "KS": "Kansas",
+    "KY": "Kentucky",
+    "LA": "Louisiana",
+    "ME": "Maine",
+    "MD": "Maryland",
+    "MA": "Massachusetts",
+    "MI": "Michigan",
+    "MN": "Minnesota",
+    "MS": "Mississippi",
+    "MO": "Missouri",
+    "MT": "Montana",
+    "NE": "Nebraska",
+    "NV": "Nevada",
+    "NH": "New Hampshire",
+    "NJ": "New Jersey",
+    "NM": "New Mexico",
+    "NY": "New York",
+    "NC": "North Carolina",
+    "ND": "North Dakota",
+    "OH": "Ohio",
+    "OK": "Oklahoma",
+    "OR": "Oregon",
+    "PA": "Pennsylvania",
+    "RI": "Rhode Island",
+    "SC": "South Carolina",
+    "SD": "South Dakota",
+    "TN": "Tennessee",
+    "TX": "Texas",
+    "UT": "Utah",
+    "VT": "Vermont",
+    "VA": "Virginia",
+    "WA": "Washington",
+    "WV": "West Virginia",
+    "WI": "Wisconsin",
+    "WY": "Wyoming",
+    "DC": "District of Columbia",
+}
 
 # Camera provider fields
 
@@ -279,8 +385,11 @@ CONFIG_SCHEMA = vol.Schema(
 DATA_STATE = "state"
 DATA_ATTRIBUTES = "attributes"
 DATA_CONFIG_ENTRY = "config_entry"
-DATA_CONFIGURATION = "configuration"
-DATA_ENTITY_INFO = "entity_info"
+DATA_CONFIGURATION = "configuration"  # CFG = Merged YAML and Config Data and Options
+DATA_ENTITY_INFO = "entity_info"  # TODO: structure like switch_entities
+DATA_INTEGRATION = "integration"  # PLI = Person Location integration runtime data
+DATA_SENSOR_ENTITIES = "sensor_entities"  # TODO: structure like switch_entities
+DATA_SWITCH_ENTITIES = "switch_entities"
 DATA_UNDO_STATE_LISTENER = "undo_state_listener"
 DATA_UNDO_UPDATE_LISTENER = "undo_update_listener"
 DATA_ASYNC_SETUP_ENTRY = "async_setup_entry"
@@ -295,19 +404,64 @@ TARGET_ASYNCIO_LOCK = asyncio.Lock()
 
 _LOGGER = logging.getLogger(__name__)
 
+_warned_messages = set()
 
-def get_waze_region(country_code: str) -> str:
-    """Determine Waze region from country code or Waze region setting."""
-    country_code = country_code.lower()
-    if country_code in ("us", "ca", "mx"):
-        return "us"
-    if country_code in WAZE_REGIONS:
-        return country_code
-    return "eu"
+
+def warn_once(logger: logging.Logger, message: str) -> bool:
+    """Log a warning only once for message."""
+    if message not in _warned_messages:
+        logger.warning(message)
+        _warned_messages.add(message)
+        return True
+    return False
+
+
+_error_messages = set()
+
+
+def error_once(logger: logging.Logger, message: str) -> bool:
+    """Log an error only once for message."""
+    if message not in _error_messages:
+        logger.error(message)
+        _error_messages.add(message)
+        return True
+    return False
+
+
+def get_home_coordinates(hass: HomeAssistant) -> tuple:
+    """Get Home latitude and longitude and validate that they have been entered."""
+    lat = hass.config.latitude
+    lon = hass.config.longitude
+
+    if not lat or not lon or (lat == 0 and lon == 0):
+        description = "Home Location is needed for geocoding (Settings → System → General → Location)"
+        if error_once(
+            _LOGGER,
+            description,
+        ):
+            # ⭐ Create a repair notification - Required configuration is missing
+            ir.async_create_issue(
+                hass,
+                DOMAIN,
+                "home_location_required",
+                is_fixable=False,
+                severity=ir.IssueSeverity.ERROR,
+                title="Home Assistant Location Required",
+                description=description,
+            )
+
+        return (None, None)
+
+    # ⭐ Clear repair notification
+    registry = ir.async_get(hass)
+    if registry.async_get_issue(DOMAIN, "home_location_required"):
+        ir.async_delete_issue(hass, DOMAIN, "home_location_required")
+
+    return (lat, lon)
 
 
 class PERSON_LOCATION_INTEGRATION:
-    """Class to represent the integration itself."""
+    """Class to represent the integration runtime."""
 
     def __init__(self, _entity_id, _hass: HomeAssistant) -> None:
         """Initialize the integration instance."""
@@ -318,33 +472,24 @@ class PERSON_LOCATION_INTEGRATION:
 
         self.entity_id = _entity_id
         self.hass = _hass
-        # self.config = _config
+
         self.state = "on"
         self.attributes = {}
-        self.attributes[ATTR_ICON] = "mdi:api"
-
         self.configuration = {}
         self.entity_info = {}
+
         self._target_sensors_restored = []
 
-        home_zone = "zone.home"
-        self.attributes[ATTR_FRIENDLY_NAME] = f"{INTEGRATION_NAME} Service"
-        self.attributes["home_latitude"] = str(
-            self.hass.states.get(home_zone).attributes.get(ATTR_LATITUDE)
-        )
-        self.attributes["home_longitude"] = str(
-            self.hass.states.get(home_zone).attributes.get(ATTR_LONGITUDE)
-        )
+        self.attributes[ATTR_ICON] = "mdi:api"
         self.attributes["api_last_updated"] = datetime.now()
-        self.attributes["api_error_count"] = 0
+        self.attributes["api_exception_count"] = 0
         self.attributes["api_calls_requested"] = 0
         self.attributes["api_calls_skipped"] = 0
         self.attributes["api_calls_throttled"] = 0
         self.attributes["startup"] = True
         self.attributes["waze_error_count"] = 0
         self.attributes[ATTR_ATTRIBUTION] = (
-            f"System information for the {INTEGRATION_NAME} integration \
-                ({DOMAIN}), version {VERSION}."
+            f"System information for the {INTEGRATION_NAME} integration ({DOMAIN}), version {VERSION}."
         )
 
         # ❌ self.set_state()
@@ -368,8 +513,9 @@ class PERSON_LOCATION_INTEGRATION:
         else:
             self.hass.data[DOMAIN] = integration_state_data
 
-        simple_attributes = {ATTR_ICON: self.attributes[ATTR_ICON]}
-        self.hass.states.async_set(self.entity_id, self.state, simple_attributes)
+        # simple_attributes = {ATTR_ICON: self.attributes[ATTR_ICON]}
+        # self.hass.states.async_set(self.entity_id, self.state, simple_attributes)
+        self.hass.states.async_set(self.entity_id, self.state, self.attributes)
 
         _LOGGER.debug(
             "[async_set_state] (%s) -state: %s -attributes: %s",

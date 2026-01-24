@@ -28,16 +28,40 @@ from ..const import (
     METERS_PER_KM,
     METERS_PER_MILE,
     PERSON_LOCATION_INTEGRATION,
+    SWITCH_GOOGLE_DISTANCE_API,
+    SWITCH_MAPBOX_DIRECTIONS_API,
+    SWITCH_RADAR_DISTANCE_API,
+    SWITCH_WAZE_TRAVEL_TIME,
     WAZE_MIN_METERS_FROM_HOME,
-    get_waze_region,
+    WAZE_REGIONS,
+    error_once,
+    get_home_coordinates,
+)
+from ..sensor import (
+    PERSON_LOCATION_TARGET,
+)
+from ..switch import (
+    is_provider_enabled,
+    record_api_error,
+    record_api_success,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 
+def get_waze_region(country_code: str) -> str:
+    """Determine Waze region from country code or Waze region setting."""
+    country_code = country_code.lower()
+    if country_code in ("us", "ca", "mx"):
+        return "us"
+    if country_code in WAZE_REGIONS:
+        return country_code
+    return "eu"
+
+
 async def update_driving_miles_and_minutes(
     pli: PERSON_LOCATION_INTEGRATION,
-    target,
+    target: PERSON_LOCATION_TARGET,
     new_latitude: str,
     new_longitude: str,
     waze_country_code: str,
@@ -45,16 +69,19 @@ async def update_driving_miles_and_minutes(
     """
     Update driving duration and distance.
 
-    Input target._attr_extra_state_attributes:
+    Input:
+      target._attr_extra_state_attributes
         ATTR_METERS_FROM_HOME
         ATTR_MILES_FROM_HOME
 
-    Updates target._attr_extra_state_attributes:
+    Update:
+      target._attr_extra_state_attributes
         ATTR_DRIVING_MILES
         ATTR_DRIVING_MINUTES
         ATTR_ATTRIBUTION
 
-    May update pli.attributes:
+    May update:
+      pli.attributes
         "waze_error_count"
     """
     try:
@@ -89,14 +116,24 @@ async def update_driving_miles_and_minutes(
             "[update_driving_miles_and_minutes] from_location: " + from_location
         )
 
-        to_location = (
-            f"{pli.attributes['home_latitude']},{pli.attributes['home_longitude']}"
-        )
-        _LOGGER.debug("[update_driving_miles_and_minutes] to_location: " + to_location)
+        home_latitude, home_longitude = get_home_coordinates(pli.hass)
+        to_location = f"{home_latitude},{home_longitude}"
+
+        _LOGGER.debug("[update_driving_miles_and_minutes] to_location: %s", to_location)
+        if to_location == (None, None):
+            return
 
         # ------- Waze --------------------------------------------------
 
         if distance_duration_source == "waze":
+            provider_id = SWITCH_WAZE_TRAVEL_TIME
+            if not is_provider_enabled(pli.hass, provider_id):
+                _LOGGER.debug(
+                    "[update_driving_miles_and_minutes] %s not enabled",
+                    provider_id,
+                )
+                return
+
             waze_region = get_waze_region(waze_country_code)
             _LOGGER.debug(
                 "[update_driving_miles_and_minutes] waze_region: " + waze_region
@@ -171,7 +208,7 @@ async def update_driving_miles_and_minutes(
                     )
 
                 except Exception as pw_err:
-                    _LOGGER.error(
+                    _LOGGER.debug(
                         "[update_driving_miles_and_minutes] (%s) pywaze fallback failed %s: %s",
                         entity_id,
                         type(pw_err).__name__,
@@ -180,18 +217,41 @@ async def update_driving_miles_and_minutes(
                     pli.attributes["waze_error_count"] = (
                         pli.attributes.get("waze_error_count", 0) + 1
                     )
+                    if pli.attributes["waze_error_count"] > 10:
+                        error_count_exceeded = True
+                    else:
+                        error_count_exceeded = False
+                    error_message = f"Wyze service and pywaze failed {type(pw_err).__name__}: {pw_err}"
+                    record_api_error(
+                        pli.hass,
+                        provider_id,
+                        error_message,
+                        turn_off=error_count_exceeded,
+                    )
+
                     target._attr_extra_state_attributes[ATTR_DRIVING_MILES] = (
                         target._attr_extra_state_attributes[ATTR_MILES_FROM_HOME]
                     )
                     return
+
             # Waze was not used in reverse_geocode, so give attribution if used here
             target._attr_extra_state_attributes[ATTR_ATTRIBUTION] += (
                 '"Data by Waze App. https://waze.com"; '
             )
 
+            record_api_success(pli.hass, provider_id)
+
         # ------- Radar -------------------------------------------------
 
         elif distance_duration_source == "radar":
+            provider_id = SWITCH_RADAR_DISTANCE_API
+            if not is_provider_enabled(pli.hass, provider_id):
+                _LOGGER.debug(
+                    "[update_driving_miles_and_minutes] %s not enabled",
+                    provider_id,
+                )
+                return
+
             async with aiohttp.ClientSession() as session:
                 data = await radar_calc_distance(
                     pli,
@@ -204,6 +264,8 @@ async def update_driving_miles_and_minutes(
                 duration_min, distance_m = extract_duration_distance(data)
             distance_km = distance_m / METERS_PER_KM
 
+            record_api_success(pli.hass, provider_id)
+
         # ------- Google --------------------------------------------------
 
         elif distance_duration_source == "google_maps":
@@ -215,8 +277,15 @@ async def update_driving_miles_and_minutes(
                 CONF_GOOGLE_API_KEY, DEFAULT_API_KEY_NOT_SET
             )
             if not api_key or api_key == DEFAULT_API_KEY_NOT_SET:
-                _LOGGER.error(
+                _LOGGER.debug(
                     "[update_driving_miles_and_minutes] CONF_GOOGLE_API_KEY not set"
+                )
+                return
+            provider_id = SWITCH_GOOGLE_DISTANCE_API
+            if not is_provider_enabled(pli.hass, provider_id):
+                _LOGGER.debug(
+                    "[update_driving_miles_and_minutes] %s not enabled",
+                    provider_id,
                 )
                 return
 
@@ -246,9 +315,19 @@ async def update_driving_miles_and_minutes(
                     duration_min = duration_sec / 60.0
                     distance_km = distance_m / 1000.0
 
+                record_api_success(pli.hass, provider_id)
+
         # ------- Mapbox --------------------------------------------------
 
         elif distance_duration_source == "mapbox":
+            provider_id = SWITCH_MAPBOX_DIRECTIONS_API
+            if not is_provider_enabled(pli.hass, provider_id):
+                _LOGGER.debug(
+                    "[update_driving_miles_and_minutes] %s not enabled",
+                    provider_id,
+                )
+                return
+
             async with aiohttp.ClientSession() as session:
                 minutes, km = await mapbox_calc_distance(
                     pli, from_location, to_location, session=session
@@ -256,12 +335,17 @@ async def update_driving_miles_and_minutes(
                 duration_min = minutes
                 distance_km = km
 
+            record_api_success(pli.hass, provider_id)
+
         # ------- Unknown -------------------------------------------------
 
         else:
-            _LOGGER.debug(
-                "[update_driving_miles_and_minutes] Source (%s) not handled.",
-                distance_duration_source,
+            error_once(
+                _LOGGER,
+                (
+                    "[update_driving_miles_and_minutes] Source (%s) not handled.",
+                    distance_duration_source,
+                ),
             )
             return
 
@@ -296,7 +380,7 @@ async def update_driving_miles_and_minutes(
             str(e),
         )
         _LOGGER.debug(traceback.format_exc())
-        pli.attributes["api_error_count"] += 1
+        pli.attributes["api_exception_count"] += 1
 
 
 # ------- Radar -------------------------------------------------

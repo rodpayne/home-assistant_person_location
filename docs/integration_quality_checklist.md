@@ -1,7 +1,7 @@
 ## See [Integration quality scale](https://developers.home-assistant.io/docs/core/integration-quality-scale/) for descriptions.
 
 ## Bronze
-- [X] `action-setup` - Service actions are registered in async_setup
+- [X] `action-setup` - Service actions are registered in async_setup - *Found that in at least one case (Reconfigure), async_setup does not run, so service registration sometimes needs to be done in async_setup_entry.*
 - [n/a] `appropriate-polling` - If it's a polling integration, set an appropriate polling interval
 - [X] `brands` - Has branding assets available for the integration
 - [ ] `common-modules` - Place common patterns in common modules
@@ -28,7 +28,7 @@
 - [ ] `docs-configuration-parameters` - The documentation describes all integration configuration options
 - [ ] `docs-installation-parameters` - The documentation describes all integration installation parameters
 - [ ] `entity-unavailable` - Mark entity unavailable if appropriate
-- [ ] `integration-owner` - Has an integration owner
+- [X] `integration-owner` - Has an integration owner
 - [ ] `log-when-unavailable` - If internet/device/service is unavailable, log once when unavailable and once when back connected
 - [ ] `parallel-updates` - Number of parallel updates is specified
 - [ ] `reauthentication-flow` - Reauthentication needs to be available via the UI
@@ -36,9 +36,9 @@
 
 ## Gold
 - [X] `devices` - The integration creates devices
-- [ ] `diagnostics` - Implements diagnostics
-- [ ] `discovery-update-info` - Integration uses discovery info to update network information
-- [ ] `discovery` - Devices can be discovered
+- [X] `diagnostics` - Implements diagnostics
+- [n/a] `discovery-update-info` - Integration uses discovery info to update network information
+- [n/a] `discovery` - Devices can be discovered
 - [ ] `docs-data-update` - The documentation describes how data is updated
 - [ ] `docs-examples` - The documentation provides automation examples the user can use.
 - [ ] `docs-known-limitations` - The documentation describes known limitations of the integration (not to be confused with bugs)
@@ -54,7 +54,7 @@
 - [ ] `exception-translations` - Exception messages are translatable
 - [ ] `icon-translations` - Entities implement icon translations
 - [X] `reconfiguration-flow` - Integrations should have a reconfigure flow
-- [ ] `repair-issues` - Repair issues and repair flows are used when user intervention is needed
+- [/] `repair-issues` - Repair issues and repair flows are used when user intervention is needed
 - [X] `stale-devices` - Stale devices are removed
 
 ## Platinum

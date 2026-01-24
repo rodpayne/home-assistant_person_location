@@ -47,6 +47,7 @@ from .const import (
     CONF_SHOW_ZONE_WHEN_AWAY,
     DEFAULT_FRIENDLY_NAME_TEMPLATE,
     DOMAIN,
+    get_home_coordinates,
     IC3_STATIONARY_ZONE_PREFIX,
     INFO_TRIGGER_COUNT,
     PERSON_LOCATION_INTEGRATION,
@@ -580,12 +581,10 @@ def setup_process_trigger(pli: PERSON_LOCATION_INTEGRATION) -> bool:
                     )
 
                     if reportedZone == "home":
-                        target._attr_extra_state_attributes[ATTR_LATITUDE] = (
-                            pli.attributes["home_latitude"]
-                        )
-                        target._attr_extra_state_attributes[ATTR_LONGITUDE] = (
-                            pli.attributes["home_longitude"]
-                        )
+                        (
+                            target._attr_extra_state_attributes[ATTR_LATITUDE],
+                            target._attr_extra_state_attributes[ATTR_LONGITUDE],
+                        ) = get_home_coordinates(pli.hass)
 
                     # Set up something like https://philhawthorne.com/making-home-assistants-presence-detection-not-so-binary/
                     # https://github.com/rodpayne/home-assistant_person_location?tab=readme-ov-file#make-presence-detection-not-so-binary

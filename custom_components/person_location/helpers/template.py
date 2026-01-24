@@ -151,7 +151,7 @@ async def test_friendly_name_template(hass: HomeAssistant, template_str: str) ->
 
     friendly_name_location = "is in Spanish Fork"
 
-    target = State(
+    target_state = State(
         "sensor.rod_location",  # entity_id
         "Just Left",  # state
         {
@@ -205,9 +205,9 @@ async def test_friendly_name_template(hass: HomeAssistant, template_str: str) ->
 
     friendly_name_variables = {
         "friendly_name_location": friendly_name_location,
-        "person_name": target.attributes["person_name"],
+        "person_name": target_state.attributes["person_name"],
         "source": sourceObject,
-        "target": target,
+        "target": target_state,
     }
     _LOGGER.debug(f"friendly_name_variables = {friendly_name_variables}")
 

@@ -899,3 +899,7 @@ logger:
   logs:
     custom_components.person_location: debug  
 ```
+
+Diagnostics are accessed through **Settings → Devices & Services → person_location → ⋮ → Download Diagnostics.**
+
+Diagnostics output is a **sanitized JSON document** containing configuration metadata, provider information, and recent runtime state. Sensitive values such as API keys are automatically redacted.

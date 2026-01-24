@@ -1,10 +1,11 @@
 """helpers/entity.py - Helpers for entity lifecycle"""
 
+from collections.abc import Iterable
 import logging
 import re
-from typing import Iterable
 
 from homeassistant.const import STATE_UNAVAILABLE
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
 from ..const import (
@@ -15,7 +16,7 @@ from ..const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# -------------------------------------------------------------------------------
+# ------- Template Entities -------------------------------------------------
 
 # Base ends with "_location"; suffix can contain underscores
 _TEMPLATE_RE = re.compile(r"^(?P<base>.+_location)_(?P<suffix>.+)_template$")
@@ -36,12 +37,15 @@ def _extract_base_and_suffix(unique_id: str) -> tuple[str, str] | None:
 
 
 async def prune_orphan_template_entities(
-    hass,
-    *,
-    platform_domain: str,  # your integration's domain string in the registry
-    entity_domain: str = "sensor",
-    allowed_suffixes: Iterable[str],
+    hass: HomeAssistant,
 ) -> list[str]:
+    """Remove template sensor entities that are no longer requested."""
+    platform_domain = DOMAIN
+    entity_domain = "sensor"
+
+    # Get template sensor names that are still valid
+    allowed_suffixes = hass.data[DOMAIN][DATA_CONFIGURATION][CONF_CREATE_SENSORS]
+
     registry = er.async_get(hass)
     allowed = set(allowed_suffixes or [])
     removed: list[str] = []
