@@ -20,6 +20,7 @@ from homeassistant.helpers.event import (
     async_track_point_in_time,
 )
 from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.util import slugify
 
 from .const import (
     ATTR_ALTITUDE,
@@ -635,7 +636,7 @@ def create_and_register_template_sensor(
 ) -> PersonLocationTemplateSensor:
     """Create or update a PersonLocationTemplateSensor safely."""
     entities = hass.data[DOMAIN]["entities"]
-    entity_id = f"sensor.{parent.personName.lower()}_location_{suffix.lower()}"
+    entity_id = f"{parent._entity_id}_{suffix.lower()}"
 
     if entity_id in entities:
         # Update existing sensor

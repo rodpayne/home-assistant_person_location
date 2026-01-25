@@ -26,6 +26,7 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 import homeassistant.helpers.config_validation as cv
+from homeassistant.util import slugify
 from homeassistant.util.yaml.objects import (
     NodeListClass,
     NodeStrClass,
@@ -38,7 +39,7 @@ API_STATE_OBJECT = DOMAIN + "." + DOMAIN + "_integration"
 INTEGRATION_NAME = "Person Location"
 ISSUE_URL = "https://github.com/rodpayne/home-assistant_person_location/issues"
 
-VERSION = "2026.01.24"
+VERSION = "2026.01.25"
 
 # Titles for the config entries:
 
@@ -603,6 +604,6 @@ class PERSON_LOCATION_TRIGGER:
         self.targetName = (
             self.configuration[CONF_OUTPUT_PLATFORM]
             + "."
-            + self.personName.lower()
+            + slugify(self.personName)
             + "_location"
         )

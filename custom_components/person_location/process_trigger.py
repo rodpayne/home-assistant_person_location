@@ -47,13 +47,13 @@ from .const import (
     CONF_SHOW_ZONE_WHEN_AWAY,
     DEFAULT_FRIENDLY_NAME_TEMPLATE,
     DOMAIN,
-    get_home_coordinates,
     IC3_STATIONARY_ZONE_PREFIX,
     INFO_TRIGGER_COUNT,
     PERSON_LOCATION_INTEGRATION,
     PERSON_LOCATION_TRIGGER,
     TARGET_LOCK,
     ZONE_DOMAIN,
+    get_home_coordinates,
 )
 from .sensor import get_target_entity
 
@@ -197,7 +197,7 @@ def setup_process_trigger(pli: PERSON_LOCATION_INTEGRATION) -> bool:
                 from_state
                 to_state
         Output (if update is accepted):
-            - Updated "sensor.<personName>_location" with <personName>'s location and status:
+            - Updated "sensor.<slugify(personName)>_location" with <personName>'s location and status:
                 Attributes:
                 - selected attributes from the triggered device tracker
                 - state: "Just Arrived", "Home", "Just Left", "Away", or "Extended Away"
@@ -207,7 +207,7 @@ def setup_process_trigger(pli: PERSON_LOCATION_INTEGRATION) -> bool:
                 - reported_state: the state reported by device tracker = "Home", "Away", or <zone>
                 - bread_crumbs: the series of locations that have been seen
                 - icon: the icon that corresponds with the current zone
-            - Call rest_command service to update HomeSeer: 'homeseer_<personName>_<state>'
+            - Call rest_command service to update HomeSeer: 'homeseer_<slugify(personName)>_<state>'
         """
         entity_id = call.data.get(CONF_ENTITY_ID, "NONE")
         triggerFrom = call.data.get("from_state", "NONE")
