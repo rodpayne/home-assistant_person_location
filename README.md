@@ -80,7 +80,10 @@ When a person is detected as moving between `Home` and `Away`, instead of going 
 If `CONF_SHOW_ZONE_WHEN_AWAY`, then `<Zone>` is reported instead of `Away`.                
 
 ### **Reverse geocode the location and make distance calculations**
-The custom integration supplies a service to reverse geocode the location (making it human readable) using `Open Street Map`, `MapQuest`, `Google Maps`, and/or `Radar` and calculate the distance from home (miles and minutes) using `WazeRouteCalculator`.  
+The custom integration supplies a service to reverse geocode the location (making it human readable) using `Open Street Map`, `MapQuest`, `Google Maps`, and/or `Radar` and calculate the distance from home (miles and minutes) using `WazeRouteCalculator`, `Radar`, `Google Maps`, or `Mapbox`.  
+
+Individual "template" sensors can be programatically created for selected attributes so that template sensors do not need to be configured.
+These template sensors move the attribute to a sensor state where it will be be shown in history and logbook entries.
 
 ## Components
 
@@ -892,6 +895,7 @@ Show all related device trackers and person location information (especially dur
 ```
 ### **Troubleshooting**
 
+#### **Debug Logging**
 To enable detailed logging for this custom integration, add the following to `configuration.yaml`.
 ```yaml
 logger:
@@ -899,7 +903,15 @@ logger:
   logs:
     custom_components.person_location: debug  
 ```
-
+#### **Diagnostics Download**
 Diagnostics are accessed through **Settings → Devices & Services → person_location → ⋮ → Download Diagnostics.**
 
 Diagnostics output is a **sanitized JSON document** containing configuration metadata, provider information, and recent runtime state. Sensitive values such as API keys are automatically redacted.
+
+#### **Map Camera Rendering**
+
+A map camera URL template that will not render in the camera frontend can be checked in a web browser.
+
+Go to `Person Location Config` → `⋮` → `Reconfigure` → `Manage Map Camera providers` → pick one → `Update and preview result`.
+
+Copy the `Map Camera URL Preview` and paste it into the address bar of a web browser. It should show an error message if it is not being accepted by the map provider.
