@@ -30,7 +30,7 @@
             },
             "sensors": {
                 "title": "Person Location Sensor Configuration",
-                "description": "We can create individual sensors so that template sensors do not need to be manually configured. Choose from this list: altitude, bread_crumbs, direction, driving_miles, driving_minutes, geocoded, latitude, longitude, meters_from_home, miles_from_home. ",
+                "description": "We can create individual sensors so that template sensors do not need to be manually configured. Choose from this list: altitude, bread_crumbs, direction, driving_miles, driving_minutes, geocoded, latitude, longitude, meters_from_home, miles_from_home.",
                 "data": {
                     "create_sensors": "Sensors to be created (comma separated)",
                     "altitude": "altitude",
