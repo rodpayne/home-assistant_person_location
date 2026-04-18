@@ -1,9 +1,10 @@
-"""Support for map as a camera (hybrid config)."""
+"""camera.py - Support for map as a camera (hybrid config)."""
 
+# pyright: reportMissingImports=false
 import asyncio
 import logging
-from typing import Any
 
+# from typing import Any
 import httpx
 
 from homeassistant.components.camera import Camera
@@ -30,7 +31,6 @@ from .const import (
     DATA_CONFIGURATION,
     DOMAIN,
     IMAGE_API_PROVIDER_SWITCHES,
-    VERSION,
 )
 from .switch import (
     is_provider_enabled,
@@ -54,7 +54,7 @@ CAMERA_PARENT_DEVICE = DeviceInfo(
 def normalize_provider(hass: HomeAssistant, provider: dict) -> dict:
     """Ensure provider dict has Template objects and defaults."""
 
-    def _as_template(value):
+    def _as_template(value: str | Template) -> Template:
         if isinstance(value, Template):
             tpl = value
         else:
@@ -72,15 +72,19 @@ def normalize_provider(hass: HomeAssistant, provider: dict) -> dict:
 
 
 async def async_setup_platform(
-    hass, config, async_add_entities, discovery_info=None
+    hass: HomeAssistant,
+    config: dict,
+    async_add_entities: callable,
+    discovery_info: dict | None = None,
 ) -> None:
     """Set up cameras from YAML config."""
-
     _LOGGER.debug("async_setup_platform: config = %s", config)
     async_add_entities([PersonLocationCamera(hass, normalize_provider(hass, config))])
 
 
-async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities) -> None:
+async def async_setup_entry(
+    hass: HomeAssistant, entry: dict, async_add_entities: callable
+) -> None:
     """Set up cameras from config entry providers."""
     _LOGGER.debug("[async_setup_entry] entry: %s", entry)
     providers = entry.data.get(CONF_PROVIDERS, [])
@@ -112,10 +116,16 @@ def provider_for_key(key_used: str) -> str | None:
     return IMAGE_API_PROVIDER_SWITCHES.get(key_used, None)
 
 
+# =====================================================================
+# Map Camera Sensor Class
+# =====================================================================
+
+
 class PersonLocationCamera(Camera):
     """A person_location implementation of a map camera."""
 
-    def __init__(self, hass: HomeAssistant, provider) -> None:
+    def __init__(self, hass: HomeAssistant, provider: dict) -> None:
+        """Initialize the map camera."""
         super().__init__()
         self.hass = hass
         self._name = provider[CONF_NAME]
@@ -150,20 +160,27 @@ class PersonLocationCamera(Camera):
         self._api_key = cfg[self._key_used]
         self._api_provider = provider_for_key(self._key_used)
 
-        self._attr_extra_state_attributes = {
-            "key_used": self._key_used,
-            "api_provider": self._api_provider,
-        }
+        self._attr_extra_state_attributes = {}
+        self._attr_extra_state_attributes.update(
+            {
+                "key_used": self._key_used,
+                "api_provider": self._api_provider,
+            }
+        )
 
     @property
     def name(self) -> str:
+        """Return the name of the camera."""
         return self._name
 
     @property
-    def state(self):
+    def state(self) -> str:
+        """Return the state of the camera."""
         return self._state
 
-    async def async_camera_image(self, width=None, height=None) -> bytes | None:
+    async def async_camera_image(
+        self, width: int | None = None, height: int | None = None
+    ) -> bytes | None:
         """Return bytes of camera image."""
         provider_id = self._attr_extra_state_attributes["api_provider"]
         if not is_provider_enabled(self.hass, provider_id):

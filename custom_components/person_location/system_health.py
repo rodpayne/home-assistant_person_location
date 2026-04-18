@@ -2,6 +2,7 @@
 
 # See https://developers.home-assistant.io/blog/2020/11/09/system-health-and-templates
 
+# pyright: reportMissingImports=false
 import logging
 
 from homeassistant.components import system_health
@@ -13,13 +14,9 @@ from .const import (
     DATA_ATTRIBUTES,
     DATA_CONFIG_ENTRY,
     DATA_CONFIGURATION,
-    DATA_ENTITY_INFO,
     DATA_STATE,
     DATA_SWITCH_ENTITIES,
     DOMAIN,
-    INFO_GEOCODE_COUNT,
-    INFO_LOCALITY,
-    INFO_TRIGGER_COUNT,
     VERSION,
 )
 

@@ -1,36 +1,24 @@
-"""Constants and Classes for person_location integration."""
+"""const.py - Constants and Classes for person_location integration."""
 
+# pyright: reportMissingImports=false
 import asyncio
-from datetime import datetime, timedelta
+from datetime import timedelta
 import logging
-import threading
 
 import voluptuous as vol
 
-from homeassistant.components.mobile_app.const import ATTR_VERTICAL_ACCURACY
-from homeassistant.components.waze_travel_time.const import REGIONS as WAZE_REGIONS
-from homeassistant.components.zone.const import DOMAIN as ZONE_DOMAIN
+# from homeassistant.components.mobile_app.const import ATTR_VERTICAL_ACCURACY
+# from homeassistant.components.waze_travel_time.const import REGIONS as WAZE_REGIONS
+# from homeassistant.components.zone.const import DOMAIN as ZONE_DOMAIN
 from homeassistant.const import (
-    ATTR_ATTRIBUTION,
-    ATTR_FRIENDLY_NAME,
-    ATTR_GPS_ACCURACY,
-    ATTR_ICON,
     ATTR_LATITUDE,
     ATTR_LONGITUDE,
-    ATTR_UNIT_OF_MEASUREMENT,
-    STATE_HOME,
-    STATE_NOT_HOME,
-    STATE_ON,
-    STATE_UNKNOWN,
 )
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers import issue_registry as ir
+
+# from homeassistant.core import HomeAssistant
 import homeassistant.helpers.config_validation as cv
-from homeassistant.util import slugify
-from homeassistant.util.yaml.objects import (
-    NodeListClass,
-    NodeStrClass,
-)
+
+# from homeassistant.helpers.entity import Entity
 
 # Our info:
 
@@ -39,11 +27,10 @@ API_STATE_OBJECT = DOMAIN + "." + DOMAIN + "_integration"
 INTEGRATION_NAME = "Person Location"
 ISSUE_URL = "https://github.com/rodpayne/home-assistant_person_location/issues"
 
-VERSION = "2026.01.31"
+VERSION = "2026.04.17"
 
 # Titles for the config entries:
 
-# TITLE_IMPORTED_YAML_CONFIG = "Imported YAML Config"
 TITLE_IMPORTED_YAML_CONFIG = "Person Location Config"
 TITLE_PERSON_LOCATION_CONFIG = "Person Location Config"
 
@@ -80,29 +67,66 @@ DEFAULT_LOCALITY_PRIORITY_OSM = (
     "country",  # ----------- e.g. United States
 )
 
-# Attribute names:
+# Attribute names in the target sensor's state attributes:
 
-ATTR_ALTITUDE = "altitude"
-ATTR_BREAD_CRUMBS = "bread_crumbs"
-ATTR_COMPASS_BEARING = "compass_bearing"
-ATTR_DIRECTION = "direction"
-ATTR_DRIVING_MILES = "driving_miles"
-ATTR_DRIVING_MINUTES = "driving_minutes"
-ATTR_GEOCODED = "geocoded"
-ATTR_LAST_LOCATED = "last_located"
-ATTR_LOCATION_TIME = "location_time"
-ATTR_METERS_FROM_HOME = "meters_from_home"
-ATTR_MILES_FROM_HOME = "miles_from_home"
-ATTR_PERSON_NAME = "person_name"
-ATTR_REPORTED_STATE = "reported_state"
-ATTR_SOURCE = "source"
-ATTR_SPEED = "speed"
-ATTR_ZONE = "zone"
+ATTR_ALTITUDE = "altitude"  # - altitude in meters if reported by trigger device
+ATTR_AWAY_TIMESTAMP = (
+    "away_time"  # - timestamp of when person left home (to detect STATE_EXTENDED_AWAY)
+)
+ATTR_BREAD_CRUMBS = "bread_crumbs"  # - the last several localities geocoded (e.g. "Home > Spanish Fork > Provo")
+ATTR_COMPASS_BEARING = "compass_bearing"  # - compass bearing in degrees (0-360) calculated between last two locations (0 if home)
+ATTR_DIRECTION = "direction"  # - subjective direction of travel ("home", "toward home", "away from home", "stationary", "far away")
+ATTR_DRIVING_KM = (
+    "driving_km"  # - driving distance in km calculated based on route home
+)
+ATTR_DRIVING_MILES = (
+    "driving_miles"  # - driving distance in miles calculated based on route home
+)
+ATTR_DRIVING_MINUTES = (
+    "driving_minutes"  # - driving time in minutes calculated based on route home
+)
+ATTR_LOCALITY = "locality"  # - locality associated with the location (e.g. "Provo")
+ATTR_LOCATION_TIMESTAMP = (
+    "location_time"  # - timestamp of the locationinfo in last processed trigger
+)
+ATTR_METERS_FROM_HOME = "meters_from_home"  # - straight-line distance in meters calculated between location and home
+ATTR_MILES_FROM_HOME = "miles_from_home"  # - straight-line distance in miles calculated between location and home
+ATTR_PERSON_NAME = "person_name"  # - the name used to identify the person (e.g. "Rod")
+ATTR_REPORTED_STATE = "reported_state"  # - the state reported by trigger device, normalized to "home", "not_home", "just_left", etc.)
+ATTR_ZONE = "zone"  # - the zone if reported by the trigger device (e.g. "home", "post_office", "walmart")
+ATTR_SOURCE = "source"  # - the trigger device ID (e.g. device_tracker.rod_iphone_16)
+ATTR_SPEED = "speed"  # - speed (if reported by trigger device) or calculated between last two updates (straight-line meters travelled)/(seconds elapsed)
+
+# Additional attribute names examined in trigger sensors:
+
+ATTR_LAST_LOCATED = "last_located"  # - timestamp of the last time the person was located (iCloud3) or trigger device reported a location
 
 ATTR_GOOGLE_MAPS = "Google_Maps"
 ATTR_MAPQUEST = "MapQuest"
 ATTR_OPEN_STREET_MAP = "Open_Street_Map"
 ATTR_RADAR = "Radar"
+
+# States for the target sensor:
+STATE_JUST_ARRIVED = "just_arrived"  # state for recent transition to home status
+STATE_JUST_LEFT = "just_left"  # state for recent transition to away status
+STATE_EXTENDED_AWAY = "extended_away"  # state for long-running away status
+
+# Integration-specific states that imply "away"
+AWAY_LIKE = {
+    "not_home",
+    "moving",
+    "driving",
+    "in_transit",
+    "on_bus",
+    "on_bicycle",
+    "on_foot",
+    "stationary",  # iOS app uses this outside zones
+    "parked",
+    "near_home",
+    "in_zone",  # but not home zone
+    STATE_JUST_LEFT,  # person_location-specific state for recent transition to away
+    STATE_EXTENDED_AWAY,  # person_location-specific state for long-running away status
+}
 
 # Items under target.this_entity_info:
 
@@ -116,11 +140,14 @@ INFO_LOCATION_LONGITUDE = "location_longitide"
 #  Data (structural configuration parameters)
 # --------------------------------------------
 
+ATTR_GEOCODED = "geocoded"  # - indicates if the geolocation template sensors should be created ("Radar", "Google Maps", etc.)
+
 CONF_CREATE_SENSORS = "create_sensors"
 VALID_CREATE_SENSORS = [
     ATTR_ALTITUDE,
     ATTR_BREAD_CRUMBS,
     ATTR_DIRECTION,
+    ATTR_DRIVING_KM,
     ATTR_DRIVING_MILES,
     ATTR_DRIVING_MINUTES,
     ATTR_GEOCODED,
@@ -137,8 +164,8 @@ VALID_ENTITY_DOMAINS = ("binary_sensor", "device_tracker", "person", "sensor")
 
 CONF_FROM_YAML = "configuration_from_yaml"
 CONF_DISTANCE_DURATION_SOURCE = "distance_duration_source"
-CONF_USE_WAZE = "use_waze"
-CONF_WAZE_REGION = "waze_region"
+# CONF_USE_WAZE = "use_waze"
+# CONF_WAZE_REGION = "waze_region"
 
 CONF_LANGUAGE = "language"
 DEFAULT_LANGUAGE = "en"
@@ -395,15 +422,11 @@ DATA_UNDO_STATE_LISTENER = "undo_state_listener"
 DATA_UNDO_UPDATE_LISTENER = "undo_update_listener"
 DATA_ASYNC_SETUP_ENTRY = "async_setup_entry"
 
-INTEGRATION_LOCK = threading.Lock()
-TARGET_LOCK = threading.Lock()
-# Note to future me: If functions where these locks are used are converted to async,
-#   they will need to be changed to asyncio.Lock and the locations where
-#   `with TARGET_LOCK:` is used would need to change to `async with TARGET_LOCK:`
 INTEGRATION_ASYNCIO_LOCK = asyncio.Lock()
 TARGET_ASYNCIO_LOCK = asyncio.Lock()
 
 _LOGGER = logging.getLogger(__name__)
+
 
 _warned_messages = set()
 
@@ -427,183 +450,3 @@ def error_once(logger: logging.Logger, message: str) -> bool:
         _error_messages.add(message)
         return True
     return False
-
-
-def get_home_coordinates(hass: HomeAssistant) -> tuple:
-    """Get Home latitude and longitude and validate that they have been entered."""
-    lat = hass.config.latitude
-    lon = hass.config.longitude
-
-    if not lat or not lon or (lat == 0 and lon == 0):
-        description = "Home Location is needed for geocoding (Settings → System → General → Location)"
-        if error_once(
-            _LOGGER,
-            description,
-        ):
-            # ⭐ Create a repair notification - Required configuration is missing
-            ir.async_create_issue(
-                hass,
-                DOMAIN,
-                "home_location_required",
-                is_fixable=False,
-                severity=ir.IssueSeverity.ERROR,
-                title="Home Assistant Location Required",
-                description=description,
-            )
-
-        return (None, None)
-
-    # ⭐ Clear repair notification
-    registry = ir.async_get(hass)
-    if registry.async_get_issue(DOMAIN, "home_location_required"):
-        ir.async_delete_issue(hass, DOMAIN, "home_location_required")
-
-    return (lat, lon)
-
-
-class PERSON_LOCATION_INTEGRATION:
-    """Class to represent the integration runtime."""
-
-    def __init__(self, _entity_id, _hass: HomeAssistant) -> None:
-        """Initialize the integration instance."""
-        # Log startup message:
-        _LOGGER.info(
-            STARTUP_VERSION.format(name=DOMAIN, version=VERSION, issue_link=ISSUE_URL)
-        )
-
-        self.entity_id = _entity_id
-        self.hass = _hass
-
-        self.state = "on"
-        self.attributes = {}
-        self.configuration = {}
-        self.entity_info = {}
-
-        self._target_sensors_restored = []
-
-        self.attributes[ATTR_ICON] = "mdi:api"
-        self.attributes["api_last_updated"] = datetime.now()
-        self.attributes["api_exception_count"] = 0
-        self.attributes["api_calls_requested"] = 0
-        self.attributes["api_calls_skipped"] = 0
-        self.attributes["api_calls_throttled"] = 0
-        self.attributes["startup"] = True
-        self.attributes["waze_error_count"] = 0
-        self.attributes[ATTR_ATTRIBUTION] = (
-            f"System information for the {INTEGRATION_NAME} integration ({DOMAIN}), version {VERSION}."
-        )
-
-        # ❌ self.set_state()
-
-    def set_state(self) -> None:
-        """Schedule async_set_state safely from a thread or sync context."""
-        self.hass.loop.call_soon_threadsafe(
-            lambda: self.hass.async_create_task(self.async_set_state())
-        )
-
-    async def async_set_state(self) -> None:
-        """Async-safe state setter."""
-        integration_state_data = {
-            DATA_STATE: self.state,
-            DATA_ATTRIBUTES: self.attributes,
-            DATA_CONFIGURATION: self.configuration,
-            DATA_ENTITY_INFO: self.entity_info,
-        }
-        if DOMAIN in self.hass.data:
-            self.hass.data[DOMAIN].update(integration_state_data)
-        else:
-            self.hass.data[DOMAIN] = integration_state_data
-
-        # simple_attributes = {ATTR_ICON: self.attributes[ATTR_ICON]}
-        # self.hass.states.async_set(self.entity_id, self.state, simple_attributes)
-        self.hass.states.async_set(self.entity_id, self.state, self.attributes)
-
-        _LOGGER.debug(
-            "[async_set_state] (%s) -state: %s -attributes: %s",
-            self.entity_id,
-            self.state,
-            self.attributes,
-        )
-
-
-class PERSON_LOCATION_TRIGGER:
-    """Class to represent device trackers that trigger us."""
-
-    def __init__(self, _entity_id, _pli: PERSON_LOCATION_INTEGRATION) -> None:
-        """Initialize the entity instance."""
-        _LOGGER.debug("[PERSON_LOCATION_TRIGGER] (%s) === __init__ ===", _entity_id)
-
-        self.entity_id = _entity_id
-        self.pli = _pli
-        self.hass = _pli.hass
-
-        self.configuration = self.hass.data[DOMAIN][DATA_CONFIGURATION]
-
-        targetStateObject = self.hass.states.get(self.entity_id)
-        if targetStateObject is not None:
-            self.firstTime = False
-            if (
-                targetStateObject.state.startswith(IC3_STATIONARY_STATE_PREFIX)
-                or targetStateObject.state == STATE_NOT_HOME
-            ):
-                self.state = "Away"
-            else:
-                self.state = targetStateObject.state
-            self.last_changed = targetStateObject.last_changed
-            self.last_updated = targetStateObject.last_updated
-            self.attributes = targetStateObject.attributes.copy()
-        else:
-            self.firstTime = True
-            self.state = STATE_UNKNOWN
-            self.last_changed = datetime(2020, 3, 14, 15, 9, 26, 535897)
-            self.last_updated = datetime(2020, 3, 14, 15, 9, 26, 535897)
-            self.attributes = {}
-
-        if "friendly_name" in self.attributes:
-            self.friendlyName = self.attributes["friendly_name"]
-        else:
-            self.friendlyName = ""
-            _LOGGER.debug("friendly_name attribute is missing")
-
-        if self.state.lower() == STATE_HOME or self.state.lower() == STATE_ON:
-            self.stateHomeAway = "Home"
-            self.state = "Home"
-        else:
-            self.stateHomeAway = "Away"
-            if self.state == STATE_NOT_HOME:
-                self.state = "Away"
-
-        if self.entity_id in self.pli.configuration[CONF_DEVICES]:
-            self.personName = self.pli.configuration[CONF_DEVICES][
-                self.entity_id
-            ].lower()
-        elif "person_name" in self.attributes:
-            self.personName = self.attributes["person_name"]
-        elif "account_name" in self.attributes:
-            self.personName = self.attributes["account_name"]
-        elif "owner_fullname" in self.attributes:
-            self.personName = self.attributes["owner_fullname"].split()[0].lower()
-        elif (
-            "friendly_name" in self.attributes
-            and self.entity_id.split(".")[0] == "person"
-        ):
-            self.personName = self.attributes["friendly_name"]
-        else:
-            self.personName = self.entity_id.split(".")[1].split("_")[0].lower()
-            if self.firstTime is False:
-                _LOGGER.debug(
-                    'The account_name (or person_name) attribute is missing in %s, trying "%s"',
-                    self.entity_id,
-                    self.personName,
-                )
-        # It is tempting to make the output a device_tracker instead of sensor,
-        #   so that it can be input into the Person built-in integration,
-        #   but if you do, be very careful not to trigger a loop.
-        #   The state and other attributes will also need to be adjusted.
-
-        self.targetName = (
-            self.configuration[CONF_OUTPUT_PLATFORM]
-            + "."
-            + slugify(self.personName)
-            + "_location"
-        )

@@ -20,11 +20,11 @@ reverse_geocode:
       
 geocode_api_on:
   # Description of the service
-  description: Resume using the Open Street Map API and WazeRouteCalculator.
+  description: Resume using the Person Location services.
 
 geocode_api_off:
   # Description of the service
-  description: Pause using the Open Street Map API. This may be necessary if a malfunction causes an excessive number of calls or if the external site is unreachable. The Nominatim Usage Policy says, "Apps must make sure that they can switch off the service at our request at any time (in particular, switching should be possible without requiring a software update)." This also pauses the WazeRouteCalculator calls.
+  description: Pause using the Person Location services. This may be necessary if a malfunction causes an excessive number of calls or if the external site is unreachable. The Nominatim Usage Policy says, "Apps must make sure that they can switch off the service at our request at any time (in particular, switching should be possible without requiring a software update)." This also pauses the WazeRouteCalculator calls.
 
 process_trigger:
   # Description of the service

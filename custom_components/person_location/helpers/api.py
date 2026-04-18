@@ -1,7 +1,17 @@
-"""API Client Wrapper with retries and exponential backoff."""
+"""helpers/api.py - API Client Wrapper with retries and exponential backoff."""
 
+# pyright: reportMissingImports=false
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
+
+    from . import PersonLocationIntegration
 import asyncio
-from datetime import datetime, timezone
+
+# from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 import logging
 import socket
@@ -10,25 +20,24 @@ import traceback
 import aiohttp
 import async_timeout
 
-from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from ..const import (
     CONF_LANGUAGE,
     CONF_REGION,
-    DATA_CONFIGURATION,
     DATA_INTEGRATION,
     DEFAULT_API_KEY_NOT_SET,
     DOMAIN,
-    PERSON_LOCATION_INTEGRATION,
     STATE_ABBREVIATIONS,
     SWITCH_GOOGLE_GEOCODING_API,
     SWITCH_MAPBOX_STATIC_IMAGE_API,
     SWITCH_MAPQUEST_GEOCODING_API,
     SWITCH_OSM_NOMINATIM_GEOCODING_API,
     SWITCH_RADAR_GEOCODING_API,
-    get_home_coordinates,
+    error_once,
 )
+from ..helpers.timestamp import now_utc
 from ..switch import (
     record_api_error,
     record_api_success,
@@ -39,6 +48,39 @@ _LOGGER: logging.Logger = logging.getLogger(__package__)
 HEADERS = {"Content-type": "application/json; charset=UTF-8"}
 RETRIES = 2  # number of retry attempts
 TIMEOUT = 10  # seconds
+
+
+def get_home_coordinates(hass: HomeAssistant) -> tuple:
+    """Get Home latitude and longitude and validate that they have been entered."""
+    lat = hass.config.latitude
+    lon = hass.config.longitude
+
+    if not lat or not lon or (lat == 0 and lon == 0):
+        description = "Home Location is needed for geocoding (Settings → System → General → Location)"
+        if error_once(
+            _LOGGER,
+            description,
+        ):
+            # ⭐ Create a repair notification - Required configuration is missing
+            ir.async_create_issue(
+                hass,
+                DOMAIN,
+                "home_location_required",
+                is_fixable=False,
+                severity=ir.IssueSeverity.ERROR,
+                title="Home Assistant Location Required",
+                description=description,
+            )
+
+        return (None, None)
+
+    # ⭐ Clear repair notification
+    registry = ir.async_get(hass)
+    if registry.async_get_issue(DOMAIN, "home_location_required"):
+        ir.async_delete_issue(hass, DOMAIN, "home_location_required")
+
+    return (lat, lon)
+
 
 # ------- Entry point for a generic API call:
 
@@ -54,8 +96,8 @@ async def async_person_location_get_api_data(
     retries: int = RETRIES,
     timeout: float = TIMEOUT,
 ) -> dict:
-    """Wrap call to PERSON_LOCATION_CLIENT.async_get_api_data."""
-    client = PERSON_LOCATION_CLIENT(hass)
+    """Wrap call to PersonLocationClient.async_get_api_data."""
+    client = PersonLocationClient(hass)
     resp = await client.async_get_api_data(method, url, data, headers, timeout, retries)
     if provider_id:
         authentication_failed = resp.get("status") == 401
@@ -77,7 +119,7 @@ async def async_get_google_maps_geocoding(
     hass: HomeAssistant, key: str, latitude: str, longitude: str
 ) -> dict:
     """Call the Google Maps Geocoding API."""
-    pli: PERSON_LOCATION_INTEGRATION = hass.data[DOMAIN][DATA_INTEGRATION]
+    pli: PersonLocationIntegration = hass.data[DOMAIN][DATA_INTEGRATION]
     provider_id = SWITCH_GOOGLE_GEOCODING_API
     url = (
         "https://maps.googleapis.com/maps/api/geocode/json?language="
@@ -91,7 +133,7 @@ async def async_get_google_maps_geocoding(
         + "&key="
         + key
     )
-    client = PERSON_LOCATION_CLIENT(pli.hass)
+    client = PersonLocationClient(pli.hass)
     resp = await client.async_get_api_data("get", url)
     authentication_failed = resp.get("status") == 401
     if not resp["ok"]:
@@ -130,7 +172,7 @@ async def async_get_mapbox_static_image(
     """Call the Mapbox Static Image API."""
     provider_id = SWITCH_MAPBOX_STATIC_IMAGE_API
     url = f"https://api.mapbox.com/styles/v1/mapbox/streets-v11/static/{longitude},{latitude},5,0/300x200?access_token={key}"
-    client = PERSON_LOCATION_CLIENT(hass)
+    client = PersonLocationClient(hass)
     resp = await client.async_get_api_data("get", url)
     if not resp["ok"]:
         authentication_failed = resp.get("status") == 401
@@ -170,7 +212,7 @@ async def async_get_mapquest_reverse_geocoding(
         + "&key="
         + key
     )
-    client = PERSON_LOCATION_CLIENT(hass)
+    client = PersonLocationClient(hass)
     resp = await client.async_get_api_data("get", url)
     if not resp["ok"]:
         authentication_failed = resp.get("status") == 401
@@ -218,7 +260,7 @@ async def async_get_open_street_map_reverse_geocoding(
             + "&addressdetails=1&namedetails=1&zoom=18&limit=1"
         )
 
-    client = PERSON_LOCATION_CLIENT(hass)
+    client = PersonLocationClient(hass)
     resp = await client.async_get_api_data("get", url)
     if not resp["ok"]:
         authentication_failed = resp.get("status") == 401
@@ -250,7 +292,7 @@ async def async_get_radar_reverse_geocoding(
 
     url = f"https://api.radar.io/v1/geocode/reverse?coordinates={latitude},{longitude}"
     headers = {"Authorization": key, "Content-Type": "application/json"}
-    client = PERSON_LOCATION_CLIENT(hass)
+    client = PersonLocationClient(hass)
     resp = await client.async_get_api_data("get", url, headers=headers)
     if not resp["ok"]:
         authentication_failed = resp.get("status") in (401, 403)
@@ -333,7 +375,7 @@ def get_retry_delay(headers: dict, default: float = 1.0) -> float:
     # Case 2: HTTP date
     try:
         retry_time = parsedate_to_datetime(retry_after)
-        now = datetime.now(timezone.utc)
+        now = now_utc()
         delay = (retry_time - now).total_seconds()
         return max(delay, default)
     except Exception:
@@ -343,7 +385,12 @@ def get_retry_delay(headers: dict, default: float = 1.0) -> float:
 # ------- Make the actual API call:
 
 
-class PERSON_LOCATION_CLIENT:
+# =====================================================================
+# Person Location Client Wrapper Class
+# =====================================================================
+
+
+class PersonLocationClient:
     """API Client Wrapper with retries and exponential backoff."""
 
     def __init__(self, hass: HomeAssistant) -> None:

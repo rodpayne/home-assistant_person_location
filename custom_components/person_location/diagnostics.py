@@ -1,24 +1,27 @@
-"""
-diagnostics.py - ccessed through Settings → Devices & Services → person_location → Download Diagnostics.
+"""diagnostics.py - accessed through Settings → Devices & Services → person_location → Download Diagnostics.
 
 Diagnostics output is a sanitized JSON document containing configuration metadata, provider information,
 and recent runtime state. Sensitive values such as API keys are automatically redacted.
 """
 
+# pyright: reportMissingImports=false
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant
+
+    from . import PersonLocationIntegration
 import logging
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+# from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 
 from .const import (
-    DATA_ATTRIBUTES,
-    DATA_CONFIGURATION,
     DATA_INTEGRATION,
     DOMAIN,
-    PERSON_LOCATION_INTEGRATION,
     REDACT_KEYS,
 )
 
@@ -40,7 +43,7 @@ def _redact(data: dict) -> dict:
     return redacted
 
 
-def get_effective_log_level_name(logger) -> str:
+def get_effective_log_level_name(logger: logging.Logger) -> str:
     """Get the effective logging level name."""
     level = logger.getEffectiveLevel()
     mapping = logging.getLevelNamesMapping()
@@ -58,7 +61,7 @@ async def async_get_config_entry_diagnostics(
     entry: ConfigEntry,
 ) -> dict:
     """Return diagnostics for a config entry."""
-    data = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
+    # data = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
 
     #
     # --- Registries ---------------------------------------------------------
@@ -161,7 +164,7 @@ async def async_get_config_entry_diagnostics(
             }
     """
 
-    pli: PERSON_LOCATION_INTEGRATION = hass.data[DOMAIN][DATA_INTEGRATION]
+    pli: PersonLocationIntegration = hass.data[DOMAIN][DATA_INTEGRATION]
     pli_dict = pli.__dict__.copy()
     pli_dict.pop("hass")
     pli_dict.pop("DATA_CONFIGURATION")
@@ -169,9 +172,9 @@ async def async_get_config_entry_diagnostics(
 
     # attributes: dict = hass.data[DOMAIN][DATA_ATTRIBUTES]
 
-    logging_effective_level = logging.getLevelNamesMapping().get(
-        _LOGGER.getEffectiveLevel(), "UNKNOWN"
-    )
+    # logging_effective_level = logging.getLevelNamesMapping().get(
+    #    _LOGGER.getEffectiveLevel(), "UNKNOWN"
+    # )
 
     #
     # --- Final diagnostics structure ----------------------------------------

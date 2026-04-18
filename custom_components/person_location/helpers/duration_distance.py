@@ -1,44 +1,60 @@
+"""helpers/duration_distance.py - Calculate driving duration and distance."""
+
+# pyright: reportMissingImports=false
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..sensor import (
+        PersonLocationTargetSensor,
+    )
+    from . import PersonLocationIntegration
+
 import asyncio
 import logging
-import os
+
+# import os
 import random
 import traceback
 
 import aiohttp
 from pywaze.route_calculator import WazeRouteCalculator
 
+from homeassistant.components.waze_travel_time.const import REGIONS as WAZE_REGIONS
+
+# from waze_route_calculator.regions import WAZE_REGIONS
+from homeassistant.const import (
+    ATTR_ATTRIBUTION,
+)
 from homeassistant.exceptions import ServiceNotFound
 from homeassistant.helpers.httpx_client import get_async_client
 
 from ..const import (
-    ATTR_ATTRIBUTION,
+    ATTR_DRIVING_KM,
     ATTR_DRIVING_MILES,
     ATTR_DRIVING_MINUTES,
     ATTR_METERS_FROM_HOME,
     ATTR_MILES_FROM_HOME,
+    CONF_CREATE_SENSORS,
     CONF_DISTANCE_DURATION_SOURCE,
     CONF_GOOGLE_API_KEY,
-    CONF_LANGUAGE,
     CONF_MAPBOX_API_KEY,
     CONF_MAPQUEST_API_KEY,
     CONF_OSM_API_KEY,
     CONF_RADAR_API_KEY,
-    CONF_REGION,
     DEFAULT_API_KEY_NOT_SET,
     METERS_PER_KM,
     METERS_PER_MILE,
-    PERSON_LOCATION_INTEGRATION,
     SWITCH_GOOGLE_DISTANCE_API,
     SWITCH_MAPBOX_DIRECTIONS_API,
     SWITCH_RADAR_DISTANCE_API,
     SWITCH_WAZE_TRAVEL_TIME,
     WAZE_MIN_METERS_FROM_HOME,
-    WAZE_REGIONS,
     error_once,
-    get_home_coordinates,
 )
-from ..sensor import (
-    PERSON_LOCATION_TARGET,
+from ..helpers.api import (
+    get_home_coordinates,
 )
 from ..switch import (
     is_provider_enabled,
@@ -60,8 +76,8 @@ def get_waze_region(country_code: str) -> str:
 
 
 async def update_driving_miles_and_minutes(
-    pli: PERSON_LOCATION_INTEGRATION,
-    target: PERSON_LOCATION_TARGET,
+    pli: PersonLocationIntegration,
+    target: PersonLocationTargetSensor,
     new_latitude: str,
     new_longitude: str,
     waze_country_code: str,
@@ -81,12 +97,21 @@ async def update_driving_miles_and_minutes(
         ATTR_ATTRIBUTION
 
     May update:
-      pli.attributes
+      target._attr_extra_state_attributes
+        ATTR_DRIVING_KM
+      pli._attr_extra_state_attributes
         "waze_error_count"
     """
     try:
         distance_duration_source = pli.configuration[CONF_DISTANCE_DURATION_SOURCE]
         entity_id = target.entity_id
+
+        # Target unit for length according to the user’s settings
+        user_length_unit = pli.hass.config.units.length_unit  # e.g., 'km' or 'mi'
+        record_driving_km = user_length_unit == "km"
+        # Override if they selected driving_km as a template sensor
+        if ATTR_DRIVING_KM in pli.configuration.get(CONF_CREATE_SENSORS, []):
+            record_driving_km = True
 
         _LOGGER.debug(
             "[update_driving_miles_and_minutes] (%s) Source=%s",
@@ -102,10 +127,17 @@ async def update_driving_miles_and_minutes(
             target._attr_extra_state_attributes[ATTR_METERS_FROM_HOME]
             < WAZE_MIN_METERS_FROM_HOME
         ):
+            if record_driving_km:
+                target._attr_extra_state_attributes[ATTR_DRIVING_KM] = (
+                    target._attr_extra_state_attributes[ATTR_MILES_FROM_HOME]
+                    * METERS_PER_MILE
+                    / METERS_PER_KM
+                )
             target._attr_extra_state_attributes[ATTR_DRIVING_MILES] = (
                 target._attr_extra_state_attributes[ATTR_MILES_FROM_HOME]
             )
             target._attr_extra_state_attributes[ATTR_DRIVING_MINUTES] = "0"
+
             _LOGGER.debug(
                 "[update_driving_miles_and_minutes] Too close to home for lookup to matter."
             )
@@ -214,10 +246,10 @@ async def update_driving_miles_and_minutes(
                         type(pw_err).__name__,
                         pw_err,
                     )
-                    pli.attributes["waze_error_count"] = (
-                        pli.attributes.get("waze_error_count", 0) + 1
+                    pli._attr_extra_state_attributes["waze_error_count"] = (
+                        pli._attr_extra_state_attributes.get("waze_error_count", 0) + 1
                     )
-                    if pli.attributes["waze_error_count"] > 10:
+                    if pli._attr_extra_state_attributes["waze_error_count"] > 10:
                         error_count_exceeded = True
                     else:
                         error_count_exceeded = False
@@ -229,6 +261,12 @@ async def update_driving_miles_and_minutes(
                         turn_off=error_count_exceeded,
                     )
 
+                    if record_driving_km:
+                        target._attr_extra_state_attributes[ATTR_DRIVING_KM] = (
+                            target._attr_extra_state_attributes[ATTR_MILES_FROM_HOME]
+                            * METERS_PER_MILE
+                            / METERS_PER_KM
+                        )
                     target._attr_extra_state_attributes[ATTR_DRIVING_MILES] = (
                         target._attr_extra_state_attributes[ATTR_MILES_FROM_HOME]
                     )
@@ -366,6 +404,18 @@ async def update_driving_miles_and_minutes(
             round(duration_min, 1)
         )
 
+        if record_driving_km:
+            if distance_km <= 0:
+                display_km = target._attr_extra_state_attributes[ATTR_MILES_FROM_HOME]
+            elif distance_km >= 100:
+                display_km = round(distance_km, 0)
+            elif distance_km >= 10:
+                display_km = round(distance_km, 1)
+            else:
+                display_km = round(distance_km, 2)
+
+            target._attr_extra_state_attributes[ATTR_DRIVING_KM] = str(display_km)
+
         _LOGGER.debug(
             "[update_driving_miles_and_minutes] %s returned duration=%.1f minutes, distance=%s miles",
             distance_duration_source,
@@ -380,14 +430,14 @@ async def update_driving_miles_and_minutes(
             str(e),
         )
         _LOGGER.debug(traceback.format_exc())
-        pli.attributes["api_exception_count"] += 1
+        pli._attr_extra_state_attributes["api_exception_count"] += 1
 
 
 # ------- Radar -------------------------------------------------
 
 
 async def radar_calc_distance(
-    pli: PERSON_LOCATION_INTEGRATION,
+    pli: PersonLocationIntegration,
     origin: str,
     destination: str,
     modes: str = "car",
@@ -463,7 +513,7 @@ def extract_duration_distance(data: dict, mode: str = "car") -> tuple:
 
 
 async def mapbox_calc_distance(
-    pli: PERSON_LOCATION_INTEGRATION,
+    pli: PersonLocationIntegration,
     origin: str,
     destination: str,
     profile: str = "driving",

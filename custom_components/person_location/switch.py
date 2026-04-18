@@ -1,4 +1,15 @@
-"""Switch platform for API provider toggles."""
+"""switch.py - Switch platform for API provider toggles."""
+
+# pyright: reportMissingImports=false
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
+    from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
+    from . import PersonLocationIntegration
 
 import logging
 from typing import Any
@@ -6,10 +17,8 @@ from typing import Any
 # from homeassistant.components.logbook.const import DOMAIN as LOGBOOK_DOMAIN
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.entity import EntityCategory
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     API_PROVIDER_SWITCHES,
@@ -18,7 +27,6 @@ from .const import (
     DATA_SWITCH_ENTITIES,
     DEFAULT_API_KEY_NOT_SET,
     DOMAIN,
-    PERSON_LOCATION_INTEGRATION,
     warn_once,
 )
 
@@ -74,6 +82,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return unload_ok
 
 
+# =====================================================================
+# API Provider Switch - Represents the status of an API provider
+# =====================================================================
+
+
 class ApiProviderSwitch(SwitchEntity):
     """Representation of a switch controlling an API provider."""
 
@@ -83,7 +96,7 @@ class ApiProviderSwitch(SwitchEntity):
         """Initialize a switch entity."""
         self._provider_id = provider_id
         self._hass = hass
-        self._pli: PERSON_LOCATION_INTEGRATION = hass.data[DOMAIN].get(
+        self._pli: PersonLocationIntegration = hass.data[DOMAIN].get(
             DATA_INTEGRATION, {}
         )
         self.entry = entry

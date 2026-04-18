@@ -1,9 +1,10 @@
-"""Config flow for Person Location integration."""
+"""config_flow.py - Config flow for Person Location integration."""
 
+# pyright: reportMissingImports=false
 import copy
 import logging
-from typing import Any, Dict, Optional
 
+# from typing import Any, Dict, Optional
 # from urllib.parse import urlparse
 import voluptuous as vol
 
@@ -17,8 +18,7 @@ from homeassistant.helpers import entity_registry as er, selector
 import homeassistant.helpers.config_validation as cv
 
 # from homeassistant.helpers.httpx_client import get_async_client
-from homeassistant.helpers.template import Template as HATemplate
-
+# from homeassistant.helpers.template import Template as HATemplate
 from .const import (
     ALLOWED_OPTIONS_KEYS,
     CONF_CREATE_SENSORS,
@@ -57,7 +57,6 @@ from .const import (
     TITLE_IMPORTED_YAML_CONFIG,
     TITLE_PERSON_LOCATION_CONFIG,
     VALID_CREATE_SENSORS,
-    VALID_OUTPUT_PLATFORM,
 )
 from .helpers.api import (
     async_test_google_api_key,
@@ -93,7 +92,8 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     # ----------------- Entry Points from Home Assistant -----------------
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize the config flow."""
         self._errors = {}
         self._user_input = {}
         self.integration_config_data = {}
@@ -104,7 +104,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         self._last_step = None  # Tracks last completed step
         self._step_order = ["geocode", "sensors", "triggers", "providers", "done"]
 
-    async def async_step_user(self, user_input: dict = None) -> FlowResult:
+    async def async_step_user(self, user_input: dict | None = None) -> FlowResult:
         """Handle first configuration or when Add Service is clicked."""
         _LOGGER.debug("[async_step_user] user_input = %s", user_input)
 
@@ -113,7 +113,9 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
         return await self.async_step_menu(user_input)
 
-    async def async_step_reconfigure(self, user_input: dict = None) -> FlowResult:
+    async def async_step_reconfigure(
+        self, user_input: dict | None = None
+    ) -> FlowResult:
         """Handle reconfigure initiated from the three-dot menu."""
         _LOGGER.debug("[async_step_reconfigure] user_input = %s", user_input)
 
@@ -124,7 +126,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         # Jump straight to the menu so the user can pick what to edit
         return await self.async_step_menu(user_input)
 
-    async def async_step_import(self, conf: dict) -> FlowResult:
+    async def async_step_import(self, conf: dict | None = None) -> FlowResult:
         """Handle configuration from __init__.py async_setup."""
         _LOGGER.debug("[async_step_import] conf = %s", conf)
 
@@ -268,7 +270,9 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         }
         return await self._async_show_config_geocode_form(user_input)
 
-    async def _async_show_config_geocode_form(self, user_input) -> FlowResult:
+    async def _async_show_config_geocode_form(
+        self, user_input: dict | None
+    ) -> FlowResult:
         """Show the initial form for API keys and geocoding settings."""
         return self.async_show_form(
             step_id="geocode",
@@ -296,7 +300,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             errors=self._errors,
         )
 
-    async def async_step_source(self, user_input: dict = None) -> FlowResult:
+    async def async_step_source(self, user_input: dict | None = None) -> FlowResult:
         """Step: Select source for driving distance and duration."""
         _LOGGER.debug("[async_step_source] user_input = %s", user_input)
 
@@ -349,7 +353,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     # ----------------- Sensors to be created -----------------
 
-    async def async_step_sensors(self, user_input: dict = None) -> FlowResult:
+    async def async_step_sensors(self, user_input: dict | None = None) -> FlowResult:
         """Step: Collect sensor creation and output platform, with cleanup support."""
         _LOGGER.debug("[async_step_sensors] user_input = %s", user_input)
 
@@ -417,7 +421,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         }
         return await self._show_config_sensors_form(user_input)
 
-    async def _show_config_sensors_form(self, user_input) -> FlowResult:
+    async def _show_config_sensors_form(self, user_input: dict | None) -> FlowResult:
         """Show the form for sensor creation and output platform."""
         # ┌───────────────────────────────────────────────┐
         # │ Form schema                                   │
@@ -445,7 +449,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     # ----------------- Triggers: Manage triggers/devices -----------------
 
-    async def async_step_triggers(self, user_input: dict = None) -> FlowResult:
+    async def async_step_triggers(self, user_input: dict | None = None) -> FlowResult:
         """Manage triggers list: pairs of device entities/person names."""
         _LOGGER.debug("[async_step_triggers] user_input = %s", user_input)
 
@@ -610,12 +614,12 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
             action = user_input.get("edit_action")
             if action == removeLabel:
-                old_device_entry = devices.pop(device)
+                devices.pop(device)
                 _LOGGER.debug(
                     "[async_step_trigger_edit] devices after remove = %s", devices
                 )
             elif action == updateLabel:
-                x = devices.pop(device)
+                devices.pop(device)
                 devices[new_device_name] = new_person_name
                 _LOGGER.debug(
                     "[async_step_trigger_edit] devices after update = %s", devices
@@ -1129,6 +1133,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        """Get the options flow for this config entry."""
         return PersonLocationOptionsFlowHandler()
 
 
@@ -1142,10 +1147,11 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
 
     # ----------------- Entry Points from Home Assistant -----------------
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize options flow."""
         self._errors = {}
 
-    async def async_step_init(self, user_input: dict = None) -> OptionsFlow:
+    async def async_step_init(self, user_input: dict | None = None) -> OptionsFlow:
         """Entry point for options flow."""
         _LOGGER.debug("[async_step_init] user_input = %s", user_input)
 
@@ -1203,7 +1209,7 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
                             friendly_preview = "Preview: `" + result["rendered"] + "`"
 
             if not errors and not user_input[conf_preview_friendly_name]:
-                x = user_input.pop(conf_preview_friendly_name)
+                user_input.pop(conf_preview_friendly_name)
                 return self.async_create_entry(title="", data=user_input)
 
         return self.async_show_form(

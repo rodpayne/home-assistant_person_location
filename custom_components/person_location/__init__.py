@@ -1,17 +1,29 @@
-"""Person Location integration."""
+"""__init__.py - Person Location integration."""
 
+# pyright: reportMissingImports=false
 from datetime import datetime, timedelta
 from functools import partial
 import logging
-import pprint
 
+# from typing import TYPE_CHECKING, Any
 import voluptuous as vol
 
+# import homeassistant.components.device_tracker
+from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import STATE_OFF, STATE_ON, Platform
-from homeassistant.core import Event, EventStateChangedData, HomeAssistant
+from homeassistant.const import (
+    ATTR_ATTRIBUTION,
+    ATTR_FRIENDLY_NAME,
+    STATE_OFF,
+    STATE_ON,
+    Platform,
+)
+from homeassistant.core import Event, EventStateChangedData, HomeAssistant, ServiceCall
 from homeassistant.helpers import device_registry as dr, entity_registry as er
-import homeassistant.helpers.config_validation as cv
+
+# import homeassistant.helpers.config_validation as cv
+# from homeassistant.helpers.entity import Entity, EntityCategory
+# from homeassistant.helpers.entity_component import EntityComponent
 from homeassistant.helpers.event import (
     async_track_point_in_time,
     async_track_state_change_event,
@@ -19,7 +31,6 @@ from homeassistant.helpers.event import (
 
 from .const import (
     ALLOWED_OPTIONS_KEYS,
-    API_STATE_OBJECT,
     CONF_CREATE_SENSORS,
     CONF_DEVICES,
     CONF_FOLLOW_PERSON_INTEGRATION,
@@ -35,19 +46,24 @@ from .const import (
     CONF_SHOW_ZONE_WHEN_AWAY,
     CONFIG_SCHEMA,
     DATA_ASYNC_SETUP_ENTRY,
+    DATA_ATTRIBUTES,
     DATA_CONFIG_ENTRY,
     DATA_CONFIGURATION,
     DATA_ENTITY_INFO,
     DATA_INTEGRATION,
+    DATA_STATE,
     DATA_UNDO_STATE_LISTENER,
     DATA_UNDO_UPDATE_LISTENER,
     DEFAULT_FRIENDLY_NAME_TEMPLATE,
     DEFAULT_SHOW_ZONE_WHEN_AWAY,
     DOMAIN,
     INFO_GEOCODE_COUNT,
-    INTEGRATION_LOCK,
-    PERSON_LOCATION_INTEGRATION,
+    INTEGRATION_ASYNCIO_LOCK,
+    INTEGRATION_NAME,
+    ISSUE_URL,
+    STARTUP_VERSION,
     TITLE_PERSON_LOCATION_CONFIG,
+    VERSION,
 )
 from .helpers.api import (
     async_test_google_api_key,
@@ -57,11 +73,105 @@ from .helpers.api import (
     async_test_radar_api_key,
 )
 from .helpers.entity import prune_orphan_template_entities
-from .process_trigger import setup_process_trigger
-from .reverse_geocode import setup_reverse_geocode
+from .helpers.timestamp import now_utc, to_iso
+from .process_trigger import async_setup_process_trigger
+from .reverse_geocode import async_setup_reverse_geocode
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS: list[Platform] = [Platform.CAMERA, Platform.SENSOR, Platform.SWITCH]
+
+
+# ---------------------------------------------------------------------------
+# Integration Runtime Controller Object (pli)
+# ---------------------------------------------------------------------------
+
+
+class PersonLocationIntegration(SensorEntity):
+    """Runtime controller for the Person Location integration.
+
+    This is NOT a sensor/switch/camera — it is the integration's
+    central state container and must be initialized before any platform loads.
+    """
+
+    # _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:api"
+
+    def __init__(self, _hass: HomeAssistant) -> None:
+        """Initialize the integration instance."""
+        # Log startup banner:
+        _LOGGER.info(
+            STARTUP_VERSION.format(name=DOMAIN, version=VERSION, issue_link=ISSUE_URL)
+        )
+        _LOGGER.debug("Controller MRO: %s", self.__class__.mro())
+
+        self.hass = _hass
+
+        # self.entity_id = _entity_id
+        self._attr_unique_id = f"{DOMAIN}_controller"
+        self._attr_has_entity_name = True
+        self._attr_name = "Controller"
+
+        # Runtime state (not necessarily the same as HA state)
+
+        # self.state = "on"
+        self._attr_native_value = "on"
+        self._attr_should_poll = False
+        self._attr_extra_state_attributes = {}
+        self.configuration = {}
+        self.entity_info = {}
+
+        self._target_sensors_restored = []
+
+        # self._attr_extra_state_attributes[ATTR_ICON] = "mdi:api"
+        self._attr_extra_state_attributes["api_last_updated"] = to_iso(now_utc())
+        self._attr_extra_state_attributes["api_exception_count"] = 0
+        self._attr_extra_state_attributes["api_calls_requested"] = 0
+        self._attr_extra_state_attributes["api_calls_skipped"] = 0
+        self._attr_extra_state_attributes["api_calls_throttled"] = 0
+        self._attr_extra_state_attributes[ATTR_FRIENDLY_NAME] = self._attr_name
+        self._attr_extra_state_attributes["startup"] = True
+        self._attr_extra_state_attributes["waze_error_count"] = 0
+        self._attr_extra_state_attributes[ATTR_ATTRIBUTION] = (
+            f"System information for the {INTEGRATION_NAME} integration ({DOMAIN}), version {VERSION}."
+        )
+
+    async def async_added_to_hass(self) -> None:
+        """Write initial state once entity is registered."""
+        _LOGGER.debug("[async_added_to_hass] Write initial state")
+        await super().async_added_to_hass()
+        await self.async_set_state()
+
+    async def async_set_state(self) -> None:
+        """Push integration state into hass.data and HA state machine."""
+        if not self.hass:
+            _LOGGER.warning("async_set_state called with self.hass empty")
+            return
+        else:
+            _LOGGER.debug("async_set_state called with self.hass available")
+
+        self.hass.data[DOMAIN][DATA_STATE] = self._attr_native_value
+        self.hass.data[DOMAIN][DATA_ATTRIBUTES] = self._attr_extra_state_attributes
+        self.hass.data[DOMAIN][DATA_CONFIGURATION] = self.configuration
+        self.hass.data[DOMAIN][DATA_ENTITY_INFO] = self.entity_info
+
+        self.async_write_ha_state()
+
+        _LOGGER.debug(
+            "[async_set_state] (%s) -state: %s -attributes: %s",
+            self.entity_id,
+            self._attr_native_value,
+            self._attr_extra_state_attributes,
+        )
+
+    @property
+    def device_info(self) -> dict:
+        """Return device info."""
+        return {
+            "identifiers": {(DOMAIN, "main")},
+            "name": "Person Location Integration",
+            "manufacturer": DOMAIN,
+            "model": "Integration Controller",
+        }
 
 
 def merge_entry_data(entry: ConfigEntry, conf: dict) -> tuple[dict, dict]:
@@ -109,28 +219,26 @@ def merge_entry_data(entry: ConfigEntry, conf: dict) -> tuple[dict, dict]:
     return updated_data, updated_options
 
 
-async def _setup_services(
-    pli: PERSON_LOCATION_INTEGRATION, hass: HomeAssistant
-) -> None:
+async def _setup_services(pli: PersonLocationIntegration, hass: HomeAssistant) -> None:
     # Services: geocode on/off
-    async def handle_geocode_api_on(call) -> None:
+    async def handle_geocode_api_on(call: ServiceCall) -> None:
         _LOGGER.debug("[geocode_api_on] === Start ===")
-        with INTEGRATION_LOCK:
-            _LOGGER.debug("[geocode_api_on] INTEGRATION_LOCK obtained")
-            pli.state = STATE_ON
-            pli.attributes["icon"] = "mdi:api"
-            pli.async_set_state()
-            _LOGGER.debug("[geocode_api_on] INTEGRATION_LOCK release...")
+        async with INTEGRATION_ASYNCIO_LOCK:
+            _LOGGER.debug("[geocode_api_on] INTEGRATION_ASYNCIO_LOCK obtained")
+            pli._attr_native_value = STATE_ON
+            pli._attr_extra_state_attributes["icon"] = "mdi:api"
+            await pli.async_set_state()
+            _LOGGER.debug("[geocode_api_on] INTEGRATION_ASYNCIO_LOCK release...")
         _LOGGER.debug("[geocode_api_on] === Return ===")
 
-    async def handle_geocode_api_off(call) -> None:
+    async def handle_geocode_api_off(call: ServiceCall) -> None:
         _LOGGER.debug("[geocode_api_off] === Start ===")
-        with INTEGRATION_LOCK:
-            _LOGGER.debug("[geocode_api_off] INTEGRATION_LOCK obtained")
-            pli.state = STATE_OFF
-            pli.attributes["icon"] = "mdi:api-off"
-            pli.async_set_state()
-            _LOGGER.debug("[geocode_api_off] INTEGRATION_LOCK release...")
+        async with INTEGRATION_ASYNCIO_LOCK:
+            _LOGGER.debug("[geocode_api_off] INTEGRATION_ASYNCIO_LOCK obtained")
+            pli._attr_native_value = STATE_OFF
+            pli._attr_extra_state_attributes["icon"] = "mdi:api-off"
+            await pli.async_set_state()
+            _LOGGER.debug("[geocode_api_off] INTEGRATION_ASYNCIO_LOCK release...")
         _LOGGER.debug("[geocode_api_off] === Return ===")
 
     if not hass.services.has_service(DOMAIN, "geocode_api_on"):
@@ -140,9 +248,9 @@ async def _setup_services(
 
     # Services: integration functionality
     if not hass.services.has_service(DOMAIN, "reverse_geocode"):
-        setup_reverse_geocode(pli)
+        await async_setup_reverse_geocode(pli)
     if not hass.services.has_service(DOMAIN, "process_trigger"):
-        setup_process_trigger(pli)
+        await async_setup_process_trigger(pli)
 
 
 # ------------------------------------------------------------------
@@ -154,11 +262,20 @@ async def async_setup(hass: HomeAssistant, yaml_config: dict) -> bool:
     """Set up integration and bridge YAML into config entry."""
     hass.data.setdefault(DOMAIN, {})
 
-    # Create integration object
-    pli = PERSON_LOCATION_INTEGRATION(f"{DOMAIN}.integration", hass)
+    # Get or create integration object
+    if DATA_INTEGRATION in hass.data[DOMAIN]:
+        _LOGGER.debug(
+            "[async_setup] Using existing integration object - this may be an options update, not the initial setup"
+        )
+        pli = hass.data[DOMAIN][DATA_INTEGRATION]
+    else:
+        _LOGGER.debug("[async_setup} Creating new integration object")
+        # Create integration object
+        pli = PersonLocationIntegration(hass)
+        hass.data[DOMAIN][DATA_INTEGRATION] = pli
 
     # Explicit startup flag so logic downstream is predictable
-    pli.attributes.setdefault("startup", True)
+    pli._attr_extra_state_attributes.setdefault("startup", True)
 
     # Some code references expect hass.data[DOMAIN][DATA_INTEGRATION]
     hass.data[DOMAIN][DATA_INTEGRATION] = pli
@@ -206,7 +323,7 @@ async def async_setup(hass: HomeAssistant, yaml_config: dict) -> bool:
         # conf_with_defaults[CONF_CREATE_SENSORS] = sorted(cv.ensure_list(conf_create_sensors))
 
     if not pli.configuration:
-        pli.DATA_CONFIGURATION = conf_with_defaults
+        pli.configuration = conf_with_defaults
 
     # ------- register services -------
 
@@ -274,31 +391,65 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][DATA_CONFIG_ENTRY] = entry
 
-    # Get integration object
+    # ---------------------------------------------------------
+    # 1. Get or create the integration controller (pli)
+    # ---------------------------------------------------------
     if DATA_INTEGRATION in hass.data[DOMAIN]:
         pli = hass.data[DOMAIN][DATA_INTEGRATION]
+        _LOGGER.debug("[async_setup_entry] Using existing integration object")
     else:
-        _LOGGER.debug("[async_setup_entry} Apparently async_setup did not run")
+        _LOGGER.debug("[async_setup_entry] Creating new integration object")
         # Create integration object
-        pli = PERSON_LOCATION_INTEGRATION(f"{DOMAIN}.integration", hass)
+        pli = PersonLocationIntegration(hass)
         hass.data[DOMAIN][DATA_INTEGRATION] = pli
         # Register services
         await _setup_services(pli, hass)
 
-    # Store integration object for entry
+    pli.hass = hass
+
+    # ---------------------------------------------------------
+    # 2. Register the controller entity ONCE
+    # ---------------------------------------------------------
+    ent_reg = er.async_get(hass)
+    existing_entity_id = ent_reg.async_get_entity_id("sensor", DOMAIN, "controller")
+
+    if existing_entity_id is None:
+        _LOGGER.debug("[async_setup_entry] Registering controller entity")
+
+        async_add_entities = hass.data[DOMAIN].get("sensor_async_add_entities")
+        if async_add_entities:
+            _LOGGER.debug(
+                "[async_setup_entry] Registering controller entity via sensor platform"
+            )
+            async_add_entities([pli])
+            pli._controller_registered = True
+        else:
+            _LOGGER.debug(
+                "[async_setup_entry] sensor_async_add_entities not ready yet; deferring controller registration"
+            )
+    else:
+        _LOGGER.debug(
+            "[async_setup_entry] Controller entity already exists (%s); skipping add",
+            existing_entity_id,
+        )
+
+    # Store integration object for this entry
     hass.data[DOMAIN][entry.entry_id] = pli
 
-    pli.config = entry.data  # TODO: is this used anywhere?
-    pli.async_set_state
+    # Initial state push
+    # await pli.async_set_state()
 
+    # ---------------------------------------------------------
+    # 3. Register options update listener (once)
+    # ---------------------------------------------------------
     if DATA_UNDO_UPDATE_LISTENER not in hass.data[DOMAIN]:
         hass.data[DOMAIN][DATA_UNDO_UPDATE_LISTENER] = entry.add_update_listener(
             async_options_update_listener
         )
 
-    # ------------------------------------------------------------------
+    # ---------------------------------------------------------
     # Listeners: device tracker state change
-    # ------------------------------------------------------------------
+    # ---------------------------------------------------------
 
     def _handle_device_tracker_state_change(
         event: Event[EventStateChangedData],
@@ -326,6 +477,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     def _listen_for_device_tracker_state_changes(entity_id: str) -> None:
         """Register state listener for a device tracker entity."""
+        _LOGGER.debug(
+            "[_listen_for_device_tracker_state_changes] Registering for %s", entity_id
+        )
         if entity_id not in pli.entity_info:
             pli.entity_info[entity_id] = {}
 
@@ -343,12 +497,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 )
 
     def _listen_for_configured_entities(
-        hass: HomeAssistant, pli_obj: PERSON_LOCATION_INTEGRATION
+        hass: HomeAssistant, pli_obj: PersonLocationIntegration
     ) -> None:
         """Register listeners for configured person/device entities."""
         _LOGGER.debug("[_listen_for_configured_entities] === Start ===")
 
-        def _register_person_entities():
+        def _register_person_entities() -> None:
+            """Register state listeners for person entities (runs in executor)."""
             for entity_id in hass.states.entity_ids("person"):
                 _listen_for_device_tracker_state_changes(entity_id)
 
@@ -368,9 +523,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def _async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         """Process config_flow configuration and options."""
         _LOGGER.debug(
-            "[_async_setup_entry] === Start === -data: %s -options: %s",
-            pprint.pformat(entry.data),
-            pprint.pformat(entry.options),
+            "[_async_setup_entry] === Start === Set up configuration for entry %s",
+            entry.entry_id,
         )
 
         # Register services (for update where async_setup does not get called)
@@ -378,7 +532,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         # Determine if friendly name template is being changed
         friendly_name_template_changed = (
-            (not pli.attributes.get("startup", True))
+            (not pli._attr_extra_state_attributes.get("startup", True))
             and (CONF_FRIENDLY_NAME_TEMPLATE in entry.options)
             and (CONF_FRIENDLY_NAME_TEMPLATE in (pli.configuration or {}))
             and (
@@ -396,13 +550,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data.setdefault(DOMAIN, {})
         hass.data[DOMAIN][DATA_CONFIGURATION] = pli.configuration
 
-        # Forward setup to platforms
+        # Forward to platforms
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-        # Wire listeners based on updated configuration
-        _listen_for_configured_entities(hass, pli)
+        # Try again to register controller if sensor platform wasn't ready earlier
+        async_add_entities = hass.data[DOMAIN].get("sensor_async_add_entities")
+        if async_add_entities and not getattr(pli, "_controller_registered", False):
+            _LOGGER.debug("[async_setup_entry] Late controller registration")
+            async_add_entities([pli])
+            pli._controller_registered = True
+            await pli.async_set_state()
 
-        # Validate the API keys.
+        # Wire listeners based on updated configuration
+        # _listen_for_configured_entities(hass, pli)
+
+        # Validate API keys
         valid1 = await async_test_google_api_key(
             hass, pli.configuration[CONF_GOOGLE_API_KEY]
         )
@@ -416,6 +578,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         valid5 = await async_test_radar_api_key(
             hass, pli.configuration[CONF_RADAR_API_KEY]
         )
+
         if all([valid1, valid2, valid3, valid4, valid5]):
             _LOGGER.debug("All configured API keys have passed validation")
 
@@ -452,9 +615,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Startup timer (defer wiring until HA finishes starting)
     # ------------------------------------------------------------------
 
-    def _handle_startup_is_done(now) -> None:
+    def _handle_startup_is_done(now: datetime) -> None:
         """Flip startup flag and rewire listeners when HA has started."""
-        _LOGGER.debug("[_handle_startup_is_done] === Start ===")
+        _LOGGER.debug("[_handle_startup_is_done] === Start === %s", now)
 
         # Still starting? Wait another minute
         if not hass.is_running:
@@ -462,7 +625,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _set_timer_startup_is_done(1)
             return
 
-        pli.attributes["startup"] = False
+        _listen_for_configured_entities(hass, pli)
+
+        pli._attr_extra_state_attributes["startup"] = False
         # It should now be safe to expand template sensors for restored target sensors.
         if pli._target_sensors_restored:
             _LOGGER.debug("[_handle_startup_is_done] Running delayed reverse_geocode.")
@@ -484,21 +649,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     def _set_timer_startup_is_done(minutes: int) -> None:
         """Start a timer for 'startup is done'."""
-        point_in_time = datetime.now() + timedelta(minutes=minutes)
+        point_in_time = now_utc() + timedelta(minutes=minutes)
         async_track_point_in_time(
             hass,
             partial(_handle_startup_is_done),
             point_in_time=point_in_time,
         )
 
-    # Initial listener wiring and startup timer
-    _listen_for_configured_entities(hass, pli)
     _set_timer_startup_is_done(1)
 
     # Async state set (avoid sync set_state during startup)
-    hass.loop.call_soon_threadsafe(
-        lambda: hass.async_create_task(pli.async_set_state())
-    )
+    await pli.async_set_state()
 
     _LOGGER.debug("[async_setup_entry] === Return ===")
     return True
@@ -513,40 +674,75 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry and clean up orphaned devices/entities."""
     _LOGGER.debug("[async_unload_entry] Unloading entry: %s", entry.entry_id)
 
-    # Unload platforms
+    # ---------------------------------------------------------
+    # 1. Unload all platforms (sensor, switch, camera)
+    # ---------------------------------------------------------
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if not unload_ok:
         _LOGGER.debug("[async_unload_entry] async_unload_platforms failed")
         return False
 
-    # Remove template sensors that are no longer needed
+    # ---------------------------------------------------------
+    # 2. Remove template sensors created by this integration
+    # ---------------------------------------------------------
     removed = await prune_orphan_template_entities(hass)
     if removed:
         _LOGGER.debug(
             "[async_unload_entry] Removed orphan template entities: %s", removed
         )
 
-    # Unload switches
+    # ---------------------------------------------------------
+    # 3. Remove API switch entities tied to this entry
+    # ---------------------------------------------------------
     ent_reg = er.async_get(hass)
+    # Debug: list all entities for this integration
+    for e in ent_reg.entities.values():
+        if e.platform == DOMAIN:
+            _LOGGER.debug(
+                "[async_unload_entry] Found entity: entity_id=%s unique_id=%s",
+                e.entity_id,
+                e.unique_id,
+            )
+
     removed_count = 0
     for entity in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
         if entity.domain == "switch":
             ent_reg.async_remove(entity.entity_id)
-            removed_count = removed_count + 1
+            removed_count += 1
     _LOGGER.debug("[async_unload_entry] Removed %d API switch entities", removed_count)
 
-    # Remove services registered by this integration
-    if hass.services.has_service(DOMAIN, "geocode_api_on"):
-        hass.services.async_remove(DOMAIN, "geocode_api_on")
-    if hass.services.has_service(DOMAIN, "geocode_api_off"):
-        hass.services.async_remove(DOMAIN, "geocode_api_off")
-    if hass.services.has_service(DOMAIN, "process_trigger"):
-        hass.services.async_remove(DOMAIN, "process_trigger")
-    if hass.services.has_service(DOMAIN, "reverse_geocode"):
-        hass.services.async_remove(DOMAIN, "reverse_geocode")
+    # ---------------------------------------------------------
+    # 4. Remove controller entity tied to this entry
+    # ---------------------------------------------------------
+    ent_reg = er.async_get(hass)
+    controller_entity_id = ent_reg.async_get_entity_id(
+        "sensor", DOMAIN, f"{DOMAIN}_controller"
+    )
 
-    # Remove integration object and undo listeners
-    pli = hass.data[DOMAIN].pop(DATA_INTEGRATION, None)
+    if controller_entity_id:
+        _LOGGER.debug(
+            "[async_unload_entry] Removing controller entity %s", controller_entity_id
+        )
+        ent_reg.async_remove(controller_entity_id)
+    else:
+        _LOGGER.debug("[async_unload_entry] Controller entity not found for removal")
+
+    # ---------------------------------------------------------
+    # 5. Remove services registered by this integration
+    # ---------------------------------------------------------
+    for service in (
+        "geocode_api_on",
+        "geocode_api_off",
+        "process_trigger",
+        "reverse_geocode",
+    ):
+        if hass.services.has_service(DOMAIN, service):
+            hass.services.async_remove(DOMAIN, service)
+
+    # ---------------------------------------------------------
+    # 6. Remove state listeners stored in the controller
+    # ---------------------------------------------------------
+    pli = hass.data[DOMAIN].get(DATA_INTEGRATION)
     if pli:
         for entity_id, info in list(pli.entity_info.items()):
             undo = info.get(DATA_UNDO_STATE_LISTENER)
@@ -557,23 +753,40 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 )
         pli.entity_info.clear()
 
-    # Clean up orphaned devices (no entities left)
+    # ---------------------------------------------------------
+    # 7. Remove controller device (if no entities remain)
+    # ---------------------------------------------------------
     dev_reg = dr.async_get(hass)
-    ent_reg = er.async_get(hass)
+    for device in list(dev_reg.devices.values()):
+        if entry.entry_id in device.config_entries:
+            # Remove only if no entities remain
+            entities = [
+                e for e in ent_reg.entities.values() if e.device_id == device.id
+            ]
+            if not entities:
+                _LOGGER.debug(
+                    "[async_unload_entry] Removing orphaned device %s",
+                    device.name,
+                )
+                dev_reg.async_remove_device(device.id)
 
-    devices = [
-        d for d in dev_reg.devices.values() if entry.entry_id in d.config_entries
-    ]
-    for device in devices:
-        entities = [e for e in ent_reg.entities.values() if e.device_id == device.id]
-        if not entities:
-            dev_reg.async_remove_device(device.id)
-            _LOGGER.debug(
-                "[async_unload_entry] Removed orphaned device %s", device.name
-            )
-
-    # Optional: clear per-domain bookkeeping
+    # ---------------------------------------------------------
+    # 8. Clean up hass.data bookkeeping
+    # ---------------------------------------------------------
     hass.data[DOMAIN].pop(DATA_CONFIG_ENTRY, None)
+
+    pli = hass.data[DOMAIN].pop(DATA_INTEGRATION, None)
+    if pli:
+        for entity_id, info in list(pli.entity_info.items()):
+            undo = info.get(DATA_UNDO_STATE_LISTENER)
+            if undo:
+                undo()
+                _LOGGER.debug(
+                    "[async_unload_entry] Removed state listener for %s", entity_id
+                )
+        # Reset registration flag so next setup will add the controller again
+        pli._controller_registered = False
+
     if DATA_UNDO_UPDATE_LISTENER in hass.data[DOMAIN]:
         hass.data[DOMAIN][DATA_UNDO_UPDATE_LISTENER]()
         hass.data[DOMAIN].pop(DATA_UNDO_UPDATE_LISTENER, None)

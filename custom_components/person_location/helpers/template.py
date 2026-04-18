@@ -1,9 +1,21 @@
-"""helpers/template.py - Helpers for template validation"""
+"""helpers/template.py - Helpers for template validation."""
 
+# pyright: reportMissingImports=false
+import inspect
 import logging
 from typing import Any
+from urllib.parse import urlparse
 
-from homeassistant.core import HomeAssistant
+from homeassistant.const import (
+    STATE_NOT_HOME,
+)
+from homeassistant.core import HomeAssistant, State
+from homeassistant.exceptions import TemplateError
+from homeassistant.helpers.template import Template, Template as HATemplate
+
+from ..const import (
+    STATE_JUST_LEFT,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -11,6 +23,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def normalize_template(s: str) -> str:
+    """Normalize a template string by collapsing whitespace and removing newlines."""
     import re
 
     if not isinstance(s, str):
@@ -50,12 +63,6 @@ async def validate_template(
         "missing_entities": list[str]
         }
     """
-    import inspect
-    from urllib.parse import urlparse
-
-    from homeassistant.exceptions import TemplateError
-    from homeassistant.helpers.template import Template
-
     result: dict[str, Any] = {
         "ok": False,
         "error": None,
@@ -136,10 +143,7 @@ async def validate_template(
 
 
 async def test_friendly_name_template(hass: HomeAssistant, template_str: str) -> dict:
-    """Render a preview of friendly_name for the supplied template_str"""
-    from homeassistant.core import State
-    from homeassistant.helpers.template import Template as HATemplate
-
+    """Render a preview of friendly_name for the supplied template_str."""
     _LOGGER.debug("HATemplate type = %s", type(HATemplate))
 
     if not isinstance(template_str, str) or not template_str.strip():
@@ -153,7 +157,7 @@ async def test_friendly_name_template(hass: HomeAssistant, template_str: str) ->
 
     target_state = State(
         "sensor.rod_location",  # entity_id
-        "Just Left",  # state
+        STATE_JUST_LEFT,  # state
         {
             "source_type": "gps",
             "latitude": 40.12703438635704,
@@ -163,7 +167,7 @@ async def test_friendly_name_template(hass: HomeAssistant, template_str: str) ->
             "vertical_accuracy": 30,
             "entity_picture": "/local/rod-phone.png",
             "source": "device_tracker.rod_iphone_16",
-            "reported_state": "Away",
+            "reported_state": STATE_NOT_HOME,
             "person_name": "Rod",
             "location_time": "2025-10-26 18:31:21.062200",
             "icon": "mdi:help-circle",

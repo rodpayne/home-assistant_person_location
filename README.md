@@ -16,8 +16,8 @@
 * [Components](#components)
   * [Folder: custom_components/person_location](#folder-custom_componentsperson_location)
   * [File: automation_folder/person_location_detection.yaml](#file-automation_folderperson_location_detectionyaml)
-  * [Service: person_location/process_trigger](#service-person_locationprocess_trigger)
-  * [Service: person_location/reverse_geocode](#service-person_locationreverse_geocode)
+  * [Action: person_location/process_trigger](#action-person_locationprocess_trigger)
+  * [Action: person_location/reverse_geocode](#action-person_locationreverse_geocode)
 * [Installation](#installation)   
   * [Installation via HACS](#installation-via-hacs) 
   * [Manual installation hints](#manual-installation-hints) 
@@ -80,7 +80,7 @@ When a person is detected as moving between `Home` and `Away`, instead of going 
 If `CONF_SHOW_ZONE_WHEN_AWAY`, then `<Zone>` is reported instead of `Away`.                
 
 ### **Reverse geocode the location and make distance calculations**
-The custom integration supplies a service to reverse geocode the location (making it human readable) using `Open Street Map`, `MapQuest`, `Google Maps`, and/or `Radar` and calculate the distance from home (miles and minutes) using `WazeRouteCalculator`, `Radar`, `Google Maps`, or `Mapbox`.  
+The custom integration supplies an action to reverse geocode the location (making it human readable) using `Open Street Map`, `MapQuest`, `Google Maps`, and/or `Radar` and calculate the distance from home (miles and minutes) using `WazeRouteCalculator`, `Radar`, `Google Maps`, or `Mapbox`.  
 
 Individual "template" sensors can be programatically created for selected attributes so that template sensors do not need to be configured.
 These template sensors move the attribute to a sensor state where it will be be shown in history and logbook entries.
@@ -120,7 +120,9 @@ Reverse geocoding generates an address from a latitude and longitude. The Open S
 | Open_Street_Map: | 1313 Mockingbird Lane Hollywood Los Angeles California 90038 United States | `display_name` from Open Street Map |
 | friendly_name: | Rod (Rod's iPhone) is in Los Angeles | formatted location to be displayed for sensor |
 
-Open Street Map (Nominatim) has [a usage policy](https://operations.osmfoundation.org/policies/nominatim/) that limits the frequency of calls. The custom integration attempts to limit calls to less than once per second.  To meet the requirement to be able to switch off the service, the state of `person_location.person_location_api` can be changed to `Off`. This can be done by calling service `person_location.geocode_api_off` and then resumed later by calling service `person_location.geocode_api_on`.  The number of calls is also reduced by skipping updates while the person location sensor state is `Home` or if the location has changed by less than 10 meters.  (It *will* update while the state is `Just Arrived`, so it reflects the home location while home.)
+Open Street Map (Nominatim) has [a usage policy](https://operations.osmfoundation.org/policies/nominatim/) that limits the frequency of calls. The custom integration attempts to limit calls to less than once per second.  To meet the requirement to be able to switch off the service, the state of `sensor.person_location_integration_person_location_controller` can be changed to `Off`. This can be done by calling action `person_location.geocode_api_off` and then resumed later by calling action `person_location.geocode_api_on`.  The number of calls is also reduced by skipping updates while the person location sensor state is `Home` or if the location has changed by less than 10 meters.  (It *will* update while the state is `Just Arrived`, so it reflects the home location while home.)
+
+The Open Street Map API calls can now be turned off by using the `Nominatim Geocoding Api` Diagnostic Switch found under the `Settings > Devices & services > Person Location > Person Location Integration` device.  (Any other API calls can be turned off and on in the same way.)
 
 If you find problems with the OSM information results, feel free to sign up at https://www.openstreetmap.org/ and edit the map. 
 
@@ -159,7 +161,7 @@ The Radar Geocoding feature sets the following attribute names in the sensor.
 </details>
 
 ### **File: automation_folder/person_location_detection.yaml**
-This automation file contains example automations that call the `person_location/process_trigger` service.  This is one of the ways to specify which device trackers will be watched for events that will trigger processing.  These automations are optional and are kind of a non-standard way to configure the integration.
+This automation file contains example automations that call the `person_location/process_trigger` action.  This is one of the ways to specify which device trackers will be watched for events that will trigger processing.  These automations are optional and are kind of a non-standard way to configure the integration.
 <details>
   <summary> Click for More Details</summary>
 
@@ -168,7 +170,7 @@ Automation `Person Location Update` contains a list of device tracker entities t
 Note that `Person Location Update for router home` and `Person Location Update for router not_home` are not currently used by me because it drives my router crazy to be probed all the time.  The intention here was to give a five minute delay before declaring the device not home, so that temporary WIFI dropoffs do not cause inappropriate actions.
 
 #### **Device tracker requirements (input)**
-Each device tracker that is processed (by calling the `person_location/process_trigger` service) needs to have the identity of the person that is being tracked. This is specified in either a `person_name` or `account_name` attribute of the device tracker. This could be done in Configuration Customizations.
+Each device tracker that is processed (by calling the `person_location/process_trigger` action) needs to have the identity of the person that is being tracked. This is specified in either a `person_name` or `account_name` attribute of the device tracker. This could be done in Configuration Customizations.
 
 ![Customizations Example](docs/images/CustomizationsExample.png)
 
@@ -183,8 +185,8 @@ In the case of the [Apple iCloud integration](https://www.home-assistant.io/inte
 ```
 </details>
 
-### **Service: person_location/process_trigger** 
-This is the service that is called by automation `Person Location Update` following a state change of a device tracker such as a phone, watch, or car.  It creates/updates a Home Assistant sensor named `sensor.<personName>_location`.  The configuration can also specify that this be done for all `person` entities and/or for selected "device trackers".
+### **Action: person_location/process_trigger** 
+This is the action that is called by automation `Person Location Update` following a state change of a device tracker such as a phone, watch, or car.  It creates/updates a Home Assistant sensor named `sensor.<personName>_location`.  The configuration can also specify that this be done for all `person` entities and/or for selected "device trackers".
 <details>
   <summary>Click for More Details</summary>	
 
@@ -210,7 +212,7 @@ The sensor will be updated with a state such as `Just Arrived`, `Home`, `Just Le
 	
 Note that the person location sensor state is triggered by state changes such as a device changing zones, that way a phone left at home does not get a vote for "home".  The assumption is that if the device is moving, then the person has it.  An effort is also made to show more respect to devices with a higher GPS accuracy.  This typically results in the mobile app being followed.
 
-The built-in `Person` integration competes somewhat in combining the status of multiple device trackers.  I expect that its ability to determine the actual presence and location of a person will improve with time.  If you prefer the selection priority that the built-in Person integration provides, only call the `person_location/process_trigger` service for changes of the `person.<personName>` entity rather than the upstream device trackers.  Do not mix the two because it is likely to double the updates and may get stuck following the wrong entity.  You could follow all configured Person entities by skipping all calls to `person_location/process_trigger` and selecting the `follow_person_integration` configuration option.
+The built-in `Person` integration competes somewhat in combining the status of multiple device trackers.  I expect that its ability to determine the actual presence and location of a person will improve with time.  If you prefer the selection priority that the built-in Person integration provides, only call the `person_location/process_trigger` action for changes of the `person.<personName>` entity rather than the upstream device trackers.  Do not mix the two because it is likely to double the updates and may get stuck following the wrong entity.  You could follow all configured Person entities by skipping all calls to `person_location/process_trigger` and selecting the `follow_person_integration` configuration option.
 
 #### **Person location sensor example (output)**
 
@@ -230,8 +232,8 @@ The built-in `Person` integration competes somewhat in combining the status of m
 | | | icon: | mdi:home | icon for the zone of the location |
 </details>
 
-### **Service: person_location/reverse_geocode** 
-This is the service to reverse geocode the location in a sensor and it is called by `person_location/process_trigger`.  It could also be called by other integrations to do the same for their sensors. 
+### **Action: person_location/reverse_geocode** 
+This is the action to reverse geocode the location in a sensor and it is called by `person_location/process_trigger`.  It could also be called by other integrations to do the same for their sensors. 
 <details>
   <summary>Click for More Details</summary>
 
@@ -437,7 +439,9 @@ display_zone_format: fname
 </details>
 
 
-### **Configure a Switch to control Person Location API calls (optional)**
+### **Configure a Switch to control overall Person Location API calls (optional)**
+
+(Optional and no longer especially useful because individual API calls can be controlled by an integration-provided diagnostic switch found under the `Settings > Devices & services > Person Location > Person Location Integration` device.) 
 
 ```yaml
 # Example configuration.yaml entry
@@ -446,13 +450,13 @@ switch:
   - platform: template
     switches:
       person_location_integration:
-        friendly_name: Person Location Service
-        value_template: "{{ is_state('person_location.integration', 'on') }}"
+        friendly_name: Person Location Integration API
+        value_template: "{{ is_state('sensor.person_location_integration_person_location_controller', 'on') }}"
         turn_on:
-          service: person_location.geocode_api_on
+          action: person_location.geocode_api_on
         turn_off:
-          service: person_location.geocode_api_off
-        icon_template: "{{ state_attr('person_location.integration','icon') }}"
+          action: person_location.geocode_api_off
+        icon_template: "{{ state_attr('sensor.person_location_integration_person_location_controller','icon') }}"
 ```
 
 ### **Map Configuration Examples (Optional)**
@@ -915,3 +919,22 @@ A map camera URL template that will not render in the camera frontend can be che
 Go to `Person Location Config` → `⋮` → `Reconfigure` → `Manage Map Camera providers` → pick one → `Update and preview result`.
 
 Copy the `Map Camera URL Preview` and paste it into the address bar of a web browser. It should show an error message if it is not being accepted by the map provider.
+
+```
+
+## Contributing
+
+Submit enhancement suggestions as "issues" on GitHub.
+
+Pull requests are welcome. Please ensure:
+
+- Code is formatted consistently  
+- README updates accompany functional changes   
+
+---
+
+## License
+
+MIT License
+
+---

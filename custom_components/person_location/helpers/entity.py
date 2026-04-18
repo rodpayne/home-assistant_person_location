@@ -1,9 +1,11 @@
-"""helpers/entity.py - Helpers for entity lifecycle"""
+"""helpers/entity.py - Helpers for entity lifecycle."""
 
-from collections.abc import Iterable
+# pyright: reportMissingImports=false
+# from collections.abc import Iterable
 import logging
 import re
 
+# from typing import TYPE_CHECKING
 from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
@@ -15,6 +17,45 @@ from ..const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def resolve_zone_entity_id(hass: HomeAssistant, friendly_name: str) -> str | None:
+    """Resolve a zone entity_id from a friendly name or suffix."""
+    try:
+        if not hass or not friendly_name:
+            return None
+
+        target = str(friendly_name).strip().lower()
+
+        # async_all() returns a list of State objects
+        for state_obj in hass.states.async_all():
+            entity_id = getattr(state_obj, "entity_id", None)
+            if not entity_id or not entity_id.startswith("zone."):
+                continue
+
+            attrs = getattr(state_obj, "attributes", {}) or {}
+
+            # Match friendly_name
+            fn = attrs.get("friendly_name")
+            if isinstance(fn, str) and fn.lower() == target:
+                return entity_id
+
+            # Match entity_id suffix
+            suffix = entity_id.split(".", 1)[1]
+            if suffix.lower() == target:
+                return entity_id
+
+        return None
+
+    except Exception as err:
+        # Never crash the integration — log and return None
+        hass.logger.warning(
+            "resolve_zone_entity_id: failed to resolve zone for %r (%s)",
+            friendly_name,
+            err,
+        )
+        return None
+
 
 # ------- Template Entities -------------------------------------------------
 
