@@ -8,11 +8,11 @@
 - [ ] `config-flow-test-coverage` - Full test coverage for the config flow
 - [X] `config-flow` - Integration needs to be able to be set up via the UI
     - [ ] Uses `data_description` to give context to fields
-    - [ ] Uses `ConfigEntry.data` and `ConfigEntry.options` correctly
+    - [X] Uses `ConfigEntry.data` and `ConfigEntry.options` correctly
 - [ ] `dependency-transparency` - Dependency transparency
-- [ ] `docs-actions` - The documentation describes the provided service actions that can be used
-- [ ] `docs-high-level-description` - The documentation includes a high-level description of the integration brand, product, or service
-- [ ] `docs-installation-instructions` - The documentation provides step-by-step installation instructions for the integration, including, if needed, prerequisites
+- [X] `docs-actions` - The documentation describes the provided service actions that can be used
+- [X] `docs-high-level-description` - The documentation includes a high-level description of the integration brand, product, or service
+- [X] `docs-installation-instructions` - The documentation provides step-by-step installation instructions for the integration, including, if needed, prerequisites
 - [ ] `docs-removal-instructions` - The documentation provides removal instructions
 - [ ] `entity-event-setup` - Entity events are subscribed in the correct lifecycle methods
 - [X] `entity-unique-id` - Entities have a unique ID
@@ -24,8 +24,8 @@
 
 ## Silver
 - [ ] `action-exceptions` - Service actions raise exceptions when encountering failures
-- [ ] `config-entry-unloading` - Support config entry unloading
-- [ ] `docs-configuration-parameters` - The documentation describes all integration configuration options
+- [X] `config-entry-unloading` - Support config entry unloading
+- [X] `docs-configuration-parameters` - The documentation describes all integration configuration options
 - [ ] `docs-installation-parameters` - The documentation describes all integration installation parameters
 - [ ] `entity-unavailable` - Mark entity unavailable if appropriate
 - [X] `integration-owner` - Has an integration owner
@@ -38,13 +38,13 @@
 - [X] `devices` - The integration creates devices
 - [X] `diagnostics` - Implements diagnostics
 - [n/a] `discovery-update-info` - Integration uses discovery info to update network information
-- [n/a] `discovery` - Devices can be discovered
-- [ ] `docs-data-update` - The documentation describes how data is updated
+- [/] `discovery` - Devices can be discovered - *The Person interation can be followed to discover people.*
+- [X] `docs-data-update` - The documentation describes how data is updated
 - [ ] `docs-examples` - The documentation provides automation examples the user can use.
 - [ ] `docs-known-limitations` - The documentation describes known limitations of the integration (not to be confused with bugs)
-- [ ] `docs-supported-devices` - The documentation describes known supported / unsupported devices
-- [ ] `docs-supported-functions` - The documentation describes the supported functionality, including entities, and platforms
-- [ ] `docs-troubleshooting` - The documentation provides troubleshooting information
+- [X] `docs-supported-devices` - The documentation describes known supported / unsupported devices
+- [X] `docs-supported-functions` - The documentation describes the supported functionality, including entities, and platforms
+- [X] `docs-troubleshooting` - The documentation provides troubleshooting information
 - [ ] `docs-use-cases` - The documentation describes use cases to illustrate how this integration can be used
 - [ ] `dynamic-devices` - Devices added after integration setup
 - [ ] `entity-category` - Entities are assigned an appropriate EntityCategory
@@ -60,4 +60,4 @@
 ## Platinum
 - [ ] `async-dependency` - Dependency is async
 - [ ] `inject-websession` - The integration dependency supports passing in a websession
-- [ ] `strict-typing` - Strict typing
+- [/] `strict-typing` - Strict typing

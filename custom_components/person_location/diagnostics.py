@@ -167,7 +167,7 @@ async def async_get_config_entry_diagnostics(
     pli: PersonLocationIntegration = hass.data[DOMAIN][DATA_INTEGRATION]
     pli_dict = pli.__dict__.copy()
     pli_dict.pop("hass")
-    pli_dict.pop("DATA_CONFIGURATION")
+    # pli_dict.pop(DATA_CONFIGURATION)
     pli_dict.pop("configuration")
 
     # attributes: dict = hass.data[DOMAIN][DATA_ATTRIBUTES]

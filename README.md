@@ -227,8 +227,8 @@ The built-in `Person` integration competes somewhat in combining the status of m
 | | | friendly_name: | Rod (Rod's iPhone) is Home | formatted location to be displayed for sensor |
 | | | source: | device_tracker.crab_apple | device tracker that triggered the state |
 | | | reported_state: | Home | `state` reported by the device tracker |
-| | | update_time: | 2020-12-11 17:08:52.267362 | time that the device tracker location was obtained |
-| | | zone: | home | zone reported for the location or `away` if not in a zone |
+| | | location_time: | 2026-04-18T14:35:19.007907+00:00 | time that the device tracker location was obtained (For internal use.) |
+| | | zone: | home | zone reported for the location or attribute not present if not in a zone |
 | | | icon: | mdi:home | icon for the zone of the location |
 </details>
 
