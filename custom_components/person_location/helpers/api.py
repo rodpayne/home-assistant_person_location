@@ -105,9 +105,7 @@ async def async_person_location_get_api_data(
             record_api_success(hass, provider_id)
             return resp
         else:
-            record_api_error(
-                hass, provider_id, resp["error"], turn_off=authentication_failed
-            )
+            record_api_error(hass, provider_id, resp, turn_off=authentication_failed)
             return resp
     return resp
 
@@ -137,9 +135,7 @@ async def async_get_google_maps_geocoding(
     resp = await client.async_get_api_data("get", url)
     authentication_failed = resp.get("status") == 401
     if not resp["ok"]:
-        record_api_error(
-            hass, provider_id, resp["error"], turn_off=authentication_failed
-        )
+        record_api_error(hass, provider_id, resp, turn_off=authentication_failed)
         return resp
     # resp["status"] -> HTTP status code (e.g. 200, 404)
     if resp.get("status") == 200 and resp.get("data"):
@@ -162,7 +158,7 @@ async def async_get_google_maps_geocoding(
         )
         resp["error"] = f"HTTP status: {resp.get('status')}"
     resp["ok"] = False
-    record_api_error(hass, provider_id, resp["error"], turn_off=authentication_failed)
+    record_api_error(hass, provider_id, resp, turn_off=authentication_failed)
     return resp
 
 
@@ -176,9 +172,7 @@ async def async_get_mapbox_static_image(
     resp = await client.async_get_api_data("get", url)
     if not resp["ok"]:
         authentication_failed = resp.get("status") == 401
-        record_api_error(
-            hass, provider_id, resp["error"], turn_off=authentication_failed
-        )
+        record_api_error(hass, provider_id, resp, turn_off=authentication_failed)
         return resp
     # resp["status"] -> HTTP status code (e.g. 200, 404)
     if resp.get("status") == 200:
@@ -192,7 +186,7 @@ async def async_get_mapbox_static_image(
         )
         resp["error"] = f"HTTP status: {resp.get('status')}"
     resp["ok"] = False
-    record_api_error(hass, provider_id, resp["error"])
+    record_api_error(hass, provider_id, resp)
     return resp
 
 
@@ -216,9 +210,7 @@ async def async_get_mapquest_reverse_geocoding(
     resp = await client.async_get_api_data("get", url)
     if not resp["ok"]:
         authentication_failed = resp.get("status") == 401
-        record_api_error(
-            hass, provider_id, resp["error"], turn_off=authentication_failed
-        )
+        record_api_error(hass, provider_id, resp, turn_off=authentication_failed)
         return resp
     # resp["status"] -> HTTP status code (e.g. 200, 404)
     if resp.get("status") == 200:
@@ -232,7 +224,7 @@ async def async_get_mapquest_reverse_geocoding(
         )
         resp["error"] = f"HTTP status: {resp.get('status')}"
     resp["ok"] = False
-    record_api_error(hass, provider_id, resp["error"])
+    record_api_error(hass, provider_id, resp)
     return resp
 
 
@@ -264,9 +256,7 @@ async def async_get_open_street_map_reverse_geocoding(
     resp = await client.async_get_api_data("get", url)
     if not resp["ok"]:
         authentication_failed = resp.get("status") == 401
-        record_api_error(
-            hass, provider_id, resp["error"], turn_off=authentication_failed
-        )
+        record_api_error(hass, provider_id, resp, turn_off=authentication_failed)
         return resp
     # resp["status"] -> HTTP status code (e.g. 200, 404)
     if resp.get("status") == 200:
@@ -280,7 +270,7 @@ async def async_get_open_street_map_reverse_geocoding(
         )
         resp["error"] = f"HTTP status: {resp.get('status')}"
         resp["ok"] = False
-    record_api_error(hass, provider_id, resp["error"])
+    record_api_error(hass, provider_id, resp)
     return resp
 
 
@@ -296,9 +286,7 @@ async def async_get_radar_reverse_geocoding(
     resp = await client.async_get_api_data("get", url, headers=headers)
     if not resp["ok"]:
         authentication_failed = resp.get("status") in (401, 403)
-        record_api_error(
-            hass, provider_id, resp["error"], turn_off=authentication_failed
-        )
+        record_api_error(hass, provider_id, resp, turn_off=authentication_failed)
         return resp
     # resp["status"] -> HTTP status code (e.g. 200, 404)
     if resp.get("status") == 200 and resp.get("data"):
@@ -323,7 +311,7 @@ async def async_get_radar_reverse_geocoding(
         )
         resp["error"] = f"HTTP status: {resp.get('status')}"
     resp["ok"] = False
-    record_api_error(hass, provider_id, resp["error"])
+    record_api_error(hass, provider_id, resp)
     return resp
 
 

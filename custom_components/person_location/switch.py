@@ -264,7 +264,7 @@ def record_api_success(hass: HomeAssistant, provider_id: str) -> bool:
 
 
 def record_api_error(
-    hass: HomeAssistant, provider_id: str, error: str, turn_off: bool = False
+    hass: HomeAssistant, provider_id: str, resp: dict | str, turn_off: bool = False
 ) -> bool:
     """
     Update the failure count and last_error.
@@ -276,43 +276,64 @@ def record_api_error(
     Returns:
         True if the provider switch exists, False otherwise.
     """
+    # Detect Internet unavailable
+    if isinstance(resp, str):
+        error = resp
+        internet_unavailable = False
+    else:
+        error = resp["error"]
+        internet_unavailable = (
+            not resp.get("ok")
+            and resp.get("status") is None
+            and any(
+                key in (resp.get("error") or "").lower()
+                for key in ["gaierror", "dns", "connect", "unreachable", "timeout"]
+            )
+        )
+
     switch_entity = _get_switch_entity(hass, provider_id)
     if not switch_entity:
-        _LOGGER.warning("[record_api_error] Provider switch not found: %s", provider_id)
+        warn_once(
+            _LOGGER, ("[record_api_error] Provider switch not found: %s", provider_id)
+        )
         return False
 
     api_error_count = switch_entity._extra_state_attributes.get("error_count", 0)
     switch_entity._extra_state_attributes["error_count"] = api_error_count + 1
     switch_entity._extra_state_attributes["last_error"] = error
-    if turn_off:
-        switch_entity._enabled = False
-        _LOGGER.warning(
-            "[record_api_error] Provider switch disabled: %s - %s", provider_id, error
-        )
-        # ⭐ Create a repair notification - Credentials are invalid or expired
-        ir.async_create_issue(
-            hass,
-            DOMAIN,
-            f"{provider_id}_disabled",
-            is_fixable=False,
-            severity=ir.IssueSeverity.ERROR,
-            translation_key="provider_disabled",
-            translation_placeholders={
-                "provider": provider_id.replace("_", " ").title(),
-                "error": error,
-            },
-            data={"provider_id": provider_id},
-        )
+    if not internet_unavailable:
+        # Internet outages are generally not the provider API's fault
+        if turn_off:
+            switch_entity._enabled = False
+            _LOGGER.warning(
+                "[record_api_error] Provider switch disabled: %s - %s",
+                provider_id,
+                error,
+            )
+            # ⭐ Create a repair notification - Credentials are invalid or expired
+            ir.async_create_issue(
+                hass,
+                DOMAIN,
+                f"{provider_id}_disabled",
+                is_fixable=False,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key="provider_disabled",
+                translation_placeholders={
+                    "provider": provider_id.replace("_", " ").title(),
+                    "error": error,
+                },
+                data={"provider_id": provider_id},
+            )
 
-    # Logbook entry
-    switch_entity.hass.bus.async_fire(
-        "logbook_entry",
-        {
-            "name": f"API Provider Switch {switch_entity._provider_id.replace('_', ' ').title()}",
-            "message": error,
-            "domain": DOMAIN,
-            "entity_id": switch_entity.entity_id,
-        },
-    )
+        # Logbook entry
+        switch_entity.hass.bus.async_fire(
+            "logbook_entry",
+            {
+                "name": f"API Provider Switch {switch_entity._provider_id.replace('_', ' ').title()}",
+                "message": error,
+                "domain": DOMAIN,
+                "entity_id": switch_entity.entity_id,
+            },
+        )
     switch_entity.async_write_ha_state()
     return True
