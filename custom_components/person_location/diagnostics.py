@@ -80,25 +80,29 @@ async def async_get_config_entry_diagnostics(
                 "platform": entity_entry.platform,
                 "device_id": entity_entry.device_id,
             }
+            state_obj = hass.states.get(entity_id)
+            if state_obj:
+                entity_dict["state"] = state_obj.state
+                entity_dict["last_changed"] = state_obj.last_changed.isoformat()
+                entity_dict["last_updated"] = state_obj.last_updated.isoformat()
             if entity_id.startswith("switch.api_provider"):
-                state_obj = hass.states.get(entity_id)
-                enabled = "Enabled" if state_obj.state == "on" else "Disabled"
-                success_count = state_obj.attributes.get("success_count", 0)
-                error_count = state_obj.attributes.get("error_count", 0)
-                entity_dict["status"] = (
-                    f"{enabled} | Successful: {success_count} | Errors: {error_count}"
-                )
-                last_error = state_obj.attributes.get("last_error")
-                if last_error:
-                    entity_dict["last_error"] = last_error
+                if state_obj:
+                    enabled = "Enabled" if state_obj.state == "on" else "Disabled"
+                    success_count = state_obj.attributes.get("success_count", 0)
+                    error_count = state_obj.attributes.get("error_count", 0)
+                    entity_dict["status"] = (
+                        f"{enabled} | Successful: {success_count} | Errors: {error_count}"
+                    )
+                    last_error = state_obj.attributes.get("last_error")
+                    if last_error:
+                        entity_dict["last_error"] = last_error
             elif entity_id.startswith("camera."):
-                state_obj = hass.states.get(entity_id)
-                attributes = {
-                    "api_provider": state_obj.attributes["api_provider"],
-                    "key_used": state_obj.attributes["key_used"],
-                }
-                entity_dict["attributes"] = attributes
-
+                if state_obj:
+                    attributes = {
+                        "api_provider": state_obj.attributes["api_provider"],
+                        "key_used": state_obj.attributes["key_used"],
+                    }
+                    entity_dict["attributes"] = attributes
             entities.append(entity_dict)
 
     entities = sorted(entities, key=lambda e: e["entity_id"])

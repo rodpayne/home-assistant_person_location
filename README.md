@@ -920,7 +920,7 @@ Go to `Person Location Config` → `⋮` → `Reconfigure` → `Manage Map Camer
 
 Copy the `Map Camera URL Preview` and paste it into the address bar of a web browser. It should show an error message if it is not being accepted by the map provider.
 
-```
+---
 
 ## Contributing
 
