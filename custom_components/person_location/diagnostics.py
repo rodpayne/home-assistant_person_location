@@ -176,10 +176,6 @@ async def async_get_config_entry_diagnostics(
 
     # attributes: dict = hass.data[DOMAIN][DATA_ATTRIBUTES]
 
-    # logging_effective_level = logging.getLevelNamesMapping().get(
-    #    _LOGGER.getEffectiveLevel(), "UNKNOWN"
-    # )
-
     #
     # --- Final diagnostics structure ----------------------------------------
     #

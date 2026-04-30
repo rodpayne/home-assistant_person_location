@@ -22,7 +22,7 @@ def to_iso(dt: datetime | None) -> str:
         dt = now_utc()
 
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=datetime.timezone.utc)
+        dt = dt.replace(tzinfo=dt_util.UTC)
 
     return dt.isoformat()
 
@@ -43,14 +43,14 @@ def parse_ts(raw: str | datetime | None) -> datetime:
     # Already a datetime
     if isinstance(raw, datetime):
         if raw.tzinfo is None:
-            return raw.replace(tzinfo=datetime.timezone.utc)
+            return raw.replace(tzinfo=dt_util.UTC)
         return raw
 
     # Try HA's parser (handles ISO, RFC, etc.)
     dt = dt_util.parse_datetime(str(raw))
     if dt:
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=datetime.timezone.utc)
+            dt = dt.replace(tzinfo=dt_util.UTC)
         return dt
 
     # Last resort: treat as "now"
