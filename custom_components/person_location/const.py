@@ -27,7 +27,7 @@ API_STATE_OBJECT = DOMAIN + "." + DOMAIN + "_integration"
 INTEGRATION_NAME = "Person Location"
 ISSUE_URL = "https://github.com/rodpayne/home-assistant_person_location/issues"
 
-VERSION = "2026.04.30"
+VERSION = "2026.05.02"
 
 # Titles for the config entries:
 
