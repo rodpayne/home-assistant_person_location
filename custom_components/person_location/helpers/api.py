@@ -411,10 +411,11 @@ class PersonLocationClient:
         _LOGGER.debug("[_api_wrapper] %s", url.split("?", 1)[0])
 
         last_error = None
+        response = None
 
-        for attempt in range(1, RETRIES + 1):
+        for attempt in range(1, retries + 1):
             try:
-                async with async_timeout.timeout(TIMEOUT):
+                async with async_timeout.timeout(timeout):
                     if method == "get":
                         response = await self._session.get(url, headers=headers)
                     elif method == "put":
@@ -438,7 +439,7 @@ class PersonLocationClient:
                         _LOGGER.debug(
                             "Attempt %s/%s %sfailed due to: %s",
                             attempt,
-                            RETRIES,
+                            retries,
                             "(no retry) " if no_retry else "",
                             last_error,
                         )
@@ -455,7 +456,7 @@ class PersonLocationClient:
                 _LOGGER.debug(
                     "Attempt %s/%s failed: %s",
                     attempt,
-                    RETRIES,
+                    retries,
                     last_error,
                 )
 
@@ -464,7 +465,7 @@ class PersonLocationClient:
                 _LOGGER.debug(
                     "Attempt %s/%s failed due to client error: %s",
                     attempt,
-                    RETRIES,
+                    retries,
                     last_error,
                 )
 
@@ -473,14 +474,14 @@ class PersonLocationClient:
                 _LOGGER.debug(
                     "Attempt %s/%s failed due to unexpected error: %s",
                     attempt,
-                    RETRIES,
+                    retries,
                     last_error,
                 )
                 _LOGGER.debug(traceback.format_exc())
 
-            if attempt < RETRIES:
+            if attempt < retries:
                 # ------- Pause and then retry error:
-                if response and response.status and response.status == 429:
+                if response is not None and response.status == 429:
                     delay = get_retry_delay(response.headers)
                 else:
                     delay = 2 ** (attempt - 1)
@@ -490,10 +491,12 @@ class PersonLocationClient:
         # ------- Return error response:
         _LOGGER.debug("All attempts failed for %s", url)
         return {
-            "status": response.status,
+            "status": response.status if response is not None else None,
             "ok": False,
             "data": None,
             "error": last_error or "Unknown error",
+            "headers": dict(response.headers) if response is not None else {},
+            "url": str(response.url) if response is not None else url,
         }
 
 
