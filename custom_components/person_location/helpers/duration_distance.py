@@ -149,11 +149,11 @@ async def update_driving_miles_and_minutes(
         )
 
         home_latitude, home_longitude = get_home_coordinates(pli.hass)
-        to_location = f"{home_latitude},{home_longitude}"
 
-        _LOGGER.debug("[update_driving_miles_and_minutes] to_location: %s", to_location)
-        if to_location == (None, None):
+        if home_latitude is None or home_longitude is None:
             return
+
+        to_location = f"{home_latitude},{home_longitude}"
 
         # ------- Waze --------------------------------------------------
 
