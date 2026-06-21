@@ -157,8 +157,8 @@ class PersonLocationCamera(Camera):
         self._key_used = find_api_key_in_template(
             self._still_image_url, self._template_variables
         )
-        self._api_key = cfg[self._key_used]
-        self._api_provider = provider_for_key(self._key_used)
+        self._api_key = cfg.get(self._key_used, "") if self._key_used else ""
+        self._api_provider = provider_for_key(self._key_used) if self._key_used else None
 
         self._attr_extra_state_attributes = {}
         self._attr_extra_state_attributes.update(
@@ -183,7 +183,7 @@ class PersonLocationCamera(Camera):
     ) -> bytes | None:
         """Return bytes of camera image."""
         provider_id = self._attr_extra_state_attributes["api_provider"]
-        if not is_provider_enabled(self.hass, provider_id):
+        if provider_id is not None and not is_provider_enabled(self.hass, provider_id):
             _LOGGER.debug(
                 "[async_camera_image] %s not enabled",
                 provider_id,
@@ -236,7 +236,7 @@ class PersonLocationCamera(Camera):
             return self._last_url, self._last_image
 
         error_message = None
-        if provider_error_count(self.hass, provider_id) >= 10:
+        if provider_id is not None and provider_error_count(self.hass, provider_id) >= 10:
             turn_off = True
         else:
             turn_off = False
@@ -249,7 +249,8 @@ class PersonLocationCamera(Camera):
             response.raise_for_status()
 
             image = response.content
-            record_api_success(self.hass, provider_id)
+            if provider_id is not None:
+                record_api_success(self.hass, provider_id)
             return url, image
 
         except asyncio.CancelledError:
@@ -266,12 +267,16 @@ class PersonLocationCamera(Camera):
             if response:
                 await response.aclose()
 
-        record_api_error(
-            self.hass,
-            provider_id,
-            error_message.replace(self._api_key, "**redacted**"),
-            turn_off=turn_off,
-        )
+        if self._api_key:
+            error_message = error_message.replace(self._api_key, "**redacted**")
+
+        if provider_id is not None:
+            record_api_error(
+                self.hass,
+                provider_id,
+                error_message,
+                turn_off=turn_off,
+            )
 
         self._state = STATE_PROBLEM
         # return self._last_url, self._last_image
