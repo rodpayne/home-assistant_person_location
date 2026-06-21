@@ -225,9 +225,7 @@ class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
                         ]
                         away_timestamp = dt_util.parse_datetime(away_time_raw)
                         if away_timestamp.tzinfo is None:
-                            away_timestamp = away_timestamp.replace(
-                                tzinfo=datetime.timezone.utc
-                            )
+                            away_timestamp = away_timestamp.replace(tzinfo=timezone.utc)
                     else:
                         away_timestamp = self.last_changed
                         self._attr_extra_state_attributes[ATTR_AWAY_TIMESTAMP] = to_iso(
