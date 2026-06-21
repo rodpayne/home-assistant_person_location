@@ -459,6 +459,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         old_state = event.data["old_state"]
         new_state = event.data["new_state"]
 
+        if new_state is None:
+            _LOGGER.debug("Skipping removed entity: %s", entity_id)
+            return
+
         _LOGGER.debug(
             "[_handle_device_tracker_state_change] === Start === (%s)", entity_id
         )
