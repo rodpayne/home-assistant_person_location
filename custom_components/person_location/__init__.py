@@ -411,7 +411,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # 2. Register the controller entity ONCE
     # ---------------------------------------------------------
     ent_reg = er.async_get(hass)
-    existing_entity_id = ent_reg.async_get_entity_id("sensor", DOMAIN, "controller")
+    existing_entity_id = ent_reg.async_get_entity_id(
+        "sensor",
+        DOMAIN,
+        f"{DOMAIN}_controller",
+    )
 
     if existing_entity_id is None:
         _LOGGER.debug("[async_setup_entry] Registering controller entity")
