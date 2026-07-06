@@ -43,6 +43,8 @@ from .const import (
     CONF_STATE,
     CONF_STILL_IMAGE_URL,
     CONFIG_SCHEMA,
+    CONFIG_SCHEMA_MINOR,
+    CONFIG_SCHEMA_VERSION,
     DATA_CONFIGURATION,
     DEFAULT_API_KEY_NOT_SET,
     DEFAULT_FRIENDLY_NAME_TEMPLATE,
@@ -89,6 +91,9 @@ def _split_conf_data_and_options(conf: dict) -> tuple[dict, dict]:
 
 class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle initial config flow for Person Location."""
+
+    VERSION = CONFIG_SCHEMA_VERSION
+    MINOR_VERSION = CONFIG_SCHEMA_MINOR
 
     # ----------------- Entry Points from Home Assistant -----------------
 
@@ -149,6 +154,8 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             title=title,
             data=conf_data,
             options=conf_options,
+            version=CONFIG_SCHEMA_VERSION,
+            minor_version=CONFIG_SCHEMA_MINOR,
         )
 
     # ----------------- Menu for Configuration Steps -----------------
@@ -1126,6 +1133,8 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_create_entry(
                 title=TITLE_PERSON_LOCATION_CONFIG,
                 data=self._user_input,
+                version=CONFIG_SCHEMA_VERSION,
+                minor_version=CONFIG_SCHEMA_MINOR,
             )
 
     # --------------------------- Options Factory ---------------------------

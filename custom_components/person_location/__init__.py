@@ -45,6 +45,8 @@ from .const import (
     CONF_RADAR_API_KEY,
     CONF_SHOW_ZONE_WHEN_AWAY,
     CONFIG_SCHEMA,
+    CONFIG_SCHEMA_MINOR,
+    CONFIG_SCHEMA_VERSION,
     DATA_ASYNC_SETUP_ENTRY,
     DATA_ATTRIBUTES,
     DATA_CONFIG_ENTRY,
@@ -799,49 +801,55 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 # Migration
 # ------------------------------------------------------------------
 
-# Note: Update MIGRATION_SCHEMA_VERSION if integration can't be reverted without restore
-MIGRATION_SCHEMA_VERSION = 2
-MIGRATION_SCHEMA_MINOR = 1
-
 
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
-    """Migrate old configuration entry."""
+    """
+    Migrate old configuration entry.
+
+    Called when HA detects update of CONFIG_SCHEMA_VERSION or CONFIG_SCHEMA_MINOR.
+
+    Increment CONFIG_SCHEMA_VERSION in const.py when changing schema in a way that
+    integration can't be reverted without restoring the configuration from backup.
+
+    When the stored major version is higher than the current declared major version,
+    HA errors and refuses to load the integration.
+
+    CONFIG_SCHEMA_MINOR is incremented for changes that don't require a restore.
+    """
     _LOGGER.debug(
-        "[async_migrate_entry] Migrating configuration %s from version %s.%s",
+        "[async_migrate_entry] Migrating configuration %s from version %s.%s to %s.%s",
         config_entry.entry_id,
         config_entry.version,
         config_entry.minor_version,
+        CONFIG_SCHEMA_VERSION,
+        CONFIG_SCHEMA_MINOR,
     )
 
-    # TODO: add this test when there is a migration that can't be reverted
-    # if str(config_entry.version) > MIGRATION_SCHEMA_VERSION:
-    #    _LOGGER.error(
-    #        "Component has been downgraded without restoring configuration from backup"
-    #    )
-    #    return False
+    stored_version = config_entry.version or 0
+    stored_minor_version = config_entry.minor_version or 0
 
     new_data = {**config_entry.data}
     new_options = {**config_entry.options}
 
-    if str(config_entry.version) == "1":
-        if str(config_entry.minor_version) < "2":
-            if CONF_FRIENDLY_NAME_TEMPLATE not in new_options:
-                _LOGGER.debug("Adding %s", CONF_FRIENDLY_NAME_TEMPLATE)
-                new_options[CONF_FRIENDLY_NAME_TEMPLATE] = (
-                    DEFAULT_FRIENDLY_NAME_TEMPLATE
-                )
-            if CONF_SHOW_ZONE_WHEN_AWAY not in new_options:
-                _LOGGER.debug("Adding %s", CONF_SHOW_ZONE_WHEN_AWAY)
-                new_options[CONF_SHOW_ZONE_WHEN_AWAY] = DEFAULT_SHOW_ZONE_WHEN_AWAY
+    if (
+        stored_version != CONFIG_SCHEMA_VERSION
+        or stored_minor_version != CONFIG_SCHEMA_MINOR
+    ):
+        if CONF_FRIENDLY_NAME_TEMPLATE not in new_options:
+            _LOGGER.debug("Adding %s", CONF_FRIENDLY_NAME_TEMPLATE)
+            new_options[CONF_FRIENDLY_NAME_TEMPLATE] = DEFAULT_FRIENDLY_NAME_TEMPLATE
+        if CONF_SHOW_ZONE_WHEN_AWAY not in new_options:
+            _LOGGER.debug("Adding %s", CONF_SHOW_ZONE_WHEN_AWAY)
+            new_options[CONF_SHOW_ZONE_WHEN_AWAY] = DEFAULT_SHOW_ZONE_WHEN_AWAY
 
-    hass.config_entries.async_update_entry(
-        config_entry,
-        data=new_data,
-        options=new_options,
-        minor_version=MIGRATION_SCHEMA_MINOR,
-        version=MIGRATION_SCHEMA_VERSION,
-        title=TITLE_PERSON_LOCATION_CONFIG,
-    )
+        hass.config_entries.async_update_entry(
+            config_entry,
+            data=new_data,
+            options=new_options,
+            minor_version=CONFIG_SCHEMA_MINOR,
+            version=CONFIG_SCHEMA_VERSION,
+            title=TITLE_PERSON_LOCATION_CONFIG,
+        )
 
     _LOGGER.debug(
         "[async_migrate_entry] Migration to configuration version %s.%s complete",

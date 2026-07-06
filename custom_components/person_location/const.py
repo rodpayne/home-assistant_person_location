@@ -27,7 +27,11 @@ API_STATE_OBJECT = DOMAIN + "." + DOMAIN + "_integration"
 INTEGRATION_NAME = "Person Location"
 ISSUE_URL = "https://github.com/rodpayne/home-assistant_person_location/issues"
 
-VERSION = "2026.05.02"
+VERSION = "2026.07.06"  # Update this in manifest.json as well
+
+# Note: Update CONFIG_SCHEMA_VERSION if integration can't be reverted without restore
+CONFIG_SCHEMA_VERSION = 2
+CONFIG_SCHEMA_MINOR = 1
 
 # Titles for the config entries:
 

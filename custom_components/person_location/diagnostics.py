@@ -246,6 +246,8 @@ async def async_get_config_entry_diagnostics(
         "config_entry": {
             "entry_id": entry.entry_id,
             "title": entry.title,
+            "version": entry.version,
+            "minor_version": entry.minor_version,
             "data": _redact(dict(entry.data)),
             "options": _redact(dict(entry.options)),
         },
