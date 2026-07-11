@@ -45,12 +45,14 @@ from .const import (
     ATTR_BREAD_CRUMBS,
     ATTR_COMPASS_BEARING,
     ATTR_DIRECTION,
+    ATTR_IN_ZONES,
     ATTR_LAST_LOCATED,
     ATTR_LOCATION_TIMESTAMP,
     ATTR_PERSON_NAME,
     ATTR_REPORTED_STATE,
     ATTR_SOURCE,
     ATTR_SPEED,
+    ATTR_TRACKING_TYPE,
     ATTR_ZONE,
     CONF_FRIENDLY_NAME_TEMPLATE,
     CONF_HOURS_EXTENDED_AWAY,
@@ -312,7 +314,7 @@ async def async_setup_process_trigger(pli: PersonLocationIntegration) -> bool:
             )
 
             # -----------------------------------------------------------------
-            # Carry overrelevant attributes from trigger to target
+            # Carry over relevant attributes from trigger to target
             # -----------------------------------------------------------------
             attrs = target._attr_extra_state_attributes
 
@@ -368,6 +370,18 @@ async def async_setup_process_trigger(pli: PersonLocationIntegration) -> bool:
                 attrs[ATTR_SPEED] = trigger.attributes[ATTR_SPEED]
             else:
                 attrs.pop(ATTR_SPEED, None)
+
+            # in_zones
+            if ATTR_IN_ZONES in trigger.attributes:
+                attrs[ATTR_IN_ZONES] = trigger.attributes[ATTR_IN_ZONES]
+            else:
+                attrs.pop(ATTR_IN_ZONES, None)
+
+            # tracking_type
+            if ATTR_TRACKING_TYPE in trigger.attributes:
+                attrs[ATTR_TRACKING_TYPE] = trigger.attributes[ATTR_TRACKING_TYPE]
+            else:
+                attrs.pop(ATTR_TRACKING_TYPE, None)
 
             # Basic metadata
             attrs[ATTR_SOURCE] = trigger.entity_id

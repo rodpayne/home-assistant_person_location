@@ -79,7 +79,7 @@ ATTR_AWAY_TIMESTAMP = (
 )
 ATTR_BREAD_CRUMBS = "bread_crumbs"  # - the last several localities geocoded (e.g. "Home > Spanish Fork > Provo")
 ATTR_COMPASS_BEARING = "compass_bearing"  # - compass bearing in degrees (0-360) calculated between last two locations (0 if home)
-ATTR_DIRECTION = "direction"  # - subjective direction of travel ("home", "toward home", "away from home", "stationary", "far away")
+ATTR_DIRECTION = "direction"  # - subjective direction of travel ("home", "toward home", "away from home", "stationary", or "far away")
 ATTR_DRIVING_KM = (
     "driving_km"  # - driving distance in km calculated based on route home
 )
@@ -89,6 +89,7 @@ ATTR_DRIVING_MILES = (
 ATTR_DRIVING_MINUTES = (
     "driving_minutes"  # - driving time in minutes calculated based on route home
 )
+ATTR_IN_ZONES = "in_zones"  # - list of zones the person is currently in (e.g. ["zone.home", "zone.neighborhood"])
 ATTR_LOCALITY = "locality"  # - locality associated with the location (e.g. "Provo")
 ATTR_LOCATION_TIMESTAMP = (
     "location_time"  # - timestamp of the locationinfo in last processed trigger
@@ -97,9 +98,10 @@ ATTR_METERS_FROM_HOME = "meters_from_home"  # - straight-line distance in meters
 ATTR_MILES_FROM_HOME = "miles_from_home"  # - straight-line distance in miles calculated between location and home
 ATTR_PERSON_NAME = "person_name"  # - the name used to identify the person (e.g. "Rod")
 ATTR_REPORTED_STATE = "reported_state"  # - the state reported by trigger device, normalized to "home", "not_home", "just_left", etc.)
-ATTR_ZONE = "zone"  # - the zone if reported by the trigger device (e.g. "home", "post_office", "walmart")
+ATTR_TRACKING_TYPE = "tracking_type"  # - the type of tracking used by the trigger device (e.g. "position" or "connection")
 ATTR_SOURCE = "source"  # - the trigger device ID (e.g. device_tracker.rod_iphone_16)
 ATTR_SPEED = "speed"  # - speed (if reported by trigger device) or calculated between last two updates (straight-line meters travelled)/(seconds elapsed)
+ATTR_ZONE = "zone"  # - the zone if reported by the trigger device (e.g. "home", "post_office", or "walmart")
 
 # Additional attribute names examined in trigger sensors:
 
