@@ -154,8 +154,6 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             title=title,
             data=conf_data,
             options=conf_options,
-            version=CONFIG_SCHEMA_VERSION,
-            minor_version=CONFIG_SCHEMA_MINOR,
         )
 
     # ----------------- Menu for Configuration Steps -----------------
@@ -1133,8 +1131,6 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_create_entry(
                 title=TITLE_PERSON_LOCATION_CONFIG,
                 data=self._user_input,
-                version=CONFIG_SCHEMA_VERSION,
-                minor_version=CONFIG_SCHEMA_MINOR,
             )
 
     # --------------------------- Options Factory ---------------------------
