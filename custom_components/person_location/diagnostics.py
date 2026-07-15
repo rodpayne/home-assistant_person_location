@@ -1,7 +1,7 @@
 """diagnostics.py - accessed through Settings → Devices & Services → person_location → Download Diagnostics.
 
 Diagnostics output is a sanitized JSON document containing configuration metadata, provider information,
-and recent runtime state. Sensitive values such as API keys are automatically redacted.
+and recent runtime state. Sensitive values such as API keys are redacted.
 """
 
 # pyright: reportMissingImports=false
@@ -180,56 +180,6 @@ async def async_get_config_entry_diagnostics(
                 }
             )
 
-    """
-    #
-    # --- Providers ----------------------------------------------------------
-    #
-    providers = {}
-    provider_map = data.get("providers", {})
-
-    for provider_id, provider in provider_map.items():
-        providers[provider_id] = {
-            "name": getattr(provider, "name", None),
-            "enabled": getattr(provider, "enabled", None),
-            "healthy": getattr(provider, "healthy", None),
-            "fail_count": getattr(provider, "fail_count", None),
-            "last_error": str(getattr(provider, "last_error", None)),
-        }
-    """
-    """
-    #
-    # --- Runtime cache ------------------------------------------------------
-    #
-    cache = data.get("cache", {})
-    cache_summary = {
-        "last_geocode": cache.get("last_geocode"),
-        "last_travel_time": cache.get("last_travel_time"),
-        "last_update": cache.get("last_update"),
-    }
-    """
-    """
-    #
-    # --- Templates (if your integration uses them) --------------------------
-    #
-    templates = {}
-    template_map = data.get("templates", {})
-
-    for key, tpl in template_map.items():
-        try:
-            info = await tpl.async_render_to_info()
-            templates[key] = {
-                "template": tpl.template,
-                "result": info.result,
-                "entities": sorted(info.entities),
-                "devices": sorted(info.devices),
-            }
-        except Exception as err:
-            templates[key] = {
-                "template": tpl.template,
-                "error": str(err),
-            }
-    """
-
     pli: PersonLocationIntegration = hass.data[DOMAIN][DATA_INTEGRATION]
     pli_dict = pli.__dict__.copy()
     # pli_dict = copy.deepcopy(pli.__dict__)  # make a deep copy to avoid mutating the original
@@ -239,9 +189,148 @@ async def async_get_config_entry_diagnostics(
 
     # attributes: dict = hass.data[DOMAIN][DATA_ATTRIBUTES]
 
+    data_description = {
+        #
+        # --- Config Entry (custom fields) ---
+        #
+        "config_entry.data.configuration_from_yaml": {
+            "label": "Loaded From YAML",
+            "description": "Indicates whether the integration was initialized from YAML configuration.",
+        },
+        "config_entry.data.create_sensors": {
+            "label": "Created Sensors",
+            "description": "List of additional sensors to create for person location sensors.",
+        },
+        "config_entry.data.devices": {
+            "label": "Trigger Devices",
+            "description": "Mapping of entity IDs to person names used as location triggers.",
+        },
+        "config_entry.data.distance_duration_source": {
+            "label": "Distance/Duration Source",
+            "description": "Provider used to calculate driving distance and time.",
+        },
+        "config_entry.data.follow_person_integration": {
+            "label": "Follow Person Integration",
+            "description": "Whether built-in person entities are used as triggers.",
+        },
+        "config_entry.data.person_names": {
+            "label": "Configured Persons",
+            "description": "List of person definitions provided in configuration.",
+        },
+        "config_entry.data.providers": {
+            "label": "Camera Providers",
+            "description": "List of configured camera providers with templates.",
+        },
+        "config_entry.options.extended_away": {
+            "label": "Extended Away Hours",
+            "description": "Number of hours before a person is considered extended away.",
+        },
+        "config_entry.options.friendly_name_template": {
+            "label": "Friendly Name Template",
+            "description": "Template used to generate person location sensor friendly names.",
+        },
+        "config_entry.options.just_arrived": {
+            "label": "Just Arrived Minutes",
+            "description": "Time window for indicating recent arrival.",
+        },
+        "config_entry.options.just_left": {
+            "label": "Just Left Minutes",
+            "description": "Time window for indicating recent departure.",
+        },
+        "config_entry.options.show_zone_when_away": {
+            "label": "Show Zone In State When Away",
+            "description": "Whether to show the zone name as the person location sensorstate when Away.",
+        },
+        #
+        # --- Runtime (PLI controller) ---
+        #
+        "runtime.pli.__attr_extra_state_attributes.api_last_updated": {
+            "label": "API Last Updated",
+            "description": "Timestamp of the last API update performed by the controller.",
+        },
+        "runtime.pli.__attr_extra_state_attributes.api_exception_count": {
+            "label": "API Exception Count",
+            "description": "Number of API exceptions encountered.",
+        },
+        "runtime.pli.__attr_extra_state_attributes.api_calls_requested": {
+            "label": "API Calls Requested",
+            "description": "Number of API calls requested by the integration.",
+        },
+        "runtime.pli.__attr_extra_state_attributes.api_calls_skipped": {
+            "label": "API Calls Skipped",
+            "description": "Number of API calls skipped due to throttling or caching.",
+        },
+        "runtime.pli.__attr_extra_state_attributes.api_calls_throttled": {
+            "label": "API Calls Throttled",
+            "description": "Number of API calls throttled due to provider limits.",
+        },
+        "runtime.pli.__attr_extra_state_attributes.waze_error_count": {
+            "label": "Waze Error Count",
+            "description": "Number of errors encountered while using Waze routing.",
+        },
+        #
+        # --- Entities (custom attributes) ---
+        #
+        "entities.attributes.in_zones": {
+            "label": "In Zones",
+            "description": "List of zones reported by the trigger device.",
+        },
+        "entities.attributes.location_time": {
+            "label": "Location Timestamp",
+            "description": "Timestamp of the last location detection.",
+        },
+        "entities.attributes.latitude": {
+            "label": "Latitude",
+            "description": "Latitude reported by the trigger device.",
+        },
+        "entities.attributes.longitude": {
+            "label": "Longitude",
+            "description": "Longitude reported by the trigger device.",
+        },
+        "entities.attributes.reported_state": {
+            "label": "Reported State",
+            "description": "State reported by the trigger device before normalization.",
+        },
+        "entities.attributes.source": {
+            "label": "Source Entity",
+            "description": "Trigger entity that provided the location update.",
+        },
+        "entities.attributes.tracking_type": {
+            "label": "Tracking Type",
+            "description": "Type of tracking reported by the trigger device.",
+        },
+        "entities.attributes.zone": {
+            "label": "Zone",
+            "description": "Zone reported by the trigger device.",
+        },
+        #
+        # --- Trigger Entities ---
+        #
+        "trigger_entities.person_name": {
+            "label": "Person Name",
+            "description": "Name of personassociated with the trigger entity.",
+        },
+        "trigger_entities.state": {
+            "label": "Trigger State",
+            "description": "Current state of the trigger entity.",
+        },
+        "trigger_entities.last_changed": {
+            "label": "Trigger Last Changed",
+            "description": "Timestamp when the trigger entity last changed.",
+        },
+        #
+        # --- Logging ---
+        #
+        "logging.effective_level": {
+            "label": "Effective Log Level",
+            "description": "The logging level currently applied to this integration.",
+        },
+    }
+
     #
     # --- Final diagnostics structure ----------------------------------------
     #
+
     return {
         "config_entry": {
             "entry_id": entry.entry_id,
@@ -264,4 +353,5 @@ async def async_get_config_entry_diagnostics(
         "logging": {
             "effective_level": get_effective_log_level_name(_LOGGER),
         },
+        "data_description": data_description,
     }

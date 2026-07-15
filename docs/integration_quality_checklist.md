@@ -7,8 +7,8 @@
 - [ ] `common-modules` - Place common patterns in common modules
 - [ ] `config-flow-test-coverage` - Full test coverage for the config flow
 - ✅ `config-flow` - Integration needs to be able to be set up via the UI
-    - [ ] Uses `data_description` to give context to fields
-    - ✅ Uses `ConfigEntry.data` and `ConfigEntry.options` correctly
+- ✅ Uses `data_description` to give context to fields - *There seems to be some controversy about the context for this rule (config_flow vs diagnostics), and the web site does not seem to list it except in the checklist. Either way, we are fairly well covered.*
+- ✅ Uses `ConfigEntry.data` and `ConfigEntry.options` correctly
 - [ ] `dependency-transparency` - Dependency transparency
 - ✅ `docs-actions` - The documentation describes the provided service actions that can be used
 - ✅ `docs-high-level-description` - The documentation includes a high-level description of the integration brand, product, or service
