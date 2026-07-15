@@ -667,14 +667,32 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         _LOGGER.debug("[async_step_providers] providers = %s", providers)
         _LOGGER.debug("[async_step_providers] existing_names = %s", existing_names)
 
-        cfg = self.hass.data[DOMAIN][DATA_CONFIGURATION]
         self._camera_template_variables = {
-            CONF_GOOGLE_API_KEY: cfg[CONF_GOOGLE_API_KEY],
-            CONF_MAPBOX_API_KEY: cfg[CONF_MAPBOX_API_KEY],
-            CONF_MAPQUEST_API_KEY: cfg[CONF_MAPQUEST_API_KEY],
-            CONF_OSM_API_KEY: cfg[CONF_OSM_API_KEY],
-            CONF_RADAR_API_KEY: cfg[CONF_RADAR_API_KEY],
+            CONF_GOOGLE_API_KEY: self._user_input.get(CONF_GOOGLE_API_KEY)
+            or self.integration_config_data.get(
+                CONF_GOOGLE_API_KEY, DEFAULT_API_KEY_NOT_SET
+            ),
+            CONF_OSM_API_KEY: self._user_input.get(CONF_OSM_API_KEY)
+            or self.integration_config_data.get(
+                CONF_OSM_API_KEY, DEFAULT_API_KEY_NOT_SET
+            ),
+            CONF_MAPBOX_API_KEY: self._user_input.get(CONF_MAPBOX_API_KEY)
+            or self.integration_config_data.get(
+                CONF_MAPBOX_API_KEY, DEFAULT_API_KEY_NOT_SET
+            ),
+            CONF_MAPQUEST_API_KEY: self._user_input.get(CONF_MAPQUEST_API_KEY)
+            or self.integration_config_data.get(
+                CONF_MAPQUEST_API_KEY, DEFAULT_API_KEY_NOT_SET
+            ),
+            CONF_RADAR_API_KEY: self._user_input.get(CONF_RADAR_API_KEY)
+            or self.integration_config_data.get(
+                CONF_RADAR_API_KEY, DEFAULT_API_KEY_NOT_SET
+            ),
         }
+        _LOGGER.debug(
+            "[async_step_providers] _camera_template_variables = %s",
+            self._camera_template_variables,
+        )
 
         if not existing_names:
             return await self.async_step_provider_add()

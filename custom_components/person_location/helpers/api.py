@@ -505,12 +505,21 @@ class PersonLocationClient:
 
 async def async_test_google_api_key(hass: HomeAssistant, key: str) -> bool:
     """Test to see if the API key is valid."""
-    pli = hass.data[DOMAIN].get(DATA_INTEGRATION, {})
     if key == DEFAULT_API_KEY_NOT_SET:
         return True
+
     latitude, longitude = get_home_coordinates(hass)
     if latitude is None:
         return False
+
+    pli = hass.data.get(DOMAIN, {}).get(DATA_INTEGRATION, {})
+    if not pli:
+        _LOGGER.debug(
+            "Integration data not yet initialized: DOMAIN=%s DATA_INTEGRATION=%s",
+            DOMAIN,
+            DATA_INTEGRATION,
+        )
+        return True
 
     resp = await async_get_google_maps_geocoding(hass, key, latitude, longitude)
     if resp.get("ok"):
@@ -536,13 +545,22 @@ async def async_test_google_api_key(hass: HomeAssistant, key: str) -> bool:
 
 async def async_test_mapbox_api_key(hass: HomeAssistant, key: str) -> bool:
     """Test to see if the API key is valid."""
-    # pli = hass.data[DOMAIN].get(DATA_INTEGRATION, {})
-    # cfg = hass.data[DOMAIN].get(DATA_CONFIGURATION, {})
     if key == DEFAULT_API_KEY_NOT_SET:
         return True
+
     latitude, longitude = get_home_coordinates(hass)
     if latitude is None:
         return False
+
+    pli = hass.data.get(DOMAIN, {}).get(DATA_INTEGRATION, {})
+    if not pli:
+        _LOGGER.debug(
+            "Integration data not yet initialized: DOMAIN=%s DATA_INTEGRATION=%s",
+            DOMAIN,
+            DATA_INTEGRATION,
+        )
+        return True
+
     resp = await async_get_mapbox_static_image(hass, key, latitude, longitude)
     if resp.get("ok"):
         return True
@@ -552,12 +570,21 @@ async def async_test_mapbox_api_key(hass: HomeAssistant, key: str) -> bool:
 
 async def async_test_mapquest_api_key(hass: HomeAssistant, key: str) -> bool:
     """Test to see if the API key is valid."""
-    pli = hass.data[DOMAIN].get(DATA_INTEGRATION, {})
     if key == DEFAULT_API_KEY_NOT_SET:
         return True
     latitude, longitude = get_home_coordinates(hass)
     if latitude is None:
         return False
+
+    pli = hass.data.get(DOMAIN, {}).get(DATA_INTEGRATION, {})
+    if not pli:
+        _LOGGER.debug(
+            "Integration data not yet initialized: DOMAIN=%s DATA_INTEGRATION=%s",
+            DOMAIN,
+            DATA_INTEGRATION,
+        )
+        return True
+
     resp = await async_get_mapquest_reverse_geocoding(hass, key, latitude, longitude)
     if resp.get("ok"):
         # Save home_state and home_country_code for later comparisons
@@ -586,7 +613,7 @@ async def async_test_mapquest_api_key(hass: HomeAssistant, key: str) -> bool:
 
 async def async_test_osm_api_key(hass: HomeAssistant, key: str) -> bool:
     """Test to see if the API key is valid."""
-    pli = hass.data[DOMAIN].get(DATA_INTEGRATION, {})
+    pli = hass.data.get(DOMAIN, {}).get(DATA_INTEGRATION, {})
     import re
 
     if key == DEFAULT_API_KEY_NOT_SET:
@@ -597,6 +624,16 @@ async def async_test_osm_api_key(hass: HomeAssistant, key: str) -> bool:
             latitude, longitude = get_home_coordinates(hass)
             if latitude is None:
                 return False
+
+            pli = hass.data.get(DOMAIN, {}).get(DATA_INTEGRATION, {})
+            if not pli:
+                _LOGGER.debug(
+                    "Integration data not yet initialized: DOMAIN=%s DATA_INTEGRATION=%s",
+                    DOMAIN,
+                    DATA_INTEGRATION,
+                )
+                return True
+
             resp = await async_get_open_street_map_reverse_geocoding(
                 hass, key, latitude, longitude
             )
@@ -624,12 +661,22 @@ async def async_test_osm_api_key(hass: HomeAssistant, key: str) -> bool:
 
 async def async_test_radar_api_key(hass: HomeAssistant, key: str) -> bool:
     """Test to see if the API key is valid."""
-    pli = hass.data[DOMAIN].get(DATA_INTEGRATION, {})
     if key == DEFAULT_API_KEY_NOT_SET:
         return True
+
     latitude, longitude = get_home_coordinates(hass)
     if latitude is None:
         return False
+
+    pli = hass.data.get(DOMAIN, {}).get(DATA_INTEGRATION, {})
+    if not pli:
+        _LOGGER.debug(
+            "Integration data not yet initialized: DOMAIN=%s DATA_INTEGRATION=%s",
+            DOMAIN,
+            DATA_INTEGRATION,
+        )
+        return True
+
     resp = await async_get_radar_reverse_geocoding(hass, key, latitude, longitude)
     if resp.get("ok"):
         # Save home_state and home_country_code for later comparisons
