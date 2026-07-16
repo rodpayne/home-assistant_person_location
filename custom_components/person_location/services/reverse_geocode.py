@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from . import PersonLocationIntegration
+    from .. import PersonLocationIntegration
 
 import asyncio
 from datetime import datetime
@@ -35,7 +35,7 @@ from homeassistant.exceptions import TemplateError
 from homeassistant.util import dt as dt_util
 from homeassistant.util.location import distance
 
-from .const import (
+from ..const import (
     ATTR_BREAD_CRUMBS,
     ATTR_COMPASS_BEARING,
     ATTR_DIRECTION,
@@ -79,21 +79,21 @@ from .const import (
     TARGET_ASYNCIO_LOCK,
     THROTTLE_INTERVAL,
 )
-from .helpers.api import (
+from ..helpers.api import (
     async_get_google_maps_geocoding,
     async_get_mapquest_reverse_geocoding,
     async_get_open_street_map_reverse_geocoding,
     async_get_radar_reverse_geocoding,
     get_home_coordinates,
 )
-from .helpers.duration_distance import update_driving_miles_and_minutes
-from .helpers.timestamp import now_utc, parse_ts, to_iso
-from .sensor import (
+from ..helpers.duration_distance import update_driving_miles_and_minutes
+from ..helpers.timestamp import now_utc, parse_ts, to_iso
+from ..sensor import (
     PersonLocationTargetSensor,
     create_and_register_template_sensor,
     get_target_entity,
 )
-from .switch import is_provider_enabled
+from ..switch import is_provider_enabled
 
 _LOGGER = logging.getLogger(__name__)
 

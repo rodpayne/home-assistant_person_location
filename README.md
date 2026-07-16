@@ -89,6 +89,36 @@ These template sensors move the attribute to a sensor state where it will be be 
 
 ### **Folder: custom_components/person_location**
 This folder contains the files that make up the Person Location custom integration.
+
+```
+custom_components/person_location/
+│
+├── __init__.py
+├── config_flow.py
+├── const.py
+├── diagnostics.py
+├── manifest.json
+├── services.yaml
+├── system_health.py
+│
+├── helpers/
+│   ├── api.py
+│   ├── duration_distance.py
+│   ├── entity.py
+│   ├── template.py
+│   ├── timestamp.py
+│   ├── trigger.py
+│   └── __init__.py
+│
+├── services/
+│   ├── reverse_geocode.py
+│   └── process_trigger.py
+│
+├── camera.py
+├── sensor.py
+└── switch.py
+```
+
 <details>
   <summary>Click for More Details</summary>
 
@@ -917,6 +947,7 @@ Diagnostics output is a **sanitized JSON document** containing configuration met
 A map camera URL template that will not render in the camera frontend can be checked in a web browser.
 
 Go to `Person Location Config` → `⋮` → `Reconfigure` → `Manage Map Camera providers` → pick one → `Update and preview result`.
+
 
 Copy the `Map Camera URL Preview` and paste it into the address bar of a web browser. It should show an error message if it is not being accepted by the map provider.
 

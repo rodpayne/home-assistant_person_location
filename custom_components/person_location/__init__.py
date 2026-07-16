@@ -76,8 +76,8 @@ from .helpers.api import (
 )
 from .helpers.entity import prune_orphan_template_entities
 from .helpers.timestamp import now_utc, to_iso
-from .process_trigger import async_setup_process_trigger
-from .reverse_geocode import async_setup_reverse_geocode
+from .services.process_trigger import async_setup_process_trigger
+from .services.reverse_geocode import async_setup_reverse_geocode
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS: list[Platform] = [Platform.CAMERA, Platform.SENSOR, Platform.SWITCH]

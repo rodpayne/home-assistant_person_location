@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
     from homeassistant.core import ServiceCall
 
-    from . import PersonLocationIntegration
+    from .. import PersonLocationIntegration
 
 # import asyncio
 import logging
@@ -39,7 +39,7 @@ from homeassistant.const import (
 )
 
 # from homeassistant.util import dt as dt_util
-from .const import (
+from ..const import (
     ATTR_ALTITUDE,
     ATTR_AWAY_TIMESTAMP,
     ATTR_BREAD_CRUMBS,
@@ -68,10 +68,10 @@ from .const import (
     STATE_JUST_LEFT,
     TARGET_ASYNCIO_LOCK,
 )
-from .helpers.api import get_home_coordinates
-from .helpers.timestamp import parse_ts
-from .sensor import get_target_entity
-from .trigger import PersonLocationTrigger
+from ..helpers.api import get_home_coordinates
+from ..helpers.timestamp import parse_ts
+from ..sensor import get_target_entity
+from ..helpers.trigger import PersonLocationTrigger
 
 _LOGGER = logging.getLogger(__name__)
 

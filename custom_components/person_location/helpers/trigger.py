@@ -21,12 +21,12 @@ from homeassistant.const import (
 )
 from homeassistant.util import slugify
 
-from .const import (
+from ..const import (
     AWAY_LIKE,
     CONF_DEVICES,
     IC3_STATIONARY_STATE_PREFIX,
 )
-from .helpers.timestamp import parse_ts
+from .timestamp import parse_ts
 
 _LOGGER = logging.getLogger(__name__)
 

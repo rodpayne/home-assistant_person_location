@@ -65,7 +65,7 @@ from .const import (
     STATE_EXTENDED_AWAY,
 )
 from .helpers.timestamp import now_utc, to_iso
-from .trigger import PersonLocationTrigger
+from .helpers.trigger import PersonLocationTrigger
 
 TARGET_STATE_DESCRIPTION = SensorEntityDescription(
     key="person_location_target_state",

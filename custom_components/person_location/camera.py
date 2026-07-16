@@ -158,7 +158,9 @@ class PersonLocationCamera(Camera):
             self._still_image_url, self._template_variables
         )
         self._api_key = cfg.get(self._key_used, "") if self._key_used else ""
-        self._api_provider = provider_for_key(self._key_used) if self._key_used else None
+        self._api_provider = (
+            provider_for_key(self._key_used) if self._key_used else None
+        )
 
         self._attr_extra_state_attributes = {}
         self._attr_extra_state_attributes.update(
@@ -236,7 +238,10 @@ class PersonLocationCamera(Camera):
             return self._last_url, self._last_image
 
         error_message = None
-        if provider_id is not None and provider_error_count(self.hass, provider_id) >= 10:
+        if (
+            provider_id is not None
+            and provider_error_count(self.hass, provider_id) >= 10
+        ):
             turn_off = True
         else:
             turn_off = False

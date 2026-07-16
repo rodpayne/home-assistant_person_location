@@ -1189,7 +1189,7 @@ class PersonLocationOptionsFlowHandler(config_entries.OptionsFlow):
         conf_preview_friendly_name = "_preview_friendly_name"
 
         errors = {}
-        friendly_preview = "Preview after submit?"
+        friendly_preview = "Show preview of friendly name after submit?"
 
         if user_input is None:
             user_input = {
