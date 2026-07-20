@@ -4,7 +4,7 @@
 - ✅ `action-setup` - Service actions are registered in async_setup - *Found that in at least one case (Reconfigure), async_setup does not run, so service registration sometimes needs to be done in async_setup_entry.*
 - ⛔ `appropriate-polling` - If it's a polling integration, set an appropriate polling interval
 - ✅ `brands` - Has branding assets available for the integration
-- [ ] `common-modules` - Place common patterns in common modules
+- [ ] `common-modules` - Place common patterns in common modules - *This integration does not poll or draw data from devices, so a coordinator is not necessary.*
 - [ ] `config-flow-test-coverage` - Full test coverage for the config flow
 - ✅ `config-flow` - Integration needs to be able to be set up via the UI
 - ✅ Uses `data_description` to give context to fields - *There seems to be some controversy about the context for this rule (config_flow vs diagnostics), and the web site does not seem to list it except in the checklist. Either way, we are fairly well covered.*

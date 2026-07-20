@@ -28,7 +28,7 @@
 ## Objectives
 ![Sample person location](docs/images/SamplePersonLocation.png)
 
-### **Combine the status of multiple device trackers**
+### **1. Combine the status of multiple device trackers**
 This custom integration will look at all device trackers that are for a particular person and combine them into a single person location sensor, `sensor.<name>_location`. These "device trackers" can be `device_tracker`, `sensor`, `binary_sensor`, or `person` entities.  Device tracker state changes are monitored rather than doing polling, averaging the states, or calculating a probability. 
 Device trackers follow devices that the person has; the person location sensor tries to follow the person instead.
 <details>
@@ -70,7 +70,7 @@ The process for deciding which triggered device trackers to pay attention to is 
       * Accept
 </details>
 
-### **Make presence detection not so binary**
+### **2. Make presence detection not so binary**
 When a person is detected as moving between `Home` and `Away`, instead of going straight to `Home` or `Away`, it will temporarily change the person's status to `Just Arrived` or `Just Left` so that automations can be triggered or conditions applied appropriately.
 
 ![Person State Diagram](docs/images/PersonHomeState.png)
@@ -79,7 +79,7 @@ When a person is detected as moving between `Home` and `Away`, instead of going 
 
 If `CONF_SHOW_ZONE_WHEN_AWAY`, then `<Zone>` is reported instead of `Away`.                
 
-### **Reverse geocode the location and make distance calculations**
+### **3. Reverse geocode the location and make distance calculations**
 The custom integration supplies an action to reverse geocode the location (making it human readable) using `Open Street Map`, `MapQuest`, `Google Maps`, and/or `Radar` and calculate the distance from home (miles and minutes) using `WazeRouteCalculator`, `Radar`, `Google Maps`, or `Mapbox`.  
 
 Individual "template" sensors can be programatically created for selected attributes so that template sensors do not need to be configured.
@@ -823,6 +823,10 @@ camera:
       {%- endif -%}
       {{ combined_state }}
 ```
+---
+- Example of entry in the configuration flow UI:
+![Person State Diagram](docs/images/MapCameraEdit.png)
+---
 ```yaml
 # Example ui-lovelace.yaml
 
@@ -833,6 +837,7 @@ camera:
         show_state: true
         show_name: true
 ```
+---
 </details>
 
 #### **Map Card**
@@ -840,6 +845,7 @@ camera:
 The map card requires no knowledge of the mapping API's but is limited in how much it can be customized.
 
 See https://www.home-assistant.io/lovelace/map/ for help.
+
 
 ![home_assistant_map_card](docs/images/home_assistant_map_card.png)
 <details>
@@ -946,10 +952,12 @@ Diagnostics output is a **sanitized JSON document** containing configuration met
 
 A map camera URL template that will not render in the camera frontend can be checked in a web browser.
 
-Go to `Person Location Config` → `⋮` → `Reconfigure` → `Manage Map Camera providers` → pick one → `Update and preview result`.
+- Go to `Person Location Config` → `⋮` → `Reconfigure` → `Manage Map Camera providers` → pick one → `Update and preview result`.
 
+- Example:
+![Person State Diagram](docs/images/MapCameraPreview.png)
 
-Copy the `Map Camera URL Preview` and paste it into the address bar of a web browser. It should show an error message if it is not being accepted by the map provider.
+- Copy the `Map Camera URL Preview` and paste it into the address bar of a web browser. It should show an error message if it is not being accepted by the map provider.
 
 ---
 
