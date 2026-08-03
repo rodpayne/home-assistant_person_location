@@ -1,8 +1,9 @@
 """system_health.py - Settings -> System -> Repairs -> ⋮ -> System information."""
 
-# See https://developers.home-assistant.io/blog/2020/11/09/system-health-and-templates
-
 # pyright: reportMissingImports=false
+from __future__ import annotations
+
+# See https://developers.home-assistant.io/blog/2020/11/09/system-health-and-templates
 import logging
 
 from homeassistant.components import system_health

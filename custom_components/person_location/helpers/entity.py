@@ -1,6 +1,8 @@
 """helpers/entity.py - Helpers for entity lifecycle."""
 
 # pyright: reportMissingImports=false
+from __future__ import annotations
+
 # from collections.abc import Iterable
 import logging
 import re

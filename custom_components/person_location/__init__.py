@@ -1,6 +1,8 @@
 """__init__.py - Person Location integration."""
 
 # pyright: reportMissingImports=false
+from __future__ import annotations
+
 from datetime import datetime, timedelta
 from functools import partial
 import logging

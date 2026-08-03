@@ -1,6 +1,8 @@
 """config_flow.py - Config flow for Person Location integration."""
 
 # pyright: reportMissingImports=false
+from __future__ import annotations
+
 import copy
 import logging
 

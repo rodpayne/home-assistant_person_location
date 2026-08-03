@@ -1,6 +1,8 @@
 """camera.py - Support for map as a camera (hybrid config)."""
 
 # pyright: reportMissingImports=false
+from __future__ import annotations
+
 import asyncio
 import logging
 

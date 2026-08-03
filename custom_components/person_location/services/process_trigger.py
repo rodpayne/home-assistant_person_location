@@ -70,8 +70,8 @@ from ..const import (
 )
 from ..helpers.api import get_home_coordinates
 from ..helpers.timestamp import parse_ts
-from ..sensor import get_target_entity
 from ..helpers.trigger import PersonLocationTrigger
+from ..sensor import get_target_entity
 
 _LOGGER = logging.getLogger(__name__)
 

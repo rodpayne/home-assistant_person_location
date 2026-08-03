@@ -1,6 +1,8 @@
 """helpers/template.py - Helpers for template validation."""
 
 # pyright: reportMissingImports=false
+from __future__ import annotations
+
 import inspect
 import logging
 from typing import Any
