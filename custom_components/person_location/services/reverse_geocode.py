@@ -3,6 +3,7 @@
 # pyright: reportMissingImports=false
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -69,14 +70,12 @@ from ..const import (
     INFO_LOCALITY,
     INFO_LOCATION_LATITUDE,
     INFO_LOCATION_LONGITUDE,
-    INTEGRATION_ASYNCIO_LOCK,
     METERS_PER_MILE,
     MIN_DISTANCE_TRAVELLED_TO_GEOCODE,
     SWITCH_GOOGLE_GEOCODING_API,
     SWITCH_MAPQUEST_GEOCODING_API,
     SWITCH_OSM_NOMINATIM_GEOCODING_API,
     SWITCH_RADAR_GEOCODING_API,
-    TARGET_ASYNCIO_LOCK,
     THROTTLE_INTERVAL,
 )
 from ..helpers.api import (
@@ -96,6 +95,19 @@ from ..sensor import (
 from ..switch import is_provider_enabled
 
 _LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(slots=True)
+class ReverseGeocodeContext:
+    """Per-request state used by reverse-geocoding providers."""
+
+    home_latitude: float | None = None
+    home_longitude: float | None = None
+    new_latitude: str | None = None
+    new_longitude: str | None = None
+    new_location_time: datetime | None = None
+    new_locality: str | None = None
+    waze_country_code: str | None = None
 
 
 def calculate_initial_compass_bearing(pointA: tuple, pointB: tuple) -> float:
@@ -158,41 +170,22 @@ def shorten_to_last_255(s: str) -> str:
 
 
 async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
-    """Initialize the reverse_geocode service (async with naive datetime)."""
-    # ---------------------------------------------------------------
-    # Variables shared across inner coroutines
-    # ---------------------------------------------------------------
-    #   handle_reverse_geocode
-    #       async_call_google_maps_geocoding
-    #       async_call_mapquest_reverse_geocoding
-    #       async_call_open_street_map_reverse_geocoding
-    #       async_call_radar_reverse_geocoding
-    # ---------------------------------------------------------------
-    home_latitude: float | None = None
-    home_longitude: float | None = None
-    new_latitude: str | None = None
-    new_longitude: str | None = None
-    new_location_time: datetime | None = None
-    new_locality: str | None = None
-    waze_country_code: str | None = None
-
+    """Register the reverse_geocode service."""
     # ------- Google Maps -------------------------------------------
 
     async def async_call_google_maps_geocoding(
         target: PersonLocationTargetSensor,
+        ctx: ReverseGeocodeContext,
     ) -> None:
         """Call the Google Maps Reverse Geocoding API."""
-        """https://developers.google.com/maps/documentation/geocoding/overview?hl=en_US#ReverseGeocoding"""
-        nonlocal new_locality
-        nonlocal waze_country_code
 
         entity_id = target._entity_id
 
         google_response = await async_get_google_maps_geocoding(
             pli.hass,
             pli.configuration[CONF_GOOGLE_API_KEY],
-            new_latitude,
-            new_longitude,
+            ctx.new_latitude,
+            ctx.new_longitude,
         )
         if not google_response.get("ok"):
             _LOGGER.warning(
@@ -218,21 +211,21 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
             for component in first.get("address_components", []):
                 types = component.get("types", [])
                 if "locality" in types:
-                    new_locality = component.get("long_name", new_locality or "?")
+                    ctx.new_locality = component.get("long_name", ctx.new_locality or "?")
                     _LOGGER.debug(
-                        "(%s) Google new_locality = %s", entity_id, new_locality
+                        "(%s) Google ctx.new_locality = %s", entity_id, ctx.new_locality
                     )
-                elif (new_locality == "?") and ("administrative_area_level_2" in types):
-                    new_locality = component.get("long_name", new_locality or "?")
-                elif (new_locality == "?") and ("administrative_area_level_1" in types):
-                    new_locality = component.get("long_name", new_locality or "?")
+                elif (ctx.new_locality == "?") and ("administrative_area_level_2" in types):
+                    ctx.new_locality = component.get("long_name", ctx.new_locality or "?")
+                elif (ctx.new_locality == "?") and ("administrative_area_level_1" in types):
+                    ctx.new_locality = component.get("long_name", ctx.new_locality or "?")
 
                 if "country" in types:
-                    waze_country_code = (component.get("short_name") or "").upper()
+                    ctx.waze_country_code = (component.get("short_name") or "").upper()
                     _LOGGER.debug(
-                        "(%s) Google waze_country_code = %s",
+                        "(%s) Google ctx.waze_country_code = %s",
                         entity_id,
-                        waze_country_code,
+                        ctx.waze_country_code,
                     )
 
         google_attribution = '"powered by Google"'
@@ -242,8 +235,8 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
 
         if ATTR_GEOCODED in pli.configuration.get(CONF_CREATE_SENSORS, []):
             attrs = {
-                ATTR_LATITUDE: new_latitude,
-                ATTR_LONGITUDE: new_longitude,
+                ATTR_LATITUDE: ctx.new_latitude,
+                ATTR_LONGITUDE: ctx.new_longitude,
                 ATTR_SOURCE_TYPE: target._attr_extra_state_attributes.get(
                     ATTR_SOURCE_TYPE
                 ),
@@ -251,8 +244,8 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
                     ATTR_GPS_ACCURACY
                 ),
                 ATTR_ICON: target._attr_extra_state_attributes.get(ATTR_ICON),
-                ATTR_LOCALITY: new_locality,
-                ATTR_LOCATION_TIMESTAMP: new_location_time.isoformat(),
+                ATTR_LOCALITY: ctx.new_locality,
+                ATTR_LOCATION_TIMESTAMP: ctx.new_location_time.isoformat(),
                 ATTR_PERSON_NAME: target._person_name,
                 ATTR_ATTRIBUTION: google_attribution,
             }
@@ -268,22 +261,21 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
 
     async def async_call_mapquest_reverse_geocoding(
         target: PersonLocationTargetSensor,
+        ctx: ReverseGeocodeContext,
     ) -> None:
         """Call the MapQuest Reverse Geocoding API."""
-        nonlocal new_locality
-        nonlocal waze_country_code
 
         entity_id = target._entity_id
 
         mapquest_response = await async_get_mapquest_reverse_geocoding(
             pli.hass,
             pli.configuration[CONF_MAPQUEST_API_KEY],
-            new_latitude,
-            new_longitude,
+            ctx.new_latitude,
+            ctx.new_longitude,
         )
         if not mapquest_response.get("ok"):
             _LOGGER.warning(
-                "[async_call_open_street_map_reverse_geocoding] %s",
+                "[async_call_mapquest_reverse_geocoding] %s",
                 mapquest_response.get("error"),
             )
             return
@@ -306,11 +298,11 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
         if "street" in loc:
             formatted_address_parts.append(f"{loc['street']}, ")
         if "adminArea5" in loc:
-            new_locality = loc["adminArea5"]
-            formatted_address_parts.append(f"{new_locality}, ")
+            ctx.new_locality = loc["adminArea5"]
+            formatted_address_parts.append(f"{ctx.new_locality}, ")
         elif "adminArea4" in loc and "adminArea4Type" in loc:
-            new_locality = f"{loc['adminArea4']} {loc['adminArea4Type']}"
-            formatted_address_parts.append(f"{new_locality}, ")
+            ctx.new_locality = f"{loc['adminArea4']} {loc['adminArea4Type']}"
+            formatted_address_parts.append(f"{ctx.new_locality}, ")
         if "adminArea3" in loc:
             formatted_address_parts.append(f"{loc['adminArea3']} ")
         if "postalCode" in loc:
@@ -324,13 +316,13 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
         )
 
         if "adminArea1" in loc:
-            waze_country_code = loc["adminArea1"]
+            ctx.waze_country_code = loc["adminArea1"]
             _LOGGER.debug(
-                "(%s) mapquest waze_country_code = %s", entity_id, waze_country_code
+                "(%s) mapquest ctx.waze_country_code = %s", entity_id, ctx.waze_country_code
             )
 
         target._attr_extra_state_attributes[ATTR_MAPQUEST] = formatted_address
-        _LOGGER.debug("(%s) mapquest new_locality = %s", entity_id, new_locality)
+        _LOGGER.debug("(%s) mapquest ctx.new_locality = %s", entity_id, ctx.new_locality)
 
         mapquest_attribution = f'"{mapquest_decoded.get("info", {}).get("copyright", {}).get("text", "MapQuest")}"'
         target._attr_extra_state_attributes[ATTR_ATTRIBUTION] += (
@@ -339,8 +331,8 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
 
         if ATTR_GEOCODED in pli.configuration.get(CONF_CREATE_SENSORS, []):
             attrs = {
-                ATTR_LATITUDE: new_latitude,
-                ATTR_LONGITUDE: new_longitude,
+                ATTR_LATITUDE: ctx.new_latitude,
+                ATTR_LONGITUDE: ctx.new_longitude,
                 ATTR_SOURCE_TYPE: target._attr_extra_state_attributes.get(
                     ATTR_SOURCE_TYPE
                 ),
@@ -348,8 +340,8 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
                     ATTR_GPS_ACCURACY
                 ),
                 ATTR_ICON: target._attr_extra_state_attributes.get(ATTR_ICON),
-                ATTR_LOCALITY: new_locality,
-                ATTR_LOCATION_TIMESTAMP: new_location_time.isoformat(),
+                ATTR_LOCALITY: ctx.new_locality,
+                ATTR_LOCATION_TIMESTAMP: ctx.new_location_time.isoformat(),
                 ATTR_PERSON_NAME: target._person_name,
                 ATTR_ATTRIBUTION: mapquest_attribution,
             }
@@ -365,15 +357,14 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
 
     async def async_call_open_street_map_reverse_geocoding(
         target: PersonLocationTargetSensor,
+        ctx: ReverseGeocodeContext,
     ) -> None:
         """Call the Nominatim Reverse Geocoding (OpenStreetMap) API."""
-        nonlocal new_locality
-        nonlocal waze_country_code
 
         entity_id = target._entity_id
 
         osm_response = await async_get_open_street_map_reverse_geocoding(
-            pli.hass, pli.configuration[CONF_OSM_API_KEY], new_latitude, new_longitude
+            pli.hass, pli.configuration[CONF_OSM_API_KEY], ctx.new_latitude, ctx.new_longitude
         )
         if not osm_response.get("ok"):
             _LOGGER.warning(
@@ -384,37 +375,21 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
 
         osm_decoded = osm_response.get("data", {})
 
-        # Save home_state and home_countryCode for later comparisons
-        if (
-            new_latitude == home_latitude
-            and new_longitude == home_longitude
-            and "address" in osm_decoded
-        ):
-            addr = osm_decoded["address"]
-            if "country_code" in addr and "state" in addr:
-                home_country_code = addr["country_code"].upper()
-                home_state = addr["state"]
-                _LOGGER.debug(
-                    "(%s) OSM home_state = %s, home_country_code = %s",
-                    entity_id,
-                    home_state,
-                    home_country_code,
-                )
 
         address = osm_decoded.get("address", {})
         for key in DEFAULT_LOCALITY_PRIORITY_OSM:
             if key in address:
-                new_locality = address[key]
+                ctx.new_locality = address[key]
                 break
-        _LOGGER.debug("(%s) OSM new_locality = %s", entity_id, new_locality)
+        _LOGGER.debug("(%s) OSM ctx.new_locality = %s", entity_id, ctx.new_locality)
 
         if "country_code" in address:
-            waze_country_code = address["country_code"].upper()
+            ctx.waze_country_code = address["country_code"].upper()
             _LOGGER.debug(
-                "(%s) OSM waze_country_code = %s", entity_id, waze_country_code
+                "(%s) OSM ctx.waze_country_code = %s", entity_id, ctx.waze_country_code
             )
 
-        display_name = osm_decoded.get("display_name", new_locality or "")
+        display_name = osm_decoded.get("display_name", ctx.new_locality or "")
         _LOGGER.debug("(%s) OSM display_name = %s", entity_id, display_name)
 
         target._attr_extra_state_attributes[ATTR_OPEN_STREET_MAP] = (
@@ -430,8 +405,8 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
 
         if ATTR_GEOCODED in pli.configuration.get(CONF_CREATE_SENSORS, []):
             attrs = {
-                ATTR_LATITUDE: new_latitude,
-                ATTR_LONGITUDE: new_longitude,
+                ATTR_LATITUDE: ctx.new_latitude,
+                ATTR_LONGITUDE: ctx.new_longitude,
                 ATTR_SOURCE_TYPE: target._attr_extra_state_attributes.get(
                     ATTR_SOURCE_TYPE
                 ),
@@ -439,8 +414,8 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
                     ATTR_GPS_ACCURACY
                 ),
                 ATTR_ICON: target._attr_extra_state_attributes.get(ATTR_ICON),
-                ATTR_LOCALITY: new_locality,
-                ATTR_LOCATION_TIMESTAMP: new_location_time.isoformat(),
+                ATTR_LOCALITY: ctx.new_locality,
+                ATTR_LOCATION_TIMESTAMP: ctx.new_location_time.isoformat(),
                 ATTR_PERSON_NAME: target._person_name,
                 ATTR_ATTRIBUTION: osm_attribution,
             }
@@ -456,15 +431,14 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
 
     async def async_call_radar_reverse_geocoding(
         target: PersonLocationTargetSensor,
+        ctx: ReverseGeocodeContext,
     ) -> None:
         """Call the Radar Reverse Geocoding API."""
-        nonlocal new_locality
-        nonlocal waze_country_code
 
         entity_id = target._entity_id
 
         radar_response = await async_get_radar_reverse_geocoding(
-            pli.hass, pli.configuration[CONF_RADAR_API_KEY], new_latitude, new_longitude
+            pli.hass, pli.configuration[CONF_RADAR_API_KEY], ctx.new_latitude, ctx.new_longitude
         )
         if not radar_response.get("ok"):
             _LOGGER.warning(
@@ -486,20 +460,20 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
             "country",
         ):
             if key in first:
-                new_locality = first[key]
+                ctx.new_locality = first[key]
                 break
-        _LOGGER.debug("(%s) Radar new_locality = %s", entity_id, new_locality)
+        _LOGGER.debug("(%s) Radar ctx.new_locality = %s", entity_id, ctx.new_locality)
 
         if "countryCode" in first:
-            waze_country_code = first["countryCode"].upper()
+            ctx.waze_country_code = first["countryCode"].upper()
             _LOGGER.debug(
-                "(%s) Radar waze_country_code = %s", entity_id, waze_country_code
+                "(%s) Radar ctx.waze_country_code = %s", entity_id, ctx.waze_country_code
             )
 
         formatted_address = (
             first.get("formattedAddress")
             or first.get("addressLabel")
-            or (new_locality or "")
+            or (ctx.new_locality or "")
         )
         _LOGGER.debug("(%s) RADAR formatted_address = %s", entity_id, formatted_address)
 
@@ -512,8 +486,8 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
 
         if ATTR_GEOCODED in pli.configuration.get(CONF_CREATE_SENSORS, []):
             attrs = {
-                ATTR_LATITUDE: new_latitude,
-                ATTR_LONGITUDE: new_longitude,
+                ATTR_LATITUDE: ctx.new_latitude,
+                ATTR_LONGITUDE: ctx.new_longitude,
                 ATTR_SOURCE_TYPE: target._attr_extra_state_attributes.get(
                     ATTR_SOURCE_TYPE
                 ),
@@ -521,8 +495,8 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
                     ATTR_GPS_ACCURACY
                 ),
                 ATTR_ICON: target._attr_extra_state_attributes.get(ATTR_ICON),
-                ATTR_LOCALITY: new_locality,
-                ATTR_LOCATION_TIMESTAMP: new_location_time.isoformat(),
+                ATTR_LOCALITY: ctx.new_locality,
+                ATTR_LOCATION_TIMESTAMP: ctx.new_location_time.isoformat(),
                 ATTR_PERSON_NAME: target._person_name,
                 ATTR_ATTRIBUTION: radar_attribution,
             }
@@ -548,17 +522,14 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
                 - longitude
                 - location_time (optional)
         Output:
-            - determine <new_locality> for friendly_name
+            - determine <ctx.new_locality> for friendly_name
             - full location from Radar, Google_Maps, MapQuest, and/or Open_Street_Map
             - calculate other location-based statistics, such as distance_from_home
             - add to bread_crumbs as locality changes
             - create/update additional sensors if requested
             - friendly_name: something like "Rod (i.e. Rod's watch) is at Drew's"
         """
-        nonlocal home_latitude, home_longitude
-        nonlocal new_latitude, new_longitude
-        nonlocal new_location_time, new_locality
-        nonlocal waze_country_code
+        ctx = ReverseGeocodeContext()
 
         entity_id = call.data.get(CONF_ENTITY_ID, "NONE")
         template_arg = call.data.get(CONF_FRIENDLY_NAME_TEMPLATE, "NONE")
@@ -580,497 +551,487 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
             force_update,
         )
 
-        async with INTEGRATION_ASYNCIO_LOCK:
-            _LOGGER.debug("INTEGRATION_ASYNCIO_LOCK obtained")
-            try:
-                # Use naive datetime.now() for throttling/tracking (reverted behavior)
-                currentApiTime = dt_util.utcnow()
+        if str(pli._attr_native_value).lower() != STATE_ON:
+            pli._attr_extra_state_attributes["api_calls_skipped"] += 1
+            _LOGGER.debug(
+                "(%s) api_calls_skipped = %d",
+                entity_id,
+                pli._attr_extra_state_attributes["api_calls_skipped"],
+            )
+            await pli.async_set_state()
+            return True
 
-                if str(pli._attr_native_value).lower() != STATE_ON:
-                    pli._attr_extra_state_attributes["api_calls_skipped"] += 1
+        # Reserve a global API slot, but never hold this lock while sleeping or
+        # performing network I/O. Each reservation advances api_last_updated so
+        # concurrent requests remain throttled without serializing their work.
+        async with pli._integration_lock:
+            current_api_time = now_utc()
+            last_updated_raw = pli._attr_extra_state_attributes.get(
+                "api_last_updated"
+            )
+            if isinstance(last_updated_raw, str):
+                last_updated = dt_util.parse_datetime(last_updated_raw)
+            elif isinstance(last_updated_raw, datetime):
+                last_updated = last_updated_raw
+            else:
+                last_updated = None
+
+            if last_updated is None:
+                last_updated = current_api_time - THROTTLE_INTERVAL
+
+            next_api_time = max(current_api_time, last_updated + THROTTLE_INTERVAL)
+            wait_time = (next_api_time - current_api_time).total_seconds()
+            if wait_time > 0:
+                pli._attr_extra_state_attributes["api_calls_throttled"] += 1
+                _LOGGER.debug(
+                    "(%s) API throttle wait = %05.3f; throttled = %d",
+                    entity_id,
+                    wait_time,
+                    pli._attr_extra_state_attributes["api_calls_throttled"],
+                )
+
+            pli._attr_extra_state_attributes["api_last_updated"] = to_iso(
+                next_api_time
+            )
+            pli._attr_extra_state_attributes["api_calls_requested"] += 1
+
+            counter_attribute = f"{entity_id} calls"
+            pli._attr_extra_state_attributes[counter_attribute] = (
+                pli._attr_extra_state_attributes.get(counter_attribute, 0) + 1
+            )
+
+        if wait_time > 0:
+            await asyncio.sleep(wait_time)
+
+        current_api_time = now_utc()
+
+        try:
+            # ---- handle the service call, updating the target(entity_id)
+            async with pli.target_lock(entity_id):
+
+                target = get_target_entity(pli, entity_id)
+                if not target:
+                    _LOGGER.warning("No target sensor found for %s", entity_id)
+                    return False
+
+                ctx.home_latitude, ctx.home_longitude = get_home_coordinates(pli.hass)
+
+                # Reset attribution before updating
+                target._attr_extra_state_attributes[ATTR_ATTRIBUTION] = ""
+
+                ctx.new_latitude = target._attr_extra_state_attributes.get(
+                    ATTR_LATITUDE, "None"
+                )
+                ctx.new_longitude = target._attr_extra_state_attributes.get(
+                    ATTR_LONGITUDE, "None"
+                )
+
+                old_latitude = target.this_entity_info.get(
+                    INFO_LOCATION_LATITUDE, "None"
+                )
+                old_longitude = target.this_entity_info.get(
+                    INFO_LOCATION_LONGITUDE, "None"
+                )
+
+                if (
+                    ctx.new_latitude != "None"
+                    and ctx.new_longitude != "None"
+                    and old_latitude != "None"
+                    and old_longitude != "None"
+                ):
+                    distance_traveled = round(
+                        distance(
+                            float(ctx.new_latitude),
+                            float(ctx.new_longitude),
+                            float(old_latitude),
+                            float(old_longitude),
+                        ),
+                        3,
+                    )
+                    if ctx.home_latitude and ctx.home_longitude:
+                        old_distance_from_home = round(
+                            distance(
+                                float(old_latitude),
+                                float(old_longitude),
+                                float(ctx.home_latitude),
+                                float(ctx.home_longitude),
+                            ),
+                            3,
+                        )
+                    else:
+                        old_distance_from_home = 0.0
+
+                    compass_bearing = round(
+                        calculate_initial_compass_bearing(
+                            (float(old_latitude), float(old_longitude)),
+                            (float(ctx.new_latitude), float(ctx.new_longitude)),
+                        ),
+                        1,
+                    )
                     _LOGGER.debug(
-                        "(%s) api_calls_skipped = %d",
+                        "(%s) distance_traveled = %s; compass_bearing = %s",
                         entity_id,
-                        pli._attr_extra_state_attributes["api_calls_skipped"],
+                        distance_traveled,
+                        compass_bearing,
                     )
                 else:
-                    last_updated: datetime | None = (
-                        pli._attr_extra_state_attributes.get("api_last_updated")
+                    distance_traveled = 0.0
+                    old_distance_from_home = 0.0
+                    compass_bearing = 0.0
+
+                target._attr_extra_state_attributes[ATTR_COMPASS_BEARING] = (
+                    compass_bearing
+                )
+
+                # Geocode gate conditions
+                if ctx.new_latitude == "None" or ctx.new_longitude == "None":
+                    _LOGGER.debug(
+                        "(%s) Skipping geocoding due to missing coordinates",
+                        entity_id,
                     )
-                    last_updated_raw = pli._attr_extra_state_attributes.get(
-                        "api_last_updated"
+                elif (
+                    distance_traveled < MIN_DISTANCE_TRAVELLED_TO_GEOCODE
+                    and old_latitude != "None"
+                    and old_longitude != "None"
+                    and not force_update
+                ):
+                    _LOGGER.debug(
+                        "(%s) Skipping geocoding because distance_traveled < %s",
+                        entity_id,
+                        MIN_DISTANCE_TRAVELLED_TO_GEOCODE,
                     )
-                    last_updated: datetime | None = None
-                    if isinstance(last_updated_raw, str):
-                        last_updated = dt_util.parse_datetime(last_updated_raw)
-                    elif isinstance(last_updated_raw, datetime):
-                        last_updated = last_updated_raw
+                else:
+                    ctx.new_locality = "?"
 
-                    if last_updated is None:
-                        last_updated = currentApiTime - THROTTLE_INTERVAL
-
-                    # Compute wait time in seconds: (last + interval) - now
-                    wait_time = (
-                        last_updated + THROTTLE_INTERVAL - currentApiTime
-                    ).total_seconds()
-                    if wait_time > 0:
-                        pli._attr_extra_state_attributes["api_calls_throttled"] += 1
-                        _LOGGER.debug(
-                            "(%s) wait_time = %05.3f; api_calls_throttled = %d",
-                            entity_id,
-                            wait_time,
-                            pli._attr_extra_state_attributes["api_calls_throttled"],
-                        )
-                        await asyncio.sleep(wait_time)
-                        currentApiTime = now_utc()
-
-                    # Record the integration attributes in the API_STATE_OBJECT:
-                    pli._attr_extra_state_attributes["api_last_updated"] = to_iso(
-                        currentApiTime
+                    raw = target._attr_extra_state_attributes.get(
+                        ATTR_LOCATION_TIMESTAMP
                     )
-                    pli._attr_extra_state_attributes["api_calls_requested"] += 1
+                    ctx.new_location_time = parse_ts(raw or current_api_time)
 
-                    counter_attribute = f"{entity_id} calls"
-                    pli._attr_extra_state_attributes[counter_attribute] = (
-                        pli._attr_extra_state_attributes.get(counter_attribute, 0) + 1
+                    old_location_time = target.this_entity_info.get(
+                        "reverse_geocode_location_time", ctx.new_location_time
                     )
                     _LOGGER.debug(
-                        "(%s) %s = %s",
+                        "(%s) old_location_time = %s",
                         entity_id,
-                        counter_attribute,
-                        pli._attr_extra_state_attributes[counter_attribute],
+                        old_location_time,
                     )
 
-                    # ---- handle the service call, updating the target(entity_id)
-                    async with TARGET_ASYNCIO_LOCK:
-                        _LOGGER.debug("TARGET_ASYNCIO_LOCK obtained")
+                    elapsed_seconds = (
+                        ctx.new_location_time - old_location_time
+                    ).total_seconds()
+                    _LOGGER.debug(
+                        "(%s) elapsed_seconds = %s", entity_id, elapsed_seconds
+                    )
 
-                        target = get_target_entity(pli, entity_id)
-                        if not target:
-                            _LOGGER.warning("No target sensor found for %s", entity_id)
-                            return False
-
-                        home_latitude, home_longitude = get_home_coordinates(pli.hass)
-
-                        # Reset attribution before updating
-                        target._attr_extra_state_attributes[ATTR_ATTRIBUTION] = ""
-
-                        new_latitude = target._attr_extra_state_attributes.get(
-                            ATTR_LATITUDE, "None"
+                    if elapsed_seconds > 0:
+                        speed_during_interval = (
+                            distance_traveled / elapsed_seconds
                         )
-                        new_longitude = target._attr_extra_state_attributes.get(
-                            ATTR_LONGITUDE, "None"
+                        _LOGGER.debug(
+                            "(%s) speed_during_interval = %s meters/sec",
+                            entity_id,
+                            speed_during_interval,
                         )
+                    else:
+                        speed_during_interval = 0.0
 
-                        old_latitude = target.this_entity_info.get(
-                            INFO_LOCATION_LATITUDE, "None"
-                        )
-                        old_longitude = target.this_entity_info.get(
-                            INFO_LOCATION_LONGITUDE, "None"
-                        )
+                    target._attr_extra_state_attributes[ATTR_SPEED] = round(
+                        speed_during_interval, 1
+                    )
 
-                        if (
-                            new_latitude != "None"
-                            and new_longitude != "None"
-                            and old_latitude != "None"
-                            and old_longitude != "None"
-                        ):
-                            distance_traveled = round(
-                                distance(
-                                    float(new_latitude),
-                                    float(new_longitude),
-                                    float(old_latitude),
-                                    float(old_longitude),
-                                ),
-                                3,
-                            )
-                            if home_latitude and home_longitude:
-                                old_distance_from_home = round(
-                                    distance(
-                                        float(old_latitude),
-                                        float(old_longitude),
-                                        float(home_latitude),
-                                        float(home_longitude),
-                                    ),
-                                    3,
-                                )
-                            else:
-                                old_distance_from_home = 0.0
-
-                            compass_bearing = round(
-                                calculate_initial_compass_bearing(
-                                    (float(old_latitude), float(old_longitude)),
-                                    (float(new_latitude), float(new_longitude)),
-                                ),
-                                1,
-                            )
-                            _LOGGER.debug(
-                                "(%s) distance_traveled = %s; compass_bearing = %s",
-                                entity_id,
-                                distance_traveled,
-                                compass_bearing,
-                            )
-                        else:
-                            distance_traveled = 0.0
-                            old_distance_from_home = 0.0
-                            compass_bearing = 0.0
-
-                        target._attr_extra_state_attributes[ATTR_COMPASS_BEARING] = (
-                            compass_bearing
-                        )
-
-                        # Geocode gate conditions
-                        if new_latitude == "None" or new_longitude == "None":
-                            _LOGGER.debug(
-                                "(%s) Skipping geocoding due to missing coordinates",
-                                entity_id,
-                            )
-                        elif (
-                            distance_traveled < MIN_DISTANCE_TRAVELLED_TO_GEOCODE
-                            and old_latitude != "None"
-                            and old_longitude != "None"
-                            and not force_update
-                        ):
-                            _LOGGER.debug(
-                                "(%s) Skipping geocoding because distance_traveled < %s",
-                                entity_id,
-                                MIN_DISTANCE_TRAVELLED_TO_GEOCODE,
-                            )
-                        else:
-                            new_locality = "?"
-
-                            raw = target._attr_extra_state_attributes.get(
-                                ATTR_LOCATION_TIMESTAMP
-                            )
-                            new_location_time = parse_ts(raw or currentApiTime)
-
-                            old_location_time = target.this_entity_info.get(
-                                "reverse_geocode_location_time", new_location_time
-                            )
-                            _LOGGER.debug(
-                                "(%s) old_location_time = %s",
-                                entity_id,
-                                old_location_time,
-                            )
-
-                            elapsed_seconds = (
-                                new_location_time - old_location_time
-                            ).total_seconds()
-                            _LOGGER.debug(
-                                "(%s) elapsed_seconds = %s", entity_id, elapsed_seconds
-                            )
-
-                            if elapsed_seconds > 0:
-                                speed_during_interval = (
-                                    distance_traveled / elapsed_seconds
-                                )
-                                _LOGGER.debug(
-                                    "(%s) speed_during_interval = %s meters/sec",
-                                    entity_id,
-                                    speed_during_interval,
-                                )
-                            else:
-                                speed_during_interval = 0.0
-
-                            target._attr_extra_state_attributes[ATTR_SPEED] = round(
-                                speed_during_interval, 1
-                            )
-
-                            if (
-                                target._attr_extra_state_attributes.get(
-                                    ATTR_REPORTED_STATE, ""
-                                ).lower()
-                                == STATE_HOME
-                            ):
-                                # Clamp: "Home" is not a single point
-                                distance_from_home = 0.0
-                            elif (
-                                new_latitude != "None"
-                                and new_longitude != "None"
-                                and home_latitude is not None
-                                and home_longitude is not None
-                            ):
-                                distance_from_home = round(
-                                    distance(
-                                        float(new_latitude),
-                                        float(new_longitude),
-                                        float(home_latitude),
-                                        float(home_longitude),
-                                    ),
-                                    3,
-                                )
-                            else:
-                                distance_from_home = 0.0
-
-                            _LOGGER.debug(
-                                "(%s) meters_from_home = %s",
-                                entity_id,
-                                distance_from_home,
-                            )
-                            target._attr_extra_state_attributes[
-                                ATTR_METERS_FROM_HOME
-                            ] = round(distance_from_home, 1)
-                            target._attr_extra_state_attributes[
-                                ATTR_MILES_FROM_HOME
-                            ] = round(distance_from_home / METERS_PER_MILE, 1)
-
-                            if distance_from_home >= FAR_AWAY_METERS:
-                                direction = "far away"
-                            elif speed_during_interval <= 0.5:
-                                direction = "stationary"
-                            elif old_distance_from_home > distance_from_home:
-                                direction = "toward home"
-                            elif old_distance_from_home < distance_from_home:
-                                direction = "away from home"
-                            else:
-                                direction = "stationary"
-                            _LOGGER.debug("(%s) direction = %s", entity_id, direction)
-                            target._attr_extra_state_attributes[ATTR_DIRECTION] = (
-                                direction
-                            )
-
-                            # Default Waze country code from configuration region
-                            waze_country_code = (
-                                pli.configuration.get(CONF_REGION) or "US"
-                            ).upper()
-
-                            # ------- Radar -------------------------------------------
-                            if is_provider_enabled(
-                                pli.hass, SWITCH_RADAR_GEOCODING_API
-                            ):
-                                await async_call_radar_reverse_geocoding(target)
-                            else:
-                                previous = target._attr_extra_state_attributes.pop(
-                                    ATTR_RADAR, None
-                                )
-                                if previous:
-                                    _LOGGER.debug(
-                                        "[handle_reverse_geocode] Removing attribute ATTR_RADAR"
-                                    )
-
-                            # ------- OpenStreetMap -----------------------------------
-                            if is_provider_enabled(
-                                pli.hass, SWITCH_OSM_NOMINATIM_GEOCODING_API
-                            ):
-                                await async_call_open_street_map_reverse_geocoding(
-                                    target
-                                )
-                            else:
-                                previous = target._attr_extra_state_attributes.pop(
-                                    ATTR_OPEN_STREET_MAP, None
-                                )
-                                if previous:
-                                    _LOGGER.debug(
-                                        "[handle_reverse_geocode] Removing attribute ATTR_OPEN_STREET_MAP"
-                                    )
-
-                            # ------- Google Maps -------------------------------------
-                            if is_provider_enabled(
-                                pli.hass, SWITCH_GOOGLE_GEOCODING_API
-                            ):
-                                await async_call_google_maps_geocoding(target)
-                            else:
-                                previous = target._attr_extra_state_attributes.pop(
-                                    ATTR_GOOGLE_MAPS, None
-                                )
-                                if previous:
-                                    _LOGGER.debug(
-                                        "[handle_reverse_geocode] Removing attribute ATTR_GOOGLE_MAPS"
-                                    )
-
-                            # ------- MapQuest ----------------------------------------
-                            if is_provider_enabled(
-                                pli.hass, SWITCH_MAPQUEST_GEOCODING_API
-                            ):
-                                await async_call_mapquest_reverse_geocoding(target)
-                            else:
-                                previous = target._attr_extra_state_attributes.pop(
-                                    ATTR_MAPQUEST, None
-                                )
-                                if previous:
-                                    _LOGGER.debug(
-                                        "[handle_reverse_geocode] Removing attribute ATTR_MAPQUEST"
-                                    )
-
-                            # ------- All ---------------------------------------------
-                            target._attr_extra_state_attributes[ATTR_LOCALITY] = (
-                                new_locality
-                            )
-                            target.this_entity_info[INFO_LOCALITY] = new_locality
-                            target.this_entity_info[INFO_GEOCODE_COUNT] += 1
-                            target.this_entity_info[INFO_LOCATION_LATITUDE] = (
-                                new_latitude
-                            )
-                            target.this_entity_info[INFO_LOCATION_LONGITUDE] = (
-                                new_longitude
-                            )
-                            target.this_entity_info["reverse_geocode_location_time"] = (
-                                new_location_time
-                            )
-
-                            # Driving distance/time (Waze or alternate)
-                            await update_driving_miles_and_minutes(
-                                pli,
-                                target,
-                                new_latitude,
-                                new_longitude,
-                                waze_country_code,
-                            )
-
-                        # ---- Determine friendly_name_location and new_bread_crumb
-                        reported_state_lower = target._attr_extra_state_attributes.get(
+                    if (
+                        target._attr_extra_state_attributes.get(
                             ATTR_REPORTED_STATE, ""
                         ).lower()
+                        == STATE_HOME
+                    ):
+                        # Clamp: "Home" is not a single point
+                        distance_from_home = 0.0
+                    elif (
+                        ctx.new_latitude != "None"
+                        and ctx.new_longitude != "None"
+                        and ctx.home_latitude is not None
+                        and ctx.home_longitude is not None
+                    ):
+                        distance_from_home = round(
+                            distance(
+                                float(ctx.new_latitude),
+                                float(ctx.new_longitude),
+                                float(ctx.home_latitude),
+                                float(ctx.home_longitude),
+                            ),
+                            3,
+                        )
+                    else:
+                        distance_from_home = 0.0
 
-                        if reported_state_lower in [STATE_HOME, STATE_ON]:
-                            new_bread_crumb = "Home"
-                            friendly_name_location = "is Home"
-                        elif reported_state_lower in [
-                            STATE_NOT_HOME,
-                            STATE_NOT_HOME,
-                            STATE_OFF,
-                        ]:
-                            new_bread_crumb = STATE_NOT_HOME
-                            friendly_name_location = "is Away"
-                        else:
-                            new_bread_crumb = target._attr_extra_state_attributes.get(
-                                ATTR_REPORTED_STATE, ""
+                    _LOGGER.debug(
+                        "(%s) meters_from_home = %s",
+                        entity_id,
+                        distance_from_home,
+                    )
+                    target._attr_extra_state_attributes[
+                        ATTR_METERS_FROM_HOME
+                    ] = round(distance_from_home, 1)
+                    target._attr_extra_state_attributes[
+                        ATTR_MILES_FROM_HOME
+                    ] = round(distance_from_home / METERS_PER_MILE, 1)
+
+                    if distance_from_home >= FAR_AWAY_METERS:
+                        direction = "far away"
+                    elif speed_during_interval <= 0.5:
+                        direction = "stationary"
+                    elif old_distance_from_home > distance_from_home:
+                        direction = "toward home"
+                    elif old_distance_from_home < distance_from_home:
+                        direction = "away from home"
+                    else:
+                        direction = "stationary"
+                    _LOGGER.debug("(%s) direction = %s", entity_id, direction)
+                    target._attr_extra_state_attributes[ATTR_DIRECTION] = (
+                        direction
+                    )
+
+                    # Default Waze country code from configuration region
+                    ctx.waze_country_code = (
+                        pli.configuration.get(CONF_REGION) or "US"
+                    ).upper()
+
+                    # ------- Radar -------------------------------------------
+                    if is_provider_enabled(
+                        pli.hass, SWITCH_RADAR_GEOCODING_API
+                    ):
+                        await async_call_radar_reverse_geocoding(target, ctx)
+                    else:
+                        previous = target._attr_extra_state_attributes.pop(
+                            ATTR_RADAR, None
+                        )
+                        if previous:
+                            _LOGGER.debug(
+                                "[handle_reverse_geocode] Removing attribute ATTR_RADAR"
                             )
+
+                    # ------- OpenStreetMap -----------------------------------
+                    if is_provider_enabled(
+                        pli.hass, SWITCH_OSM_NOMINATIM_GEOCODING_API
+                    ):
+                        await async_call_open_street_map_reverse_geocoding(
+                            target
+                        )
+                    else:
+                        previous = target._attr_extra_state_attributes.pop(
+                            ATTR_OPEN_STREET_MAP, None
+                        )
+                        if previous:
+                            _LOGGER.debug(
+                                "[handle_reverse_geocode] Removing attribute ATTR_OPEN_STREET_MAP"
+                            )
+
+                    # ------- Google Maps -------------------------------------
+                    if is_provider_enabled(
+                        pli.hass, SWITCH_GOOGLE_GEOCODING_API
+                    ):
+                        await async_call_google_maps_geocoding(target, ctx)
+                    else:
+                        previous = target._attr_extra_state_attributes.pop(
+                            ATTR_GOOGLE_MAPS, None
+                        )
+                        if previous:
+                            _LOGGER.debug(
+                                "[handle_reverse_geocode] Removing attribute ATTR_GOOGLE_MAPS"
+                            )
+
+                    # ------- MapQuest ----------------------------------------
+                    if is_provider_enabled(
+                        pli.hass, SWITCH_MAPQUEST_GEOCODING_API
+                    ):
+                        await async_call_mapquest_reverse_geocoding(target, ctx)
+                    else:
+                        previous = target._attr_extra_state_attributes.pop(
+                            ATTR_MAPQUEST, None
+                        )
+                        if previous:
+                            _LOGGER.debug(
+                                "[handle_reverse_geocode] Removing attribute ATTR_MAPQUEST"
+                            )
+
+                    # ------- All ---------------------------------------------
+                    target._attr_extra_state_attributes[ATTR_LOCALITY] = (
+                        ctx.new_locality
+                    )
+                    target.this_entity_info[INFO_LOCALITY] = ctx.new_locality
+                    target.this_entity_info[INFO_GEOCODE_COUNT] += 1
+                    target.this_entity_info[INFO_LOCATION_LATITUDE] = (
+                        ctx.new_latitude
+                    )
+                    target.this_entity_info[INFO_LOCATION_LONGITUDE] = (
+                        ctx.new_longitude
+                    )
+                    target.this_entity_info["reverse_geocode_location_time"] = (
+                        ctx.new_location_time
+                    )
+
+                    # Driving distance/time (Waze or alternate)
+                    await update_driving_miles_and_minutes(
+                        pli,
+                        target,
+                        ctx.new_latitude,
+                        ctx.new_longitude,
+                        ctx.waze_country_code,
+                    )
+
+                # ---- Determine friendly_name_location and new_bread_crumb
+                reported_state_lower = target._attr_extra_state_attributes.get(
+                    ATTR_REPORTED_STATE, ""
+                ).lower()
+
+                if reported_state_lower in [STATE_HOME, STATE_ON]:
+                    new_bread_crumb = "Home"
+                    friendly_name_location = "is Home"
+                elif reported_state_lower in [
+                    STATE_NOT_HOME,
+                    STATE_NOT_HOME,
+                    STATE_OFF,
+                ]:
+                    new_bread_crumb = STATE_NOT_HOME
+                    friendly_name_location = "is Away"
+                else:
+                    new_bread_crumb = target._attr_extra_state_attributes.get(
+                        ATTR_REPORTED_STATE, ""
+                    )
+                    friendly_name_location = f"is at {new_bread_crumb}"
+
+                if ATTR_ZONE in target._attr_extra_state_attributes:
+                    current_zone = target._attr_extra_state_attributes[
+                        ATTR_ZONE
+                    ]
+                    current_zone_obj = pli.hass.states.get(
+                        f"{ZONE_DOMAIN}.{current_zone}"
+                    )
+                    if (
+                        current_zone_obj is not None
+                        and not current_zone.startswith(
+                            IC3_STATIONARY_ZONE_PREFIX
+                        )
+                    ):
+                        current_zone_attrs = current_zone_obj.attributes.copy()
+                        if "friendly_name" in current_zone_attrs:
+                            new_bread_crumb = current_zone_attrs[
+                                "friendly_name"
+                            ]
                             friendly_name_location = f"is at {new_bread_crumb}"
 
-                        if ATTR_ZONE in target._attr_extra_state_attributes:
-                            current_zone = target._attr_extra_state_attributes[
-                                ATTR_ZONE
-                            ]
-                            current_zone_obj = pli.hass.states.get(
-                                f"{ZONE_DOMAIN}.{current_zone}"
-                            )
-                            if (
-                                current_zone_obj is not None
-                                and not current_zone.startswith(
-                                    IC3_STATIONARY_ZONE_PREFIX
-                                )
-                            ):
-                                current_zone_attrs = current_zone_obj.attributes.copy()
-                                if "friendly_name" in current_zone_attrs:
-                                    new_bread_crumb = current_zone_attrs[
-                                        "friendly_name"
-                                    ]
-                                    friendly_name_location = f"is at {new_bread_crumb}"
+                if (
+                    new_bread_crumb == STATE_NOT_HOME
+                    and ATTR_LOCALITY in target._attr_extra_state_attributes
+                ):
+                    new_bread_crumb = target._attr_extra_state_attributes[
+                        ATTR_LOCALITY
+                    ]
+                    friendly_name_location = f"is in {new_bread_crumb}"
 
-                        if (
-                            new_bread_crumb == STATE_NOT_HOME
-                            and ATTR_LOCALITY in target._attr_extra_state_attributes
-                        ):
-                            new_bread_crumb = target._attr_extra_state_attributes[
-                                ATTR_LOCALITY
-                            ]
-                            friendly_name_location = f"is in {new_bread_crumb}"
-
-                        _LOGGER.debug(
-                            "(%s) friendly_name_location = %s; new_bread_crumb = %s",
-                            target.entity_id,
-                            friendly_name_location,
-                            new_bread_crumb,
-                        )
-
-                        # Append to bread_crumbs
-                        if ATTR_BREAD_CRUMBS in target._attr_extra_state_attributes:
-                            old_bread_crumbs = target._attr_extra_state_attributes[
-                                ATTR_BREAD_CRUMBS
-                            ]
-                            if not old_bread_crumbs.endswith(new_bread_crumb):
-                                target._attr_extra_state_attributes[
-                                    ATTR_BREAD_CRUMBS
-                                ] = shorten_to_last_255(
-                                    old_bread_crumbs + "> " + new_bread_crumb
-                                )
-                        else:
-                            target._attr_extra_state_attributes[ATTR_BREAD_CRUMBS] = (
-                                new_bread_crumb
-                            )
-
-                        # Friendly name template (use arg if provided; else fallback to config/default)
-                        if template_arg != "NONE":
-                            selected_template = template_arg
-                        else:
-                            selected_template = pli.configuration.get(
-                                CONF_FRIENDLY_NAME_TEMPLATE,
-                                DEFAULT_FRIENDLY_NAME_TEMPLATE,
-                            )
-
-                        # Resolve source entity (handle person indirection)
-                        if (
-                            ATTR_SOURCE in target._attr_extra_state_attributes
-                            and "." in target._attr_extra_state_attributes[ATTR_SOURCE]
-                        ):
-                            sourceEntity = target._attr_extra_state_attributes[
-                                ATTR_SOURCE
-                            ]
-                            sourceObject = pli.hass.states.get(sourceEntity)
-                            if (
-                                sourceObject is not None
-                                and ATTR_SOURCE in sourceObject.attributes
-                                and "." in sourceObject.attributes.get(ATTR_SOURCE, "")
-                            ):
-                                sourceEntity = sourceObject.attributes[ATTR_SOURCE]
-                                sourceObject = pli.hass.states.get(sourceEntity)
-                        else:
-                            sourceEntity = target.entity_id
-                            sourceObject = pli.hass.states.get(sourceEntity)
-
-                        # Prepare template variables
-                        friendly_name_variables = {
-                            "friendly_name_location": friendly_name_location,
-                            "person_name": target._attr_extra_state_attributes.get(
-                                "person_name"
-                            ),
-                            "source": {
-                                "entity_id": sourceEntity,
-                                "state": getattr(sourceObject, "state", None),
-                                "attributes": getattr(sourceObject, "attributes", {}),
-                            },
-                            "target": {
-                                "entity_id": target.entity_id,
-                                "state": target.state,
-                                "attributes": target._attr_extra_state_attributes,
-                            },
-                        }
-
-                        try:
-                            new_friendly_name = (
-                                Template(selected_template)
-                                .render(**friendly_name_variables)
-                                .replace("()", "")
-                                .replace("  ", " ")
-                            )
-                            target._attr_extra_state_attributes["friendly_name"] = (
-                                new_friendly_name
-                            )
-                            target._attr_name = new_friendly_name
-                            _LOGGER.debug("new_friendly_name = %s", new_friendly_name)
-                        except TemplateError as err:
-                            _LOGGER.error(
-                                "Error parsing friendly_name_template: %s", err
-                            )
-
-                        await target.async_set_state()
-                        target.make_template_sensors()
-
-                        _LOGGER.debug("TARGET_ASYNCIO_LOCK release...")
-
-            except Exception as e:
-                _LOGGER.error(
-                    "(%s) Exception %s: %s", entity_id, type(e).__name__, str(e)
+                _LOGGER.debug(
+                    "(%s) friendly_name_location = %s; new_bread_crumb = %s",
+                    target.entity_id,
+                    friendly_name_location,
+                    new_bread_crumb,
                 )
-                _LOGGER.debug(traceback.format_exc())
-                pli._attr_extra_state_attributes["api_exception_count"] += 1
 
-            await pli.async_set_state()
-            _LOGGER.debug("INTEGRATION_ASYNCIO_LOCK release...")
+                # Append to bread_crumbs
+                if ATTR_BREAD_CRUMBS in target._attr_extra_state_attributes:
+                    old_bread_crumbs = target._attr_extra_state_attributes[
+                        ATTR_BREAD_CRUMBS
+                    ]
+                    if not old_bread_crumbs.endswith(new_bread_crumb):
+                        target._attr_extra_state_attributes[
+                            ATTR_BREAD_CRUMBS
+                        ] = shorten_to_last_255(
+                            old_bread_crumbs + "> " + new_bread_crumb
+                        )
+                else:
+                    target._attr_extra_state_attributes[ATTR_BREAD_CRUMBS] = (
+                        new_bread_crumb
+                    )
+
+                # Friendly name template (use arg if provided; else fallback to config/default)
+                if template_arg != "NONE":
+                    selected_template = template_arg
+                else:
+                    selected_template = pli.configuration.get(
+                        CONF_FRIENDLY_NAME_TEMPLATE,
+                        DEFAULT_FRIENDLY_NAME_TEMPLATE,
+                    )
+
+                # Resolve source entity (handle person indirection)
+                if (
+                    ATTR_SOURCE in target._attr_extra_state_attributes
+                    and "." in target._attr_extra_state_attributes[ATTR_SOURCE]
+                ):
+                    sourceEntity = target._attr_extra_state_attributes[
+                        ATTR_SOURCE
+                    ]
+                    sourceObject = pli.hass.states.get(sourceEntity)
+                    if (
+                        sourceObject is not None
+                        and ATTR_SOURCE in sourceObject.attributes
+                        and "." in sourceObject.attributes.get(ATTR_SOURCE, "")
+                    ):
+                        sourceEntity = sourceObject.attributes[ATTR_SOURCE]
+                        sourceObject = pli.hass.states.get(sourceEntity)
+                else:
+                    sourceEntity = target.entity_id
+                    sourceObject = pli.hass.states.get(sourceEntity)
+
+                # Prepare template variables
+                friendly_name_variables = {
+                    "friendly_name_location": friendly_name_location,
+                    "person_name": target._attr_extra_state_attributes.get(
+                        "person_name"
+                    ),
+                    "source": {
+                        "entity_id": sourceEntity,
+                        "state": getattr(sourceObject, "state", None),
+                        "attributes": getattr(sourceObject, "attributes", {}),
+                    },
+                    "target": {
+                        "entity_id": target.entity_id,
+                        "state": target.state,
+                        "attributes": target._attr_extra_state_attributes,
+                    },
+                }
+
+                try:
+                    new_friendly_name = (
+                        Template(selected_template)
+                        .render(**friendly_name_variables)
+                        .replace("()", "")
+                        .replace("  ", " ")
+                    )
+                    target._attr_extra_state_attributes["friendly_name"] = (
+                        new_friendly_name
+                    )
+                    target._attr_name = new_friendly_name
+                    _LOGGER.debug("new_friendly_name = %s", new_friendly_name)
+                except TemplateError as err:
+                    _LOGGER.error(
+                        "Error parsing friendly_name_template: %s", err
+                    )
+
+                await target.async_set_state()
+                target.make_template_sensors()
+
+
+        except Exception as e:
+            _LOGGER.error(
+                "(%s) Exception %s: %s", entity_id, type(e).__name__, str(e)
+            )
+            _LOGGER.debug(traceback.format_exc())
+            pli._attr_extra_state_attributes["api_exception_count"] += 1
+
+        await pli.async_set_state()
 
         _LOGGER.debug("(%s) === Return ===", entity_id)
         return True
-
     pli.hass.services.async_register(DOMAIN, "reverse_geocode", handle_reverse_geocode)
     return True

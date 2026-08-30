@@ -201,9 +201,7 @@ class PersonLocationCamera(Camera):
         )
 
         try:
-            self._last_url, self._last_image = await asyncio.shield(
-                self._async_camera_image()
-            )
+            self._last_url, self._last_image = await self._async_camera_image()
         except asyncio.CancelledError as err:
             _LOGGER.warning("Task cancelled getting camera image from %s", self._name)
             raise err

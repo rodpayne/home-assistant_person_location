@@ -3,19 +3,15 @@
 # pyright: reportMissingImports=false
 from __future__ import annotations
 
-# from curses import raw
 from typing import TYPE_CHECKING
 
 from custom_components.person_location.helpers.entity import resolve_zone_entity_id
 
 if TYPE_CHECKING:
-    from datetime import datetime
-
     from homeassistant.core import ServiceCall
 
     from .. import PersonLocationIntegration
 
-# import asyncio
 import logging
 import string
 
@@ -38,7 +34,6 @@ from homeassistant.const import (
     STATE_UNKNOWN,
 )
 
-# from homeassistant.util import dt as dt_util
 from ..const import (
     ATTR_ALTITUDE,
     ATTR_AWAY_TIMESTAMP,
@@ -66,7 +61,6 @@ from ..const import (
     STATE_EXTENDED_AWAY,
     STATE_JUST_ARRIVED,
     STATE_JUST_LEFT,
-    TARGET_ASYNCIO_LOCK,
 )
 from ..helpers.api import get_home_coordinates
 from ..helpers.timestamp import parse_ts
@@ -78,40 +72,6 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_process_trigger(pli: PersonLocationIntegration) -> bool:
     """Register the async process_trigger service."""
-    # def _utc2local(utc_dt: datetime) -> datetime:
-    #    """Convert UTC datetime to local timezone (aware)."""
-    #    if utc_dt.tzinfo is None:
-    #        utc_dt = utc_dt.replace(tzinfo=timezone.utc)
-    #    return dt_util.as_local(utc_dt)
-
-    # -------------------------------------------------------------------------
-    # Delayed state-change handler (async-safe)
-    # -------------------------------------------------------------------------
-    async def _handle_delayed_state_change(
-        _now: datetime,
-        *,
-        entity_id: str,
-        from_state: str,
-        to_state: str,
-        minutes: int = 3,
-    ) -> bool:
-        """Handle delayed transitions (Just Arrived → Home, etc.)."""
-        async with TARGET_ASYNCIO_LOCK:
-            target = get_target_entity(pli, entity_id)
-            if not target:
-                return False
-
-            current_state = (target._state or "").lower()
-            if current_state != from_state.lower():
-                return True
-
-            target._state = to_state
-
-            # Atomic async write
-            await target.async_set_state()
-
-        return True
-
     # -------------------------------------------------------------------------
     # Main process_trigger handler
     # -------------------------------------------------------------------------
@@ -173,7 +133,7 @@ async def async_setup_process_trigger(pli: PersonLocationIntegration) -> bool:
         # ---------------------------------------------------------------------
         # Update target sensor
         # ---------------------------------------------------------------------
-        async with TARGET_ASYNCIO_LOCK:
+        async with pli.target_lock(trigger.target_name):
             target = get_target_entity(pli, trigger.target_name)
             if not target:
                 _LOGGER.warning("No target sensor found for %s", trigger.target_name)

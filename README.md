@@ -1,5 +1,8 @@
 # Home Assistant Person Location Custom Integration
 
+> **Compatibility:** This development branch targets Home Assistant Core 2026.7 and 2026.8. It uses config-entry `runtime_data`, current async entity/state APIs, and Home Assistant-managed HTTP sessions.
+
+
 ![HACS Default](https://img.shields.io/badge/HACS-Default%20Repository-blue?style=for-the-badge&logo=home-assistant)
 ![Version](https://img.shields.io/github/v/release/rodpayne/home-assistant_person_location?style=for-the-badge)
 ![Stars](https://img.shields.io/github/stars/rodpayne/home-assistant_person_location?style=for-the-badge)
@@ -12,6 +15,7 @@
 * [Objectives](#objectives)
   * [Combine the status of multiple device trackers](#combine-the-status-of-multiple-device-trackers)
   * [Make presence detection not so binary](#make-presence-detection-not-so-binary)
+  * [Async concurrency and update behavior](#async-concurrency-and-update-behavior)
   * [Reverse geocode the location and make distance calculations](#reverse-geocode-the-location-and-make-distance-calculations)
 * [Components](#components)
   * [Folder: custom_components/person_location](#folder-custom_componentsperson_location)
@@ -78,6 +82,13 @@ When a person is detected as moving between `Home` and `Away`, instead of going 
 *Inspired by <https://philhawthorne.com/making-home-assistants-presence-detection-not-so-binary/>*
 
 If `CONF_SHOW_ZONE_WHEN_AWAY`, then `<Zone>` is reported instead of `Away`.                
+
+### **Async concurrency and update behavior**
+Location updates are handled asynchronously, with synchronization scoped to each Person Location target. Different people can therefore be processed independently, while updates for the same target remain serialized for state consistency. External API throttling is coordinated separately and does not hold a global lock during waiting or network I/O.
+
+For the implementation details, lifecycle expectations, and developer guidance, see [Async concurrency and locking](docs/async_concurrency.md).
+
+> **Developer note:** The concurrency model is intentionally conservative around per-target state. Future work can further separate external I/O from target-state mutation by using versioned request snapshots so stale API results can be discarded safely.
 
 ### **3. Reverse geocode the location and make distance calculations**
 The custom integration supplies an action to reverse geocode the location (making it human readable) using `Open Street Map`, `MapQuest`, `Google Maps`, and/or `Radar` and calculate the distance from home (miles and minutes) using `WazeRouteCalculator`, `Radar`, `Google Maps`, or `Mapbox`.  
@@ -968,7 +979,7 @@ Submit enhancement suggestions as "issues" on GitHub.
 Pull requests are welcome. Please ensure:
 
 - Code is formatted consistently  
-- README updates accompany functional changes   
+- README and `docs/` updates accompany functional changes   
 
 ---
 

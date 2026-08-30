@@ -3,24 +3,18 @@
 from __future__ import annotations
 
 # pyright: reportMissingImports=false
-import asyncio
 from datetime import timedelta
 import logging
 
 import voluptuous as vol
 
-# from homeassistant.components.mobile_app.const import ATTR_VERTICAL_ACCURACY
-# from homeassistant.components.waze_travel_time.const import REGIONS as WAZE_REGIONS
-# from homeassistant.components.zone.const import DOMAIN as ZONE_DOMAIN
 from homeassistant.const import (
     ATTR_LATITUDE,
     ATTR_LONGITUDE,
 )
 
-# from homeassistant.core import HomeAssistant
 import homeassistant.helpers.config_validation as cv
 
-# from homeassistant.helpers.entity import Entity
 
 # Our info:
 
@@ -29,7 +23,7 @@ API_STATE_OBJECT = DOMAIN + "." + DOMAIN + "_integration"
 INTEGRATION_NAME = "Person Location"
 ISSUE_URL = "https://github.com/rodpayne/home-assistant_person_location/issues"
 
-VERSION = "2026.08.02"  # Update this in manifest.json as well
+VERSION = "2026.08.30"  # Update this in manifest.json as well
 
 # Note: Update CONFIG_SCHEMA_VERSION if integration can't be reverted without restore
 CONFIG_SCHEMA_VERSION = 2
@@ -416,7 +410,8 @@ CONFIG_SCHEMA = vol.Schema(
     extra=vol.ALLOW_EXTRA,
 )
 
-# Items under hass.data[DOMAIN]:
+# Legacy runtime mirrors under hass.data[DOMAIN]. Prefer ConfigEntry.runtime_data
+# for config-entry-owned runtime state in Home Assistant Core 2026.7+.
 
 DATA_STATE = "state"
 DATA_ATTRIBUTES = "attributes"
@@ -430,8 +425,6 @@ DATA_UNDO_STATE_LISTENER = "undo_state_listener"
 DATA_UNDO_UPDATE_LISTENER = "undo_update_listener"
 DATA_ASYNC_SETUP_ENTRY = "async_setup_entry"
 
-INTEGRATION_ASYNCIO_LOCK = asyncio.Lock()
-TARGET_ASYNCIO_LOCK = asyncio.Lock()
 
 _LOGGER = logging.getLogger(__name__)
 

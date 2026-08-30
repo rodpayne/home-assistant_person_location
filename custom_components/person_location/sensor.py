@@ -99,8 +99,6 @@ class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
         self, entity_id: str, pli: PersonLocationIntegration, person_name: str
     ) -> None:
         """Initialize the target sensor."""
-        #    self._attr_device_class = TARGET_STATE_DESCRIPTION.device_class
-        #    self._attr_options = TARGET_STATE_DESCRIPTION.options
         self._attr_translation_key = TARGET_STATE_DESCRIPTION.key
         self._attr_translate_state = True
 
@@ -283,12 +281,6 @@ class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
             self._attr_extra_state_attributes,
         )
 
-        def set_state(self: PersonLocationTargetSensor) -> None:
-            """Legacy sync wrapper (kept for compatibility)."""
-            if self.hass:
-                self.hass.loop.call_soon_threadsafe(
-                    lambda: self.hass.async_create_task(self.async_set_state())
-                )
 
     # -----------------------------------------------------------------
     # Delayed state transitions (Just Arrived → Home, Just Left → Away, Away → Extended Away)
@@ -357,70 +349,66 @@ class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
     ) -> bool:
         """Handle the delayed state change for this target entity."""
         _LOGGER.debug(
-            "[_handle_delayed_state_change] (%s) === Start === %s from_state=%s; to_state=%s",
+            "[_handle_delayed_state_change] (%s) start: %s from_state=%s; to_state=%s",
             self.entity_id,
             now,
             from_state,
             to_state,
         )
 
-        # Precursor state check
-        if self._state != from_state:
-            _LOGGER.debug(
-                "[_handle_delayed_state_change] (%s) Skip: state %s is no longer %s",
-                self.entity_id,
-                self._state,
-                from_state,
-            )
-            return True
+        async with self._pli.target_lock(self._entity_id):
+            if self._state != from_state:
+                _LOGGER.debug(
+                    "[_handle_delayed_state_change] (%s) skip: state %s is no longer %s",
+                    self.entity_id,
+                    self._state,
+                    from_state,
+                )
+                return True
 
-        # Apply the new state
-        self._state = to_state
+            self._state = to_state
 
-        # -----------------------------
-        # State-specific side effects
-        # -----------------------------
-        if to_state == STATE_HOME:
-            self._attr_extra_state_attributes[ATTR_BREAD_CRUMBS] = "Home"
-            self._attr_extra_state_attributes[ATTR_DIRECTION] = "home"
-            self._attr_extra_state_attributes[ATTR_COMPASS_BEARING] = 0
-            self._attr_extra_state_attributes.pop(ATTR_AWAY_TIMESTAMP, None)
-        elif to_state == STATE_NOT_HOME:
-            # Optional: show zone name instead of plain "Away"
-            if self._pli.configuration.get(CONF_SHOW_ZONE_WHEN_AWAY, False):
-                reported_zone = self._attr_extra_state_attributes.get(ATTR_ZONE)
-                zone_state = None
-                if reported_zone:
-                    zone_state = self.hass.states.get(f"{ZONE_DOMAIN}.{reported_zone}")
+            if to_state == STATE_HOME:
+                self._attr_extra_state_attributes[ATTR_BREAD_CRUMBS] = "Home"
+                self._attr_extra_state_attributes[ATTR_DIRECTION] = "home"
+                self._attr_extra_state_attributes[ATTR_COMPASS_BEARING] = 0
+                self._attr_extra_state_attributes.pop(ATTR_AWAY_TIMESTAMP, None)
+            elif to_state == STATE_NOT_HOME:
+                if self._pli.configuration.get(CONF_SHOW_ZONE_WHEN_AWAY, False):
+                    reported_zone = self._attr_extra_state_attributes.get(ATTR_ZONE)
+                    zone_state = None
+                    if reported_zone:
+                        zone_state = self.hass.states.get(
+                            f"{ZONE_DOMAIN}.{reported_zone}"
+                        )
 
-                if zone_state is not None and not reported_zone.startswith(
-                    IC3_STATIONARY_ZONE_PREFIX
-                ):
-                    zone_attrs = zone_state.attributes.copy()
-                    friendly = zone_attrs.get("friendly_name")
-                    if friendly:
-                        self._state = friendly
-                else:
-                    _LOGGER.debug(
-                        "[_handle_delayed_state_change] (%s) Skipping zone %s for Away",
-                        self.entity_id,
-                        reported_zone,
+                    if zone_state is not None and not reported_zone.startswith(
+                        IC3_STATIONARY_ZONE_PREFIX
+                    ):
+                        friendly = zone_state.attributes.get("friendly_name")
+                        if friendly:
+                            self._state = friendly
+                    else:
+                        _LOGGER.debug(
+                            "[_handle_delayed_state_change] (%s) skipping zone %s for Away",
+                            self.entity_id,
+                            reported_zone,
+                        )
+
+                hours_ext = self._pli.configuration.get(
+                    CONF_HOURS_EXTENDED_AWAY, 0
+                )
+                if hours_ext:
+                    self.schedule_state_change(
+                        from_state=self._state,
+                        to_state=STATE_EXTENDED_AWAY,
+                        minutes=hours_ext * 60,
                     )
 
-            # Schedule Extended Away if configured
-            hours_ext = self._pli.configuration.get(CONF_HOURS_EXTENDED_AWAY, 0)
-            if hours_ext:
-                self.schedule_state_change(
-                    from_state=self._state,
-                    to_state=STATE_EXTENDED_AWAY,
-                    minutes=hours_ext * 60,
-                )
-
-        # Persist the new state
-        await self.async_set_state()
+            await self.async_set_state()
 
         _LOGGER.debug(
-            "[_handle_delayed_state_change] (%s) === Return ===", self.entity_id
+            "[_handle_delayed_state_change] (%s) complete", self.entity_id
         )
         return True
 
@@ -637,13 +625,11 @@ async def async_setup_entry(
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN]["sensor_async_add_entities"] = async_add_entities
 
-    hass.data[DOMAIN]["async_add_entities"] = (
-        async_add_entities  # TODO used in reverse_geocode somehow
-    )
+    hass.data[DOMAIN]["async_add_entities"] = async_add_entities
     hass.data[DOMAIN]["entities"] = {}
 
     entry_devices = entry.data.get("devices", {})
-    pli = hass.data[DOMAIN].get(DATA_INTEGRATION)
+    pli = entry.runtime_data or hass.data[DOMAIN].get(DATA_INTEGRATION)
 
     if pli:
         if not pli.hass:
@@ -657,9 +643,7 @@ async def async_setup_entry(
         seen = set()
 
         if pli.configuration.get(CONF_FOLLOW_PERSON_INTEGRATION):
-            entity_ids = await hass.async_add_executor_job(
-                hass.states.entity_ids, "person"
-            )
+            entity_ids = hass.states.async_entity_ids("person")
             for trigger_entity_id in entity_ids:
                 trigger = PersonLocationTrigger(trigger_entity_id, pli)
                 await trigger.async_init()
@@ -715,14 +699,14 @@ def create_and_register_template_sensor(
         sensor._attr_extra_state_attributes.update(attrs)
 
         if sensor.hass:
-            hass.loop.call_soon_threadsafe(lambda: sensor.async_write_ha_state())
+            sensor.async_write_ha_state()
 
         return sensor
 
     sensor = PersonLocationTemplateSensor(parent, suffix, value, attrs)
     async_add_entities = hass.data[DOMAIN]["async_add_entities"]
 
-    hass.loop.call_soon_threadsafe(lambda: async_add_entities([sensor]))
+    async_add_entities([sensor])
     entities[entity_id] = sensor
     return sensor
 
