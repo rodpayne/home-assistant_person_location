@@ -4,8 +4,8 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from datetime import datetime, timedelta
-from functools import partial
 import logging
 
 import voluptuous as vol
@@ -126,6 +126,7 @@ class PersonLocationIntegration(SensorEntity):
         # integration runtime owns its own event-loop-bound synchronization.
         self._integration_lock = asyncio.Lock()
         self._target_locks: dict[str, asyncio.Lock] = {}
+        self._startup_timer_unsub: Callable[[], None] | None = None
 
         self._attr_extra_state_attributes["api_last_updated"] = to_iso(now_utc())
         self._attr_extra_state_attributes["api_exception_count"] = 0
@@ -629,9 +630,11 @@ async def async_setup_entry(
     # Startup timer (defer wiring until HA finishes starting)
     # ------------------------------------------------------------------
 
+    @callback
     def _handle_startup_is_done(now: datetime) -> None:
         """Flip startup flag and rewire listeners when HA has started."""
         _LOGGER.debug("[_handle_startup_is_done] === Start === %s", now)
+        pli._startup_timer_unsub = None
 
         # Still starting? Wait another minute
         if not hass.is_running:
@@ -655,7 +658,14 @@ async def async_setup_entry(
                     ),
                     "force_update": True,
                 }
-                hass.services.call(DOMAIN, "reverse_geocode", service_data, False)
+                hass.async_create_task(
+                    hass.services.async_call(
+                        DOMAIN,
+                        "reverse_geocode",
+                        service_data,
+                        blocking=False,
+                    )
+                )
 
         _LOGGER.debug(
             "[_handle_startup_is_done] === Return === startup flag is turned off"
@@ -664,9 +674,9 @@ async def async_setup_entry(
     def _set_timer_startup_is_done(minutes: int) -> None:
         """Start a timer for 'startup is done'."""
         point_in_time = now_utc() + timedelta(minutes=minutes)
-        async_track_point_in_time(
+        pli._startup_timer_unsub = async_track_point_in_time(
             hass,
-            partial(_handle_startup_is_done),
+            _handle_startup_is_done,
             point_in_time=point_in_time,
         )
 
@@ -688,6 +698,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry and clean up orphaned devices/entities."""
     _LOGGER.debug("[async_unload_entry] Unloading entry: %s", entry.entry_id)
 
+    # Cancel integration-owned startup timer before unloading platforms.
+    pli = hass.data[DOMAIN].get(DATA_INTEGRATION)
+    if pli and pli._startup_timer_unsub:
+        pli._startup_timer_unsub()
+        pli._startup_timer_unsub = None
+        _LOGGER.debug("[async_unload_entry] Cancelled startup timer")
+
     # ---------------------------------------------------------
     # 1. Unload all platforms (sensor, switch, camera)
     # ---------------------------------------------------------
@@ -705,35 +722,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "[async_unload_entry] Removed orphan template entities: %s", removed
         )
 
-    # ---------------------------------------------------------
-    # 3. Remove API switch entities tied to this entry
-    # ---------------------------------------------------------
-    ent_reg = er.async_get(hass)
-    removed_count = 0
-    for entity in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
-        if entity.domain == "switch":
-            ent_reg.async_remove(entity.entity_id)
-            removed_count += 1
-    _LOGGER.debug("[async_unload_entry] Removed %d API switch entities", removed_count)
+    # Keep config-entry entities in the entity registry. Platform unload removes
+    # the runtime entities; registry entries must remain so entity IDs, history,
+    # and user configuration survive reloads.
 
     # ---------------------------------------------------------
-    # 4. Remove controller entity tied to this entry
-    # ---------------------------------------------------------
-    ent_reg = er.async_get(hass)
-    controller_entity_id = ent_reg.async_get_entity_id(
-        "sensor", DOMAIN, f"{DOMAIN}_controller"
-    )
-
-    if controller_entity_id:
-        _LOGGER.debug(
-            "[async_unload_entry] Removing controller entity %s", controller_entity_id
-        )
-        ent_reg.async_remove(controller_entity_id)
-    else:
-        _LOGGER.debug("[async_unload_entry] Controller entity not found for removal")
-
-    # ---------------------------------------------------------
-    # 5. Remove services registered by this integration
+    # 3. Remove services registered by this integration
     # ---------------------------------------------------------
     for service in (
         "geocode_api_on",
@@ -745,7 +739,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass.services.async_remove(DOMAIN, service)
 
     # ---------------------------------------------------------
-    # 6. Remove state listeners stored in the controller
+    # 4. Remove state listeners stored in the controller
     # ---------------------------------------------------------
     pli = hass.data[DOMAIN].get(DATA_INTEGRATION)
     if pli:
@@ -759,8 +753,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         pli.entity_info.clear()
 
     # ---------------------------------------------------------
-    # 7. Remove controller device (if no entities remain)
+    # 5. Remove controller device (if no entities remain)
     # ---------------------------------------------------------
+    ent_reg = er.async_get(hass)
     dev_reg = dr.async_get(hass)
     for device in list(dev_reg.devices.values()):
         if entry.entry_id in device.config_entries:
@@ -776,21 +771,16 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 dev_reg.async_remove_device(device.id)
 
     # ---------------------------------------------------------
-    # 8. Clean up hass.data bookkeeping
+    # 6. Clean up hass.data bookkeeping
     # ---------------------------------------------------------
     hass.data[DOMAIN].pop(DATA_CONFIG_ENTRY, None)
 
     pli = hass.data[DOMAIN].pop(DATA_INTEGRATION, None)
     if pli:
-        for entity_id, info in list(pli.entity_info.items()):
-            undo = info.get(DATA_UNDO_STATE_LISTENER)
-            if undo:
-                undo()
-                _LOGGER.debug(
-                    "[async_unload_entry] Removed state listener for %s", entity_id
-                )
-        # Reset registration flag so next setup will add the controller again
+        # State listeners were removed before the controller was popped.
+        # Reset runtime-only registration state for the next setup.
         pli._controller_registered = False
+        pli._startup_timer_unsub = None
 
     if DATA_UNDO_UPDATE_LISTENER in hass.data[DOMAIN]:
         hass.data[DOMAIN][DATA_UNDO_UPDATE_LISTENER]()

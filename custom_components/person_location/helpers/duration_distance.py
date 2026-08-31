@@ -19,6 +19,7 @@ import random
 import traceback
 
 import aiohttp
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from pywaze.route_calculator import WazeRouteCalculator
 
 from homeassistant.components.waze_travel_time.const import REGIONS as WAZE_REGIONS
@@ -253,7 +254,7 @@ async def update_driving_miles_and_minutes(
                         error_count_exceeded = True
                     else:
                         error_count_exceeded = False
-                    error_message = f"Wyze service and pywaze failed {type(pw_err).__name__}: {pw_err}"
+                    error_message = f"Waze service and pywaze failed {type(pw_err).__name__}: {pw_err}"
                     record_api_error(
                         pli.hass,
                         provider_id,
@@ -290,8 +291,8 @@ async def update_driving_miles_and_minutes(
                 )
                 return
 
-            async with aiohttp.ClientSession() as session:
-                data = await radar_calc_distance(
+            session = async_get_clientsession(pli.hass)
+            data = await radar_calc_distance(
                     pli,
                     from_location,
                     to_location,
@@ -299,7 +300,7 @@ async def update_driving_miles_and_minutes(
                     units="metric",
                     session=session,
                 )
-                duration_min, distance_m = extract_duration_distance(data)
+            duration_min, distance_m = extract_duration_distance(data)
             distance_km = distance_m / METERS_PER_KM
 
             record_api_success(pli.hass, provider_id)
@@ -327,33 +328,33 @@ async def update_driving_miles_and_minutes(
                 )
                 return
 
-            async with aiohttp.ClientSession() as session:
-                params = {
-                    "origins": from_location,
-                    "destinations": to_location,
-                    "mode": "driving",
-                    "units": "metric",
-                    "key": api_key,
-                }
-                async with session.get(
-                    GOOGLE_DISTANCE_MATRIX_URL, params=params
-                ) as resp:
-                    if resp.status != 200:
-                        text = await resp.text()
-                        raise RuntimeError(f"Google API error {resp.status}: {text}")
-                    data = await resp.json()
-                    rows = data.get("rows", [])
-                    if not rows or not rows[0].get("elements"):
-                        raise ValueError("No routes returned by Google API")
+            session = async_get_clientsession(pli.hass)
+            params = {
+                "origins": from_location,
+                "destinations": to_location,
+                "mode": "driving",
+                "units": "metric",
+                "key": api_key,
+            }
+            async with session.get(
+                GOOGLE_DISTANCE_MATRIX_URL, params=params
+            ) as resp:
+                if resp.status != 200:
+                    text = await resp.text()
+                    raise RuntimeError(f"Google API error {resp.status}: {text}")
+                data = await resp.json()
+                rows = data.get("rows", [])
+                if not rows or not rows[0].get("elements"):
+                    raise ValueError("No routes returned by Google API")
 
-                    element = rows[0]["elements"][0]
-                    duration_sec = element["duration"]["value"]  # seconds
-                    distance_m = element["distance"]["value"]  # meters
+                element = rows[0]["elements"][0]
+                duration_sec = element["duration"]["value"]  # seconds
+                distance_m = element["distance"]["value"]  # meters
 
-                    duration_min = duration_sec / 60.0
-                    distance_km = distance_m / 1000.0
+                duration_min = duration_sec / 60.0
+                distance_km = distance_m / 1000.0
 
-                record_api_success(pli.hass, provider_id)
+            record_api_success(pli.hass, provider_id)
 
         # ------- Mapbox --------------------------------------------------
 
@@ -366,12 +367,12 @@ async def update_driving_miles_and_minutes(
                 )
                 return
 
-            async with aiohttp.ClientSession() as session:
-                minutes, km = await mapbox_calc_distance(
-                    pli, from_location, to_location, session=session
-                )
-                duration_min = minutes
-                distance_km = km
+            session = async_get_clientsession(pli.hass)
+            minutes, km = await mapbox_calc_distance(
+                pli, from_location, to_location, session=session
+            )
+            duration_min = minutes
+            distance_km = km
 
             record_api_success(pli.hass, provider_id)
 
@@ -466,39 +467,34 @@ async def radar_calc_distance(
     }
     headers = {"Authorization": api_key}
 
-    close_session = False
     if session is None:
-        session = aiohttp.ClientSession()
-        close_session = True
+        session = async_get_clientsession(pli.hass)
 
-    try:
-        for attempt in range(max_retries):
-            try:
-                async with session.get(
-                    RADAR_BASE_URL, headers=headers, params=params
-                ) as resp:
-                    if resp.status == 200:
-                        return await resp.json()
-                    elif resp.status == 429:
-                        # Rate limit: exponential backoff with jitter
-                        wait = base_backoff * (2**attempt) + random.uniform(0, 0.5)
-                        print(
-                            f"Radar API rate-limited (429). Retrying in {wait:.1f}s..."
-                        )
-                        await asyncio.sleep(wait)
-                    else:
-                        text = await resp.text()
-                        raise RuntimeError(f"Radar API error {resp.status}: {text}")
-            except (TimeoutError, aiohttp.ClientError) as e:
-                # Network error: retry with backoff
-                wait = base_backoff * (2**attempt) + random.uniform(0, 0.5)
-                print(f"Network error: {e}. Retrying in {wait:.1f}s...")
-                await asyncio.sleep(wait)
-        raise RuntimeError("Radar API request failed after retries.")
-    finally:
-        if close_session:
-            await session.close()
-
+    for attempt in range(max_retries):
+        try:
+            async with session.get(
+                RADAR_BASE_URL, headers=headers, params=params
+            ) as resp:
+                if resp.status == 200:
+                    return await resp.json()
+                elif resp.status == 429:
+                    # Rate limit: exponential backoff with jitter
+                    wait = base_backoff * (2**attempt) + random.uniform(0, 0.5)
+                    _LOGGER.warning(
+                        "Radar API rate-limited (429); retrying in %.1fs", wait
+                    )
+                    await asyncio.sleep(wait)
+                else:
+                    text = await resp.text()
+                    raise RuntimeError(f"Radar API error {resp.status}: {text}")
+        except (TimeoutError, aiohttp.ClientError) as e:
+            # Network error: retry with backoff
+            wait = base_backoff * (2**attempt) + random.uniform(0, 0.5)
+            _LOGGER.warning(
+                "Radar API network error; retrying in %.1fs: %s", wait, e
+            )
+            await asyncio.sleep(wait)
+    raise RuntimeError("Radar API request failed after retries.")
 
 def extract_duration_distance(data: dict, mode: str = "car") -> tuple:
     """Extract duration (seconds) and distance (meters) from Radar API response."""
@@ -543,10 +539,8 @@ async def mapbox_calc_distance(
         "overview": "simplified",
     }
 
-    close_session = False
     if session is None:
-        session = aiohttp.ClientSession()
-        close_session = True
+        session = async_get_clientsession(pli.hass)
 
     try:
         async with session.get(url, params=params) as resp:

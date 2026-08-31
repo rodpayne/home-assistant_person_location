@@ -79,7 +79,11 @@ That design will allow external API requests for the same target to overlap safe
 
 ## Lifecycle expectations
 
-Any future background task or timer created by this integration should have an explicit owner and cleanup path. Config-entry unload and entity removal must be able to cancel work that the integration itself created.
+Any background task or timer created by this integration must have an explicit owner and cleanup path. The startup timer is owned by `PersonLocationIntegration` and is cancelled during config-entry unload. Config-entry unload and entity removal must be able to cancel work that the integration itself created.
+
+## Config-entry reloads and entity registry
+
+A normal options update reloads the config entry. Platform unload removes the active entity objects, but the integration must not manually remove those config-entry entities from Home Assistant's entity registry. Keeping registry entries preserves stable entity IDs and user configuration across reloads and avoids generating misleading historical `unavailable` transitions solely because the integration was reloaded.
 
 
 ## Home Assistant Core 2026.7/2026.8 compatibility
