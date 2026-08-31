@@ -542,31 +542,27 @@ async def mapbox_calc_distance(
     if session is None:
         session = async_get_clientsession(pli.hass)
 
-    try:
-        async with session.get(url, params=params) as resp:
-            if resp.status != 200:
-                text = await resp.text()
-                raise RuntimeError(f"Mapbox API error {resp.status}: {text}")
+    async with session.get(url, params=params) as resp:
+        if resp.status != 200:
+            text = await resp.text()
+            raise RuntimeError(f"Mapbox API error {resp.status}: {text}")
 
-            data = await resp.json()
-            routes = data.get("routes", [])
-            if not routes:
-                raise ValueError("No routes returned by Mapbox API")
+        data = await resp.json()
+        routes = data.get("routes", [])
+        if not routes:
+            raise ValueError("No routes returned by Mapbox API")
 
-            route = routes[0]
-            duration_sec = route["duration"]  # seconds
-            distance_m = route["distance"]  # meters
+        route = routes[0]
+        duration_sec = route["duration"]  # seconds
+        distance_m = route["distance"]  # meters
 
-            minutes = duration_sec / 60.0
-            kilometers = distance_m / 1000.0
+        minutes = duration_sec / 60.0
+        kilometers = distance_m / 1000.0
 
-            _LOGGER.debug(
-                "[update_driving_miles_and_minutes] Mapbox returned duration=%.1f min, distance=%.2f km",
-                minutes,
-                kilometers,
-            )
+        _LOGGER.debug(
+            "[update_driving_miles_and_minutes] Mapbox returned duration=%.1f min, distance=%.2f km",
+            minutes,
+            kilometers,
+        )
 
-            return minutes, kilometers
-    finally:
-        if close_session:
-            await session.close()
+        return minutes, kilometers
