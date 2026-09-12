@@ -16,7 +16,6 @@ if TYPE_CHECKING:
     from . import PersonLocationIntegration
 import logging
 
-# from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 
 from .const import (
@@ -120,16 +119,15 @@ async def async_get_config_entry_diagnostics(
 
     entities = sorted(entities, key=lambda e: e["entity_id"])
 
-    for device_id, device_entry in dev_reg.devices.items():
-        if entry.entry_id in device_entry.config_entries:
-            devices.append(
-                {
-                    "id": device_id,
-                    "name": device_entry.name,
-                    "model": device_entry.model,
-                    "manufacturer": device_entry.manufacturer,
-                }
-            )
+    for device_entry in dr.async_entries_for_config_entry(dev_reg, entry.entry_id):
+        devices.append(
+            {
+                "id": device_entry.id,
+                "name": device_entry.name,
+                "model": device_entry.model,
+                "manufacturer": device_entry.manufacturer,
+            }
+        )
 
     #
     # --- Trigger Entities ---------------------------------------------------------

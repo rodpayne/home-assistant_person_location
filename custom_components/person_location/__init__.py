@@ -27,7 +27,6 @@ from homeassistant.core import (
     callback,
 )
 from homeassistant.helpers import device_registry as dr, entity_registry as er
-
 from homeassistant.helpers.event import (
     async_track_point_in_time,
     async_track_state_change_event,
@@ -326,7 +325,6 @@ async def async_setup(hass: HomeAssistant, yaml_config: dict) -> bool:
             }
             _LOGGER.debug("[async_setup] conf_devices: %s", conf_devices)
             conf_with_defaults[CONF_DEVICES] = conf_devices
-
 
     if not pli.configuration:
         pli.configuration = conf_with_defaults
@@ -757,18 +755,16 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # ---------------------------------------------------------
     ent_reg = er.async_get(hass)
     dev_reg = dr.async_get(hass)
-    for device in list(dev_reg.devices.values()):
-        if entry.entry_id in device.config_entries:
-            # Remove only if no entities remain
-            entities = [
-                e for e in ent_reg.entities.values() if e.device_id == device.id
-            ]
-            if not entities:
-                _LOGGER.debug(
-                    "[async_unload_entry] Removing orphaned device %s",
-                    device.name,
-                )
-                dev_reg.async_remove_device(device.id)
+
+    for device in dr.async_entries_for_config_entry(dev_reg, entry.entry_id):
+        # Remove only if no entities remain
+        entities = er.async_entries_for_device(ent_reg, device.id)
+        if not entities:
+            _LOGGER.debug(
+                "[async_unload_entry] Removing orphaned device %s",
+                device.name,
+            )
+            dev_reg.async_remove_device(device.id)
 
     # ---------------------------------------------------------
     # 6. Clean up hass.data bookkeeping
