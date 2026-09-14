@@ -4,9 +4,12 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
 from datetime import datetime, timedelta
 import logging
+from typing import TYPE_CHECKING, TypeAlias
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 import voluptuous as vol
 
@@ -77,6 +80,7 @@ from .helpers.api import (
     async_test_radar_api_key,
 )
 from .helpers.entity import prune_orphan_template_entities
+from .helpers.redaction import redact_sensitive_data
 from .helpers.timestamp import now_utc, to_iso
 from .services.process_trigger import async_setup_process_trigger
 from .services.reverse_geocode import async_setup_reverse_geocode
@@ -154,7 +158,9 @@ class PersonLocationIntegration(SensorEntity):
             _LOGGER.debug("async_set_state called with self.hass available")
 
         self.hass.data[DOMAIN][DATA_STATE] = self._attr_native_value
-        self.hass.data[DOMAIN][DATA_ATTRIBUTES] = self._attr_extra_state_attributes
+        self.hass.data[DOMAIN][DATA_ATTRIBUTES] = redact_sensitive_data(
+            self._attr_extra_state_attributes
+        )
         self.hass.data[DOMAIN][DATA_CONFIGURATION] = self.configuration
         self.hass.data[DOMAIN][DATA_ENTITY_INFO] = self.entity_info
 
@@ -164,7 +170,7 @@ class PersonLocationIntegration(SensorEntity):
             "[async_set_state] (%s) -state: %s -attributes: %s",
             self.entity_id,
             self._attr_native_value,
-            self._attr_extra_state_attributes,
+            redact_sensitive_data(self._attr_extra_state_attributes),
         )
 
     def target_lock(self, entity_id: str) -> asyncio.Lock:
@@ -177,12 +183,12 @@ class PersonLocationIntegration(SensorEntity):
         return {
             "identifiers": {(DOMAIN, "main")},
             "name": "Person Location Integration",
-            "manufacturer": DOMAIN,
+            "manufacturer": INTEGRATION_NAME,
             "model": "Integration Controller",
         }
 
 
-PersonLocationConfigEntry = ConfigEntry[PersonLocationIntegration]
+PersonLocationConfigEntry: TypeAlias = ConfigEntry[PersonLocationIntegration]
 
 
 def merge_entry_data(entry: PersonLocationConfigEntry, conf: dict) -> tuple[dict, dict]:
@@ -217,7 +223,10 @@ def merge_entry_data(entry: PersonLocationConfigEntry, conf: dict) -> tuple[dict
         for key, value in updated_data_options_and_yaml.items()
         if key not in ALLOWED_OPTIONS_KEYS
     }
-    _LOGGER.debug("[merge_entry_data] Parsed updated_data: %s", updated_data)
+    _LOGGER.debug(
+        "[merge_entry_data] Parsed updated_data: %s",
+        redact_sensitive_data(updated_data),
+    )
 
     # Pull out keys that should be in options only
     updated_options = {
@@ -225,7 +234,10 @@ def merge_entry_data(entry: PersonLocationConfigEntry, conf: dict) -> tuple[dict
         for key, value in updated_data_options_and_yaml.items()
         if key in ALLOWED_OPTIONS_KEYS
     }
-    _LOGGER.debug("[merge_entry_data] Parsed updated_options: %s", updated_options)
+    _LOGGER.debug(
+        "[merge_entry_data] Parsed updated_options: %s",
+        redact_sensitive_data(updated_options),
+    )
 
     return updated_data, updated_options
 
@@ -340,12 +352,16 @@ async def async_setup(hass: HomeAssistant, yaml_config: dict) -> bool:
         entry = existing_entries[0]
         _LOGGER.debug("[async_setup] Updating existing entry %s", entry.entry_id)
         _LOGGER.debug("[async_setup] conf_with_defaults: %s", conf_with_defaults)
-        _LOGGER.debug("[async_setup] entry.data: %s", entry.data)
-        _LOGGER.debug("[async_setup] entry.options: %s", entry.options)
+        _LOGGER.debug("[async_setup] entry.data: %s", redact_sensitive_data(entry.data))
+        _LOGGER.debug(
+            "[async_setup] entry.options: %s", redact_sensitive_data(entry.options)
+        )
 
         new_data, new_options = merge_entry_data(entry, conf_with_defaults)
-        _LOGGER.debug("[async_setup] new_data: %s", new_data)
-        _LOGGER.debug("[async_setup] new_options: %s", new_options)
+        _LOGGER.debug("[async_setup] new_data: %s", redact_sensitive_data(new_data))
+        _LOGGER.debug(
+            "[async_setup] new_options: %s", redact_sensitive_data(new_options)
+        )
 
         hass.config_entries.async_update_entry(
             entry,

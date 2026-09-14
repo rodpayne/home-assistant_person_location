@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
     from . import PersonLocationIntegration
+
 import logging
 
 from homeassistant.helpers import device_registry as dr, entity_registry as er
@@ -22,25 +23,10 @@ from .const import (
     CONF_FOLLOW_PERSON_INTEGRATION,
     DATA_INTEGRATION,
     DOMAIN,
-    REDACT_KEYS,
 )
+from .helpers.redaction import redact_sensitive_data
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def _redact(data: dict) -> dict:
-    """Return a copy of data with sensitive fields redacted."""
-    redacted = {}
-
-    for key, value in data.items():
-        if key in REDACT_KEYS:
-            redacted[key] = "**REDACTED**"
-        elif isinstance(value, dict):
-            redacted[key] = _redact(value)
-        else:
-            redacted[key] = value
-
-    return redacted
 
 
 def get_effective_log_level_name(logger: logging.Logger) -> str:
@@ -335,8 +321,8 @@ async def async_get_config_entry_diagnostics(
             "title": entry.title,
             "version": entry.version,
             "minor_version": entry.minor_version,
-            "data": _redact(dict(entry.data)),
-            "options": _redact(dict(entry.options)),
+            "data": redact_sensitive_data(dict(entry.data)),
+            "options": redact_sensitive_data(dict(entry.options)),
         },
         "runtime": {
             "pli": pli_dict,
