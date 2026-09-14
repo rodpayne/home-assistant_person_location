@@ -3,6 +3,11 @@
 # pyright: reportMissingImports=false
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
+
 import asyncio
 import logging
 
@@ -11,7 +16,6 @@ import httpx
 
 from homeassistant.components.camera import Camera
 from homeassistant.const import STATE_PROBLEM, STATE_UNKNOWN
-from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import TemplateError
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.httpx_client import get_async_client
@@ -33,6 +37,7 @@ from .const import (
     DATA_CONFIGURATION,
     DOMAIN,
     IMAGE_API_PROVIDER_SWITCHES,
+    INTEGRATION_NAME,
 )
 from .switch import (
     is_provider_enabled,
@@ -48,8 +53,8 @@ GET_IMAGE_TIMEOUT = 10
 CAMERA_PARENT_DEVICE = DeviceInfo(
     identifiers={(DOMAIN, "map_camera")},
     name="Map Camera",
-    manufacturer="rodpayne",
-    model="Map Camera Group",
+    manufacturer=INTEGRATION_NAME,
+    model="Map Camera",
 )
 
 

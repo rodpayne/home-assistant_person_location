@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from . import PersonLocationIntegration
 
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 import logging
 
 from homeassistant.components.mobile_app.const import ATTR_VERTICAL_ACCURACY
@@ -223,7 +223,7 @@ class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
                         ]
                         away_timestamp = dt_util.parse_datetime(away_time_raw)
                         if away_timestamp.tzinfo is None:
-                            away_timestamp = away_timestamp.replace(tzinfo=timezone.utc)
+                            away_timestamp = away_timestamp.replace(tzinfo=dt_util.UTC)
                     else:
                         away_timestamp = self.last_changed
                         self._attr_extra_state_attributes[ATTR_AWAY_TIMESTAMP] = to_iso(
@@ -280,7 +280,6 @@ class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
             self._state,
             self._attr_extra_state_attributes,
         )
-
 
     # -----------------------------------------------------------------
     # Delayed state transitions (Just Arrived → Home, Just Left → Away, Away → Extended Away)
@@ -395,9 +394,7 @@ class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
                             reported_zone,
                         )
 
-                hours_ext = self._pli.configuration.get(
-                    CONF_HOURS_EXTENDED_AWAY, 0
-                )
+                hours_ext = self._pli.configuration.get(CONF_HOURS_EXTENDED_AWAY, 0)
                 if hours_ext:
                     self.schedule_state_change(
                         from_state=self._state,
@@ -407,9 +404,7 @@ class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
 
             await self.async_set_state()
 
-        _LOGGER.debug(
-            "[_handle_delayed_state_change] (%s) complete", self.entity_id
-        )
+        _LOGGER.debug("[_handle_delayed_state_change] (%s) complete", self.entity_id)
         return True
 
     # -----------------------------------------------------------------

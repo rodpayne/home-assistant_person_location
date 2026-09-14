@@ -5,15 +5,16 @@ from __future__ import annotations
 
 import copy
 import logging
+from typing import TYPE_CHECKING
 
-# from typing import Any, Dict, Optional
-# from urllib.parse import urlparse
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry, OptionsFlow
+    from homeassistant.data_entry_flow import FlowResult
+
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.config_entries import ConfigEntry, OptionsFlow
 from homeassistant.core import callback
-from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import entity_registry as er, selector
 
 # from homeassistant.helpers.aiohttp_client import async_create_clientsession
@@ -69,6 +70,7 @@ from .helpers.api import (
     async_test_osm_api_key,
     async_test_radar_api_key,
 )
+from .helpers.redaction import redact_sensitive_data
 from .helpers.template import normalize_template, validate_template
 
 CONF_NEW_DEVICE = "new_device_entity"
@@ -79,7 +81,9 @@ GET_IMAGE_TIMEOUT = 10
 
 
 def _split_conf_data_and_options(conf: dict) -> tuple[dict, dict]:
-    _LOGGER.debug("[_split_conf_data_and_options] conf: %s", conf)
+    _LOGGER.debug(
+        "[_split_conf_data_and_options] conf: %s", redact_sensitive_data(conf)
+    )
     return (
         {k: v for k, v in conf.items() if k not in ALLOWED_OPTIONS_KEYS},
         {k: v for k, v in conf.items() if k in ALLOWED_OPTIONS_KEYS},
@@ -1127,7 +1131,7 @@ class PersonLocationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 "[_async_save_integration_config_data] updating existing entry, source=%s, entry_id=%s, data=%s",
                 self.source,
                 self.config_entry.entry_id,
-                self._user_input,
+                redact_sensitive_data(self._user_input),
             )
             # Update the existing entry in place
             self.hass.config_entries.async_update_entry(

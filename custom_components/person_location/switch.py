@@ -6,6 +6,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -16,7 +17,6 @@ from typing import Any
 
 # from homeassistant.components.logbook.const import DOMAIN as LOGBOOK_DOMAIN
 from homeassistant.components.switch import SwitchEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.entity import EntityCategory
 
@@ -27,6 +27,7 @@ from .const import (
     DATA_SWITCH_ENTITIES,
     DEFAULT_API_KEY_NOT_SET,
     DOMAIN,
+    INTEGRATION_NAME,
     warn_once,
 )
 
@@ -162,7 +163,7 @@ class ApiProviderSwitch(SwitchEntity):
         return {
             "identifiers": {(DOMAIN, "main")},
             "name": "API Provider Switch",
-            "manufacturer": DOMAIN,
+            "manufacturer": INTEGRATION_NAME,
             "model": "Integration Switch",
         }
 
