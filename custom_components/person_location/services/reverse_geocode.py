@@ -211,14 +211,24 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
             for component in first.get("address_components", []):
                 types = component.get("types", [])
                 if "locality" in types:
-                    ctx.new_locality = component.get("long_name", ctx.new_locality or "?")
+                    ctx.new_locality = component.get(
+                        "long_name", ctx.new_locality or "?"
+                    )
                     _LOGGER.debug(
                         "(%s) Google ctx.new_locality = %s", entity_id, ctx.new_locality
                     )
-                elif (ctx.new_locality == "?") and ("administrative_area_level_2" in types):
-                    ctx.new_locality = component.get("long_name", ctx.new_locality or "?")
-                elif (ctx.new_locality == "?") and ("administrative_area_level_1" in types):
-                    ctx.new_locality = component.get("long_name", ctx.new_locality or "?")
+                elif (ctx.new_locality == "?") and (
+                    "administrative_area_level_2" in types
+                ):
+                    ctx.new_locality = component.get(
+                        "long_name", ctx.new_locality or "?"
+                    )
+                elif (ctx.new_locality == "?") and (
+                    "administrative_area_level_1" in types
+                ):
+                    ctx.new_locality = component.get(
+                        "long_name", ctx.new_locality or "?"
+                    )
 
                 if "country" in types:
                     ctx.waze_country_code = (component.get("short_name") or "").upper()
@@ -318,11 +328,15 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
         if "adminArea1" in loc:
             ctx.waze_country_code = loc["adminArea1"]
             _LOGGER.debug(
-                "(%s) mapquest ctx.waze_country_code = %s", entity_id, ctx.waze_country_code
+                "(%s) mapquest ctx.waze_country_code = %s",
+                entity_id,
+                ctx.waze_country_code,
             )
 
         target._attr_extra_state_attributes[ATTR_MAPQUEST] = formatted_address
-        _LOGGER.debug("(%s) mapquest ctx.new_locality = %s", entity_id, ctx.new_locality)
+        _LOGGER.debug(
+            "(%s) mapquest ctx.new_locality = %s", entity_id, ctx.new_locality
+        )
 
         mapquest_attribution = f'"{mapquest_decoded.get("info", {}).get("copyright", {}).get("text", "MapQuest")}"'
         target._attr_extra_state_attributes[ATTR_ATTRIBUTION] += (
@@ -364,7 +378,10 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
         entity_id = target._entity_id
 
         osm_response = await async_get_open_street_map_reverse_geocoding(
-            pli.hass, pli.configuration[CONF_OSM_API_KEY], ctx.new_latitude, ctx.new_longitude
+            pli.hass,
+            pli.configuration[CONF_OSM_API_KEY],
+            ctx.new_latitude,
+            ctx.new_longitude,
         )
         if not osm_response.get("ok"):
             _LOGGER.warning(
@@ -374,7 +391,6 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
             return
 
         osm_decoded = osm_response.get("data", {})
-
 
         address = osm_decoded.get("address", {})
         for key in DEFAULT_LOCALITY_PRIORITY_OSM:
@@ -438,7 +454,10 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
         entity_id = target._entity_id
 
         radar_response = await async_get_radar_reverse_geocoding(
-            pli.hass, pli.configuration[CONF_RADAR_API_KEY], ctx.new_latitude, ctx.new_longitude
+            pli.hass,
+            pli.configuration[CONF_RADAR_API_KEY],
+            ctx.new_latitude,
+            ctx.new_longitude,
         )
         if not radar_response.get("ok"):
             _LOGGER.warning(
@@ -467,7 +486,9 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
         if "countryCode" in first:
             ctx.waze_country_code = first["countryCode"].upper()
             _LOGGER.debug(
-                "(%s) Radar ctx.waze_country_code = %s", entity_id, ctx.waze_country_code
+                "(%s) Radar ctx.waze_country_code = %s",
+                entity_id,
+                ctx.waze_country_code,
             )
 
         formatted_address = (
@@ -566,9 +587,7 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
         # concurrent requests remain throttled without serializing their work.
         async with pli._integration_lock:
             current_api_time = now_utc()
-            last_updated_raw = pli._attr_extra_state_attributes.get(
-                "api_last_updated"
-            )
+            last_updated_raw = pli._attr_extra_state_attributes.get("api_last_updated")
             if isinstance(last_updated_raw, str):
                 last_updated = dt_util.parse_datetime(last_updated_raw)
             elif isinstance(last_updated_raw, datetime):
@@ -590,9 +609,7 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
                     pli._attr_extra_state_attributes["api_calls_throttled"],
                 )
 
-            pli._attr_extra_state_attributes["api_last_updated"] = to_iso(
-                next_api_time
-            )
+            pli._attr_extra_state_attributes["api_last_updated"] = to_iso(next_api_time)
             pli._attr_extra_state_attributes["api_calls_requested"] += 1
 
             counter_attribute = f"{entity_id} calls"
@@ -608,7 +625,6 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
         try:
             # ---- handle the service call, updating the target(entity_id)
             async with pli.target_lock(entity_id):
-
                 target = get_target_entity(pli, entity_id)
                 if not target:
                     _LOGGER.warning("No target sensor found for %s", entity_id)
@@ -725,9 +741,7 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
                     )
 
                     if elapsed_seconds > 0:
-                        speed_during_interval = (
-                            distance_traveled / elapsed_seconds
-                        )
+                        speed_during_interval = distance_traveled / elapsed_seconds
                         _LOGGER.debug(
                             "(%s) speed_during_interval = %s meters/sec",
                             entity_id,
@@ -771,12 +785,12 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
                         entity_id,
                         distance_from_home,
                     )
-                    target._attr_extra_state_attributes[
-                        ATTR_METERS_FROM_HOME
-                    ] = round(distance_from_home, 1)
-                    target._attr_extra_state_attributes[
-                        ATTR_MILES_FROM_HOME
-                    ] = round(distance_from_home / METERS_PER_MILE, 1)
+                    target._attr_extra_state_attributes[ATTR_METERS_FROM_HOME] = round(
+                        distance_from_home, 1
+                    )
+                    target._attr_extra_state_attributes[ATTR_MILES_FROM_HOME] = round(
+                        distance_from_home / METERS_PER_MILE, 1
+                    )
 
                     if distance_from_home >= FAR_AWAY_METERS:
                         direction = "far away"
@@ -789,9 +803,7 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
                     else:
                         direction = "stationary"
                     _LOGGER.debug("(%s) direction = %s", entity_id, direction)
-                    target._attr_extra_state_attributes[ATTR_DIRECTION] = (
-                        direction
-                    )
+                    target._attr_extra_state_attributes[ATTR_DIRECTION] = direction
 
                     # Default Waze country code from configuration region
                     ctx.waze_country_code = (
@@ -799,9 +811,7 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
                     ).upper()
 
                     # ------- Radar -------------------------------------------
-                    if is_provider_enabled(
-                        pli.hass, SWITCH_RADAR_GEOCODING_API
-                    ):
+                    if is_provider_enabled(pli.hass, SWITCH_RADAR_GEOCODING_API):
                         await async_call_radar_reverse_geocoding(target, ctx)
                     else:
                         previous = target._attr_extra_state_attributes.pop(
@@ -817,7 +827,8 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
                         pli.hass, SWITCH_OSM_NOMINATIM_GEOCODING_API
                     ):
                         await async_call_open_street_map_reverse_geocoding(
-                            target
+                            target,
+                            ctx,
                         )
                     else:
                         previous = target._attr_extra_state_attributes.pop(
@@ -829,9 +840,7 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
                             )
 
                     # ------- Google Maps -------------------------------------
-                    if is_provider_enabled(
-                        pli.hass, SWITCH_GOOGLE_GEOCODING_API
-                    ):
+                    if is_provider_enabled(pli.hass, SWITCH_GOOGLE_GEOCODING_API):
                         await async_call_google_maps_geocoding(target, ctx)
                     else:
                         previous = target._attr_extra_state_attributes.pop(
@@ -843,9 +852,7 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
                             )
 
                     # ------- MapQuest ----------------------------------------
-                    if is_provider_enabled(
-                        pli.hass, SWITCH_MAPQUEST_GEOCODING_API
-                    ):
+                    if is_provider_enabled(pli.hass, SWITCH_MAPQUEST_GEOCODING_API):
                         await async_call_mapquest_reverse_geocoding(target, ctx)
                     else:
                         previous = target._attr_extra_state_attributes.pop(
@@ -862,12 +869,8 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
                     )
                     target.this_entity_info[INFO_LOCALITY] = ctx.new_locality
                     target.this_entity_info[INFO_GEOCODE_COUNT] += 1
-                    target.this_entity_info[INFO_LOCATION_LATITUDE] = (
-                        ctx.new_latitude
-                    )
-                    target.this_entity_info[INFO_LOCATION_LONGITUDE] = (
-                        ctx.new_longitude
-                    )
+                    target.this_entity_info[INFO_LOCATION_LATITUDE] = ctx.new_latitude
+                    target.this_entity_info[INFO_LOCATION_LONGITUDE] = ctx.new_longitude
                     target.this_entity_info["reverse_geocode_location_time"] = (
                         ctx.new_location_time
                     )
@@ -903,32 +906,23 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
                     friendly_name_location = f"is at {new_bread_crumb}"
 
                 if ATTR_ZONE in target._attr_extra_state_attributes:
-                    current_zone = target._attr_extra_state_attributes[
-                        ATTR_ZONE
-                    ]
+                    current_zone = target._attr_extra_state_attributes[ATTR_ZONE]
                     current_zone_obj = pli.hass.states.get(
                         f"{ZONE_DOMAIN}.{current_zone}"
                     )
-                    if (
-                        current_zone_obj is not None
-                        and not current_zone.startswith(
-                            IC3_STATIONARY_ZONE_PREFIX
-                        )
+                    if current_zone_obj is not None and not current_zone.startswith(
+                        IC3_STATIONARY_ZONE_PREFIX
                     ):
                         current_zone_attrs = current_zone_obj.attributes.copy()
                         if "friendly_name" in current_zone_attrs:
-                            new_bread_crumb = current_zone_attrs[
-                                "friendly_name"
-                            ]
+                            new_bread_crumb = current_zone_attrs["friendly_name"]
                             friendly_name_location = f"is at {new_bread_crumb}"
 
                 if (
                     new_bread_crumb == STATE_NOT_HOME
                     and ATTR_LOCALITY in target._attr_extra_state_attributes
                 ):
-                    new_bread_crumb = target._attr_extra_state_attributes[
-                        ATTR_LOCALITY
-                    ]
+                    new_bread_crumb = target._attr_extra_state_attributes[ATTR_LOCALITY]
                     friendly_name_location = f"is in {new_bread_crumb}"
 
                 _LOGGER.debug(
@@ -944,10 +938,10 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
                         ATTR_BREAD_CRUMBS
                     ]
                     if not old_bread_crumbs.endswith(new_bread_crumb):
-                        target._attr_extra_state_attributes[
-                            ATTR_BREAD_CRUMBS
-                        ] = shorten_to_last_255(
-                            old_bread_crumbs + "> " + new_bread_crumb
+                        target._attr_extra_state_attributes[ATTR_BREAD_CRUMBS] = (
+                            shorten_to_last_255(
+                                old_bread_crumbs + "> " + new_bread_crumb
+                            )
                         )
                 else:
                     target._attr_extra_state_attributes[ATTR_BREAD_CRUMBS] = (
@@ -968,9 +962,7 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
                     ATTR_SOURCE in target._attr_extra_state_attributes
                     and "." in target._attr_extra_state_attributes[ATTR_SOURCE]
                 ):
-                    sourceEntity = target._attr_extra_state_attributes[
-                        ATTR_SOURCE
-                    ]
+                    sourceEntity = target._attr_extra_state_attributes[ATTR_SOURCE]
                     sourceObject = pli.hass.states.get(sourceEntity)
                     if (
                         sourceObject is not None
@@ -1014,18 +1006,13 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
                     target._attr_name = new_friendly_name
                     _LOGGER.debug("new_friendly_name = %s", new_friendly_name)
                 except TemplateError as err:
-                    _LOGGER.error(
-                        "Error parsing friendly_name_template: %s", err
-                    )
+                    _LOGGER.error("Error parsing friendly_name_template: %s", err)
 
                 await target.async_set_state()
                 target.make_template_sensors()
 
-
         except Exception as e:
-            _LOGGER.error(
-                "(%s) Exception %s: %s", entity_id, type(e).__name__, str(e)
-            )
+            _LOGGER.error("(%s) Exception %s: %s", entity_id, type(e).__name__, str(e))
             _LOGGER.debug(traceback.format_exc())
             pli._attr_extra_state_attributes["api_exception_count"] += 1
 
@@ -1033,5 +1020,6 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
 
         _LOGGER.debug("(%s) === Return ===", entity_id)
         return True
+
     pli.hass.services.async_register(DOMAIN, "reverse_geocode", handle_reverse_geocode)
     return True
