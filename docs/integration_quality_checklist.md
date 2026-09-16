@@ -1,7 +1,7 @@
 ## See [Integration quality scale](https://developers.home-assistant.io/docs/core/integration-quality-scale/) for descriptions.
 
 ## Bronze
-- ✅ `action-setup` - Service actions are registered in async_setup - *Found that in at least one case (Reconfigure), async_setup does not run, so service registration sometimes needs to be done in async_setup_entry.*
+- ✅ `action-setup` - Service actions are registered in async_setup - *Services are registered during integration setup, with setup-entry handling retained where necessary for the integration's YAML/config-entry lifecycle.*
 - ⛔ `appropriate-polling` - If it's a polling integration, set an appropriate polling interval
 - ✅ `brands` - Has branding assets available for the integration
 - [ ] `common-modules` - Place common patterns in common modules - *This integration does not poll or draw data from devices, so a coordinator is not necessary.*
@@ -13,14 +13,16 @@
 - ✅ `docs-actions` - The documentation describes the provided service actions that can be used
 - ✅ `docs-high-level-description` - The documentation includes a high-level description of the integration brand, product, or service
 - ✅ `docs-installation-instructions` - The documentation provides step-by-step installation instructions for the integration, including, if needed, prerequisites
-- [ ] `docs-removal-instructions` - The documentation provides removal instructions
+- ✅ `docs-removal-instructions` - The documentation provides removal instructions
 - [ ] `entity-event-setup` - Entity events are subscribed in the correct lifecycle methods
 - ✅ `entity-unique-id` - Entities have a unique ID
-- 🟩 `has-entity-name` - Entities use has_entity_name = True - *This has been set for the template sensors and the map  cameras, and is workinmg well. Unfortunately, when set for the target sensors, it causes them to prefix the friendly name with the device name and this cannot be overridden by our friendly name template.*
-- [ ] `runtime-data` - Use ConfigEntry.runtime_data to store runtime data
+- 🟩 `has-entity-name` - Entities use has_entity_name = True - *Enabled for the controller, template sensors, and map cameras. Target sensors require additional consideration because Home Assistant's entity-name/device-name behavior changes the resulting displayed name.*
+- 🟩 `runtime-data` - Use ConfigEntry.runtime_data to store runtime data - *Runtime controller is now stored in ConfigEntry.runtime_data. A legacy hass.data[DOMAIN] mirror remains for portions of the current architecture.*
 - ✅ `test-before-configure` - Test a connection in the config flow
 - [ ] `test-before-setup` - Check during integration initialization if we are able to set it up correctly
 - ✅ `unique-config-entry` - Don't allow the same device or service to be able to be set up twice
+- [ ] `docs-triggers` - The documentation describes the provided triggers that can be used
+- [ ] `docs-conditions` - The documentation describes the provided conditions that can be used
 
 ## Silver
 - [ ] `action-exceptions` - Service actions raise exceptions when encountering failures
@@ -54,7 +56,7 @@
 - [ ] `exception-translations` - Exception messages are translatable
 - [ ] `icon-translations` - Entities implement icon translations
 - ✅ `reconfiguration-flow` - Integrations should have a reconfigure flow
-- 🟩 `repair-issues` - Repair issues and repair flows are used when user intervention is needed
+- ✅ `repair-issues` - Repair issues and repair flows are used when user intervention is needed - *Repair issues and repair flows are used when user intervention is needed. (Disabled provider credentials/API failures generate a repair issue)*
 - ✅ `stale-devices` - Stale devices are removed
 
 ## Platinum
@@ -63,3 +65,19 @@
 - 🟩 `strict-typing` - Strict typing
 
 ✅ = Requirement met, 🟩 = Partial completion, ⛔ = Not applicable
+
+## Current Assessment
+
+The checklist should not be interpreted as claiming a Home Assistant quality tier. It is a development checklist for tracking the integration against the current rules.
+
+The most important remaining work is:
+
+- Complete config-flow and integration test coverage.
+- Resolve the remaining entity lifecycle/unavailable semantics.
+- Define platform parallel-update behavior.
+- Add/review reauthentication behavior for API credentials.
+- Complete documentation gaps: examples, known limitations, and use cases.
+- Complete entity categorization, device classes, translations, and icons.
+- Reduce the remaining hass.data[DOMAIN] runtime-data usage.
+- Establish strict static type-checking.
+- Add a quality_scale.yaml file to track the rule status and documented exemptions.

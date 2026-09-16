@@ -1,4 +1,4 @@
-# Async concurrency and locking
+# Person Location Integration — Async concurrency and locking
 
 This document describes the runtime concurrency model used by the Person Location integration.
 
@@ -88,7 +88,7 @@ A normal options update reloads the config entry. Platform unload removes the ac
 
 ## Home Assistant Core 2026.7/2026.8 compatibility
 
-The implementation targets Home Assistant Core 2026.7 and 2026.8. Runtime state owned by a config entry is exposed through `ConfigEntry.runtime_data`; the legacy `hass.data[DOMAIN]` mirror remains only where the current integration architecture still requires it during this incremental migration. Home Assistant's async entity APIs are used directly on the event loop, and HTTP clients should use the HA-managed `aiohttp` session rather than creating per-request sessions.
+The implementation targets Home Assistant Core 2026.7 and after. Runtime state owned by a config entry is exposed through `ConfigEntry.runtime_data`; the legacy `hass.data[DOMAIN]` mirror remains only where the current integration architecture still requires it during this incremental migration. Home Assistant's async entity APIs are used directly on the event loop, and HTTP clients should use the HA-managed `aiohttp` session rather than creating per-request sessions.
 
 
 ### Person entity coordinates in Core 2026.7

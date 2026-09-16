@@ -1,8 +1,5 @@
 # Home Assistant Person Location Custom Integration
 
-> **Compatibility:** This development branch targets Home Assistant Core 2026.7 and 2026.8. It uses config-entry `runtime_data`, current async entity/state APIs, and Home Assistant-managed HTTP sessions.
-
-
 ![HACS Default](https://img.shields.io/badge/HACS-Default%20Repository-blue?style=for-the-badge&logo=home-assistant)
 ![Version](https://img.shields.io/github/v/release/rodpayne/home-assistant_person_location?style=for-the-badge)
 ![Stars](https://img.shields.io/github/stars/rodpayne/home-assistant_person_location?style=for-the-badge)
@@ -15,20 +12,25 @@
 * [Objectives](#objectives)
   * [Combine the status of multiple device trackers](#combine-the-status-of-multiple-device-trackers)
   * [Make presence detection not so binary](#make-presence-detection-not-so-binary)
-  * [Async concurrency and update behavior](#async-concurrency-and-update-behavior)
   * [Reverse geocode the location and make distance calculations](#reverse-geocode-the-location-and-make-distance-calculations)
 * [Components](#components)
   * [Folder: custom_components/person_location](#folder-custom_componentsperson_location)
   * [File: automation_folder/person_location_detection.yaml](#file-automation_folderperson_location_detectionyaml)
   * [Action: person_location/process_trigger](#action-person_locationprocess_trigger)
   * [Action: person_location/reverse_geocode](#action-person_locationreverse_geocode)
-* [Installation](#installation)   
+* [Installation Instructions](#installation-instructions)   
   * [Installation via HACS](#installation-via-hacs) 
   * [Manual installation hints](#manual-installation-hints) 
   * [Configuration parameters](#configuration-parameters) 
   * [Map Configuration Examples (Optional)](#map-configuration-examples-optional)
   * [Lovelace Examples](#lovelace-examples)
   * [Troubleshooting](#troubleshooting)
+* [Removal Instructions](#removal-instructions)
+* [Development Notes](#development-notes)
+  * [Async concurrency and update behavior](#async-concurrency-and-update-behavior)
+  * [Configuration Data vs Options](configuration-data-vs-options)
+  * [Contributing](#contributing)
+
 ## Objectives
 ![Sample person location](docs/images/SamplePersonLocation.png)
 
@@ -83,13 +85,6 @@ When a person is detected as moving between `Home` and `Away`, instead of going 
 
 If `CONF_SHOW_ZONE_WHEN_AWAY`, then `<Zone>` is reported instead of `Away`.                
 
-### **Async concurrency and update behavior**
-Location updates are handled asynchronously, with synchronization scoped to each Person Location target. Different people can therefore be processed independently, while updates for the same target remain serialized for state consistency. External API throttling is coordinated separately and does not hold a global lock during waiting or network I/O.
-
-For the implementation details, lifecycle expectations, and developer guidance, see [Async concurrency and locking](docs/async_concurrency.md).
-
-> **Developer note:** The concurrency model is intentionally conservative around per-target state. Future work can further separate external I/O from target-state mutation by using versioned request snapshots so stale API results can be discarded safely.
-
 ### **3. Reverse geocode the location and make distance calculations**
 The custom integration supplies an action to reverse geocode the location (making it human readable) using `Open Street Map`, `MapQuest`, `Google Maps`, and/or `Radar` and calculate the distance from home (miles and minutes) using `WazeRouteCalculator`, `Radar`, `Google Maps`, or `Mapbox`.  
 
@@ -116,6 +111,7 @@ custom_components/person_location/
 │   ├── api.py
 │   ├── duration_distance.py
 │   ├── entity.py
+│   ├── redaction.py
 │   ├── template.py
 │   ├── timestamp.py
 │   ├── trigger.py
@@ -293,7 +289,9 @@ Input:
 ```
 </details>
 
-## Installation
+## Installation Instructions
+
+>The method used to remove the integration should be much like removing any other custom integration. There are no special requirements.
 
 ### **Installation via HACS**
 
@@ -954,10 +952,14 @@ logger:
   logs:
     custom_components.person_location: debug  
 ```
+
+Sensitive values such as API keys are automatically redacted using a shared redaction helper.
+
 #### **Diagnostics Download**
 Diagnostics are accessed through **Settings → Devices & Services → person_location → ⋮ → Download Diagnostics.**
 
-Diagnostics output is a **sanitized JSON document** containing configuration metadata, provider information, and recent runtime state. Sensitive values such as API keys are automatically redacted.
+Diagnostics output is a **sanitized JSON document** containing configuration metadata, provider information, and recent runtime state. 
+Sensitive values such as API keys are automatically redacted using the shared redaction helper.
 
 #### **Map Camera Rendering**
 
@@ -970,9 +972,54 @@ A map camera URL template that will not render in the camera frontend can be che
 
 - Copy the `Map Camera URL Preview` and paste it into the address bar of a web browser. It should show an error message if it is not being accepted by the map provider.
 
----
+## Removal Instructions
 
-## Contributing
+>The method used to remove the integration should be much like removing any other custom integration. There are no special requirements.
+
+>Note: Removing the integration does not remove automations, scripts, dashboards, or other Home Assistant configuration that you created using Person Location. Review and remove those separately if they are no longer needed.
+
+If Person Location was installed through HACS:
+
+1. Open **HACS** in Home Assistant.
+2. Select **Integrations**.
+3. Find **Person Location** and open it.
+4. Select the **⋮** menu and choose **Remove**.
+5. Restart Home Assistant.
+
+If Person Location has been configured in Home Assistant, remove its configuration entry before or after removing the HACS integration:
+
+1. Go to **Settings → Devices & services**.
+2. Find **Person Location**.
+3. Select the **⋮** menu for the integration entry and choose **Delete**.
+4. Remove the integration through HACS as described above.
+5. Restart Home Assistant.
+
+If Person Location was installed manually rather than through HACS:
+
+1. Go to **Settings → Devices & services** and remove the Person Location integration entry.
+2. Stop Home Assistant.
+3. Remove the `person_location` directory from:
+
+   ```text
+   config/custom_components/
+
+4. Start Home Assistant.
+
+---
+## Development Notes
+
+> **Compatibility:** This development targets Home Assistant Core 2026.7 and later. It uses config-entry `runtime_data`, current async entity/state APIs, and Home Assistant-managed HTTP sessions.
+
+### Async concurrency and update behavior
+Location updates are handled asynchronously, with synchronization scoped to each Person Location target. Different people can therefore be processed independently, while updates for the same target remain serialized for state consistency. External API throttling is coordinated separately and does not hold a global lock during waiting or network I/O.
+
+For the implementation details, lifecycle expectations, and developer guidance, see [Async concurrency and locking](docs/async_concurrency.md).
+
+### Configuration Data vs Options
+
+To clarify which settings belong in `config_entry.data` versus `config_entry.options`, and the implications for how the configuration and options flows should be structured, see [Configuration Data vs Options](docs/DataVsOptions.md).
+
+### Contributing
 
 Submit enhancement suggestions as "issues" on GitHub.
 
