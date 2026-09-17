@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
-    from homeassistant.core import HomeAssistant
+    from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 
     from . import PersonLocationIntegration
 
@@ -137,6 +137,7 @@ class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
 
         self._previous_state = STATE_UNKNOWN
         self._initialized = False
+        self._undo_state_change_timer: CALLBACK_TYPE | None = None
 
         _LOGGER.debug("[PersonLocationTargetSensor] (%s) constructed", entity_id)
 
@@ -161,6 +162,8 @@ class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
 
     async def async_added_to_hass(self) -> None:
         """Restore state after reboot."""
+        await super().async_added_to_hass()
+
         old = await self.async_get_last_state()
 
         if old:
@@ -250,6 +253,11 @@ class PersonLocationTargetSensor(SensorEntity, RestoreEntity):
         )
 
         self._initialized = True
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Cancel any pending delayed state transition before removal."""
+        self.cancel_state_change_timer()
+        await super().async_will_remove_from_hass()
 
     # -----------------------------------------------------------------
     # Atomic async state write
