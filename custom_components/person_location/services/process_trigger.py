@@ -72,6 +72,7 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_process_trigger(pli: PersonLocationIntegration) -> bool:
     """Register the async process_trigger service."""
+
     # -------------------------------------------------------------------------
     # Main process_trigger handler
     # -------------------------------------------------------------------------

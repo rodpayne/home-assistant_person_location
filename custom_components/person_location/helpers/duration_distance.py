@@ -19,7 +19,6 @@ import random
 import traceback
 
 import aiohttp
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from pywaze.route_calculator import WazeRouteCalculator
 
 from homeassistant.components.waze_travel_time.const import REGIONS as WAZE_REGIONS
@@ -29,6 +28,7 @@ from homeassistant.const import (
     ATTR_ATTRIBUTION,
 )
 from homeassistant.exceptions import ServiceNotFound
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.httpx_client import get_async_client
 
 from ..const import (
@@ -41,8 +41,6 @@ from ..const import (
     CONF_DISTANCE_DURATION_SOURCE,
     CONF_GOOGLE_API_KEY,
     CONF_MAPBOX_API_KEY,
-    CONF_MAPQUEST_API_KEY,
-    CONF_OSM_API_KEY,
     CONF_RADAR_API_KEY,
     DEFAULT_API_KEY_NOT_SET,
     METERS_PER_KM,
@@ -293,13 +291,13 @@ async def update_driving_miles_and_minutes(
 
             session = async_get_clientsession(pli.hass)
             data = await radar_calc_distance(
-                    pli,
-                    from_location,
-                    to_location,
-                    modes="car",
-                    units="metric",
-                    session=session,
-                )
+                pli,
+                from_location,
+                to_location,
+                modes="car",
+                units="metric",
+                session=session,
+            )
             duration_min, distance_m = extract_duration_distance(data)
             distance_km = distance_m / METERS_PER_KM
 
@@ -336,9 +334,7 @@ async def update_driving_miles_and_minutes(
                 "units": "metric",
                 "key": api_key,
             }
-            async with session.get(
-                GOOGLE_DISTANCE_MATRIX_URL, params=params
-            ) as resp:
+            async with session.get(GOOGLE_DISTANCE_MATRIX_URL, params=params) as resp:
                 if resp.status != 200:
                     text = await resp.text()
                     raise RuntimeError(f"Google API error {resp.status}: {text}")
@@ -490,11 +486,10 @@ async def radar_calc_distance(
         except (TimeoutError, aiohttp.ClientError) as e:
             # Network error: retry with backoff
             wait = base_backoff * (2**attempt) + random.uniform(0, 0.5)
-            _LOGGER.warning(
-                "Radar API network error; retrying in %.1fs: %s", wait, e
-            )
+            _LOGGER.warning("Radar API network error; retrying in %.1fs: %s", wait, e)
             await asyncio.sleep(wait)
     raise RuntimeError("Radar API request failed after retries.")
+
 
 def extract_duration_distance(data: dict, mode: str = "car") -> tuple:
     """Extract duration (seconds) and distance (meters) from Radar API response."""

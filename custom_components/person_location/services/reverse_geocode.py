@@ -178,7 +178,6 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
         ctx: ReverseGeocodeContext,
     ) -> None:
         """Call the Google Maps Reverse Geocoding API."""
-
         entity_id = target._entity_id
 
         google_response = await async_get_google_maps_geocoding(
@@ -274,7 +273,6 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
         ctx: ReverseGeocodeContext,
     ) -> None:
         """Call the MapQuest Reverse Geocoding API."""
-
         entity_id = target._entity_id
 
         mapquest_response = await async_get_mapquest_reverse_geocoding(
@@ -374,7 +372,6 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
         ctx: ReverseGeocodeContext,
     ) -> None:
         """Call the Nominatim Reverse Geocoding (OpenStreetMap) API."""
-
         entity_id = target._entity_id
 
         osm_response = await async_get_open_street_map_reverse_geocoding(
@@ -450,7 +447,6 @@ async def async_setup_reverse_geocode(pli: PersonLocationIntegration) -> bool:
         ctx: ReverseGeocodeContext,
     ) -> None:
         """Call the Radar Reverse Geocoding API."""
-
         entity_id = target._entity_id
 
         radar_response = await async_get_radar_reverse_geocoding(

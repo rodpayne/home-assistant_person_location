@@ -5,9 +5,12 @@ from __future__ import annotations
 
 # See https://developers.home-assistant.io/blog/2020/11/09/system-health-and-templates
 import logging
+from typing import TYPE_CHECKING
 
-from homeassistant.components import system_health
 from homeassistant.core import HomeAssistant, callback
+
+if TYPE_CHECKING:
+    from homeassistant.components import system_health
 
 from .const import (
     CONF_DISTANCE_DURATION_SOURCE,
