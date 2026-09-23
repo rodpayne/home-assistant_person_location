@@ -34,6 +34,9 @@ from homeassistant.const import (
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
 )
+from homeassistant.exceptions import (
+    ServiceValidationError,
+)
 
 from ..const import (
     ATTR_ALTITUDE,
@@ -74,16 +77,17 @@ _LOGGER = logging.getLogger(__name__)
 async def _handle_process_trigger(
     pli: PersonLocationIntegration, call: ServiceCall
 ) -> bool:
-    entity_id = call.data.get(CONF_ENTITY_ID)
+    entity_id = call.data.get(CONF_ENTITY_ID, "NONE")
     trigger_from = call.data.get("from_state")
     trigger_to = call.data.get("to_state")
 
     # ---------------------------------------------------------------------
     # Initial validation and trigger metadata loading
     # ---------------------------------------------------------------------
-    if not entity_id:
-        _LOGGER.warning("Missing %s in process_trigger call", CONF_ENTITY_ID)
-        return False
+    if entity_id == "NONE":
+        raise ServiceValidationError(
+            f"{CONF_ENTITY_ID} is required in call of {DOMAIN}.process_trigger service."
+        )
 
     ha_just_started = pli._attr_extra_state_attributes.get("startup", False)
 

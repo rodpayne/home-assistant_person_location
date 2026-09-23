@@ -25,7 +25,7 @@
 - [ ] `docs-conditions` - The documentation describes the provided conditions that can be used
 
 ## Silver
-- [ ] `action-exceptions` - Service actions raise exceptions when encountering failures
+- 🟩 `action-exceptions` - Service actions raise exceptions when encountering failures
 - ✅ `config-entry-unloading` - Support config entry unloading
 - ✅ `docs-configuration-parameters` - The documentation describes all integration configuration options
 - [ ] `docs-installation-parameters` - The documentation describes all integration installation parameters

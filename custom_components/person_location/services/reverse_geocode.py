@@ -33,7 +33,10 @@ from homeassistant.const import (
     STATE_OFF,
     STATE_ON,
 )
-from homeassistant.exceptions import TemplateError
+from homeassistant.exceptions import (
+    ServiceValidationError,
+    TemplateError,
+)
 from homeassistant.util import dt as dt_util
 from homeassistant.util.location import distance
 
@@ -529,12 +532,9 @@ async def _handle_reverse_geocode(pli: PersonLocationIntegration, call: dict) ->
     force_update = call.data.get("force_update", False)
 
     if entity_id == "NONE":
-        _LOGGER.warning(
-            "%s is required in call of %s.reverse_geocode service.",
-            CONF_ENTITY_ID,
-            DOMAIN,
+        raise ServiceValidationError(
+            f"{CONF_ENTITY_ID} is required in call of {DOMAIN}.reverse_geocode service."
         )
-        return False
 
     _LOGGER.debug(
         "(%s) === Start === %s = %s; force_update = %s",
