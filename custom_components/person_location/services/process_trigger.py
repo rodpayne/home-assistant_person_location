@@ -103,10 +103,11 @@ async def _handle_process_trigger(
         )
         return True
 
-    # Skip bad GPS accuracy
+    # Skip bad GPS accuracy. 0 means "not reported" (Tesla Fleet always sends 0),
+    # not a bad fix, so only reject a genuinely poor one.
     if ATTR_GPS_ACCURACY in trigger.attributes:
         acc = trigger.attributes[ATTR_GPS_ACCURACY]
-        if acc == 0 or acc >= 100:
+        if acc >= 100:
             _LOGGER.debug(
                 "(%s) Decision: skip due to bad GPS accuracy: %s",
                 trigger.entity_id,
@@ -226,10 +227,13 @@ async def _handle_process_trigger(
                 ):
                     # Same status as the one we are following - compare accuracy
                     if ATTR_GPS_ACCURACY in trigger.attributes:
-                        old_acc = target._attr_extra_state_attributes.get(
-                            ATTR_GPS_ACCURACY, 9999
+                        # 0 is "not reported" and must never win on accuracy.
+                        old_acc = (
+                            target._attr_extra_state_attributes.get(ATTR_GPS_ACCURACY)
+                            or 9999
                         )
-                        if trigger.attributes[ATTR_GPS_ACCURACY] < old_acc:
+                        new_acc = trigger.attributes[ATTR_GPS_ACCURACY] or 9999
+                        if new_acc < old_acc:
                             save_update = True
                             _LOGGER.debug(
                                 "(%s) Decision: gps_accuracy is better than %s",
