@@ -28,10 +28,11 @@ from homeassistant.const import (
     STATE_NOT_HOME,
     STATE_UNKNOWN,
 )
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.event import async_track_point_in_time
 from homeassistant.helpers.restore_state import RestoreEntity
-from homeassistant.util import dt as dt_util
+from homeassistant.util import dt as dt_util, slugify
 
 from .const import (
     ATTR_ALTITUDE,
@@ -662,8 +663,20 @@ async def async_setup_entry(
                 new_entities.append(sensor)
                 seen.add(entity_id)
 
+        ent_reg = er.async_get(hass)
         for device_id, person_name in entry_devices.items():
-            entity_id = f"sensor.{person_name.lower()}_location"
+            entity_id = f"sensor.{slugify(person_name)}_location"
+
+            # Targets used to be keyed with .lower(), which keeps spaces. Move an
+            # existing registry entry to the new unique_id so it keeps its
+            # entity_id instead of coming back as a _2 next to an orphan.
+            old_uid = f"sensor.{person_name.lower()}_location_target"
+            new_uid = f"{entity_id}_target"
+            if old_uid != new_uid and not ent_reg.async_get_entity_id(
+                "sensor", DOMAIN, new_uid
+            ):
+                if old := ent_reg.async_get_entity_id("sensor", DOMAIN, old_uid):
+                    ent_reg.async_update_entity(old, new_unique_id=new_uid)
 
             if entity_id in seen or entity_id in entities:
                 continue
