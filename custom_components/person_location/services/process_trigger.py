@@ -29,6 +29,7 @@ from homeassistant.const import (
     STATE_UNKNOWN,
 )
 from homeassistant.exceptions import (
+    HomeAssistantError,
     ServiceValidationError,
 )
 
@@ -380,139 +381,149 @@ async def _handle_process_trigger(
     pli: PersonLocationIntegration, call: ServiceCall
 ) -> bool:
     """Process a location trigger and update its target sensor."""
-    entity_id = call.data.get(CONF_ENTITY_ID, "NONE")
-    trigger_from = call.data.get("from_state")
-    trigger_to = call.data.get("to_state")
+    try:
+        entity_id = call.data.get(CONF_ENTITY_ID, "NONE")
+        trigger_from = call.data.get("from_state")
+        trigger_to = call.data.get("to_state")
 
-    if entity_id == "NONE":
-        raise ServiceValidationError(
-            f"{CONF_ENTITY_ID} is required in call of {DOMAIN}.process_trigger service."
-        )
+        if entity_id == "NONE":
+            raise ServiceValidationError(
+                f"{CONF_ENTITY_ID} is required in call of {DOMAIN}.process_trigger service."
+            )
 
-    ha_just_started = pli._attr_extra_state_attributes.get("startup", False)
-    trigger = await PersonLocationTrigger(entity_id, pli).async_init()
+        ha_just_started = pli._attr_extra_state_attributes.get("startup", False)
+        trigger = await PersonLocationTrigger(entity_id, pli).async_init()
 
-    if trigger.entity_id == trigger.target_name:
-        _LOGGER.debug(
-            "(%s) Decision: skip self update: target = (%s)",
-            trigger.entity_id,
-            trigger.target_name,
-        )
-        return True
-
-    if ATTR_GPS_ACCURACY in trigger.attributes:
-        accuracy = trigger.attributes[ATTR_GPS_ACCURACY]
-        if accuracy == 0 or accuracy >= 100:
+        if trigger.entity_id == trigger.target_name:
             _LOGGER.debug(
-                "(%s) Decision: skip due to bad GPS accuracy: %s",
+                "(%s) Decision: skip self update: target = (%s)",
                 trigger.entity_id,
-                accuracy,
+                trigger.target_name,
             )
             return True
 
-    new_location_time = _get_trigger_location_time(trigger)
-    trigger_source_type = _get_trigger_source_type(pli, trigger)
+        if ATTR_GPS_ACCURACY in trigger.attributes:
+            accuracy = trigger.attributes[ATTR_GPS_ACCURACY]
+            if accuracy == 0 or accuracy >= 100:
+                _LOGGER.debug(
+                    "(%s) Decision: skip due to bad GPS accuracy: %s",
+                    trigger.entity_id,
+                    accuracy,
+                )
+                return True
 
-    async with pli.target_lock(trigger.target_name):
-        target = get_target_entity(pli, trigger.target_name)
-        if not target:
-            _LOGGER.warning("No target sensor found for %s", trigger.target_name)
-            return False
+        new_location_time = _get_trigger_location_time(trigger)
+        trigger_source_type = _get_trigger_source_type(pli, trigger)
 
-        target.this_entity_info[INFO_TRIGGER_COUNT] += 1
+        async with pli.target_lock(trigger.target_name):
+            target = get_target_entity(pli, trigger.target_name)
+            if not target:
+                _LOGGER.warning("No target sensor found for %s", trigger.target_name)
+                return False
 
-        if trigger_to in ["NotSet", STATE_UNAVAILABLE, STATE_UNKNOWN]:
-            _LOGGER.debug(
-                "(%s) Decision: skip update: trigger_to = %s",
-                trigger.entity_id,
-                trigger_to,
+            target.this_entity_info[INFO_TRIGGER_COUNT] += 1
+
+            if trigger_to in ["NotSet", STATE_UNAVAILABLE, STATE_UNKNOWN]:
+                _LOGGER.debug(
+                    "(%s) Decision: skip update: trigger_to = %s",
+                    trigger.entity_id,
+                    trigger_to,
+                )
+                if (
+                    target._attr_extra_state_attributes.get(ATTR_SOURCE)
+                    == trigger.entity_id
+                ):
+                    _LOGGER.debug(
+                        "(%s) Removing from target's source",
+                        trigger.entity_id,
+                    )
+                    target._attr_extra_state_attributes.pop(ATTR_SOURCE, None)
+                    await target.async_set_state()
+                return True
+
+            attrs = target._attr_extra_state_attributes
+            old_location_time = parse_ts(
+                attrs.get(ATTR_LOCATION_TIMESTAMP) or target.last_updated
             )
-            if (
-                target._attr_extra_state_attributes.get(ATTR_SOURCE)
-                == trigger.entity_id
+            if new_location_time < old_location_time:
+                _LOGGER.debug(
+                    "(%s) Decision: skip stale update: %s < %s",
+                    trigger.entity_id,
+                    new_location_time,
+                    old_location_time,
+                )
+                return True
+
+            old_state = (target._state or "").lower()
+            if not _should_save_update(
+                trigger,
+                target,
+                trigger_from,
+                trigger_to,
+                trigger_source_type,
+                old_state,
+                ha_just_started,
             ):
                 _LOGGER.debug(
-                    "(%s) Removing from target's source",
+                    "(%s) Decision: ignore this update",
                     trigger.entity_id,
                 )
-                target._attr_extra_state_attributes.pop(ATTR_SOURCE, None)
-                await target.async_set_state()
-            return True
+                return True
 
-        attrs = target._attr_extra_state_attributes
-        old_location_time = parse_ts(
-            attrs.get(ATTR_LOCATION_TIMESTAMP) or target.last_updated
-        )
-        if new_location_time < old_location_time:
             _LOGGER.debug(
-                "(%s) Decision: skip stale update: %s < %s",
+                "(%s) Saving This Update -state: %s -attributes: %s",
                 trigger.entity_id,
-                new_location_time,
-                old_location_time,
+                trigger.state,
+                trigger.attributes,
             )
-            return True
 
-        old_state = (target._state or "").lower()
-        if not _should_save_update(
-            trigger,
-            target,
-            trigger_from,
-            trigger_to,
-            trigger_source_type,
-            old_state,
-            ha_just_started,
-        ):
-            _LOGGER.debug(
-                "(%s) Decision: ignore this update",
-                trigger.entity_id,
+            _copy_trigger_attributes(attrs, trigger)
+            attrs[ATTR_SOURCE] = trigger.entity_id
+            attrs[ATTR_REPORTED_STATE] = trigger.state
+            attrs[ATTR_PERSON_NAME] = string.capwords(trigger.person_name)
+            attrs[ATTR_LOCATION_TIMESTAMP] = new_location_time.isoformat()
+
+            zone_name, zone_state = _update_zone_attributes(pli, trigger, attrs)
+            new_state = _set_presence_state(
+                pli, target, attrs, trigger, old_state, ha_just_started
             )
-            return True
+            new_state = _apply_zone_override(pli, new_state, zone_name, zone_state)
 
-        _LOGGER.debug(
-            "(%s) Saving This Update -state: %s -attributes: %s",
-            trigger.entity_id,
-            trigger.state,
-            trigger.attributes,
+            target._state = new_state
+            attrs.setdefault(ATTR_BREAD_CRUMBS, new_state)
+
+            await target.async_set_state()
+
+        force_update = new_state in [STATE_HOME, STATE_JUST_ARRIVED] and old_state in [
+            STATE_NOT_HOME,
+            STATE_EXTENDED_AWAY,
+            STATE_JUST_LEFT,
+        ]
+        if pli._attr_extra_state_attributes.get("startup"):
+            force_update = True
+
+        await pli.hass.services.async_call(
+            DOMAIN,
+            "reverse_geocode",
+            {
+                "entity_id": target.entity_id,
+                "friendly_name_template": pli.configuration.get(
+                    CONF_FRIENDLY_NAME_TEMPLATE,
+                    DEFAULT_FRIENDLY_NAME_TEMPLATE,
+                ),
+                "force_update": force_update,
+            },
+            blocking=False,
         )
+        # test_exception = 1 / 0  # Uncomment to test exception handling
 
-        _copy_trigger_attributes(attrs, trigger)
-        attrs[ATTR_SOURCE] = trigger.entity_id
-        attrs[ATTR_REPORTED_STATE] = trigger.state
-        attrs[ATTR_PERSON_NAME] = string.capwords(trigger.person_name)
-        attrs[ATTR_LOCATION_TIMESTAMP] = new_location_time.isoformat()
+    except Exception as err:
+        pli._attr_extra_state_attributes["api_exception_count"] += 1
+        await pli.async_set_state()
 
-        zone_name, zone_state = _update_zone_attributes(pli, trigger, attrs)
-        new_state = _set_presence_state(
-            pli, target, attrs, trigger, old_state, ha_just_started
-        )
-        new_state = _apply_zone_override(pli, new_state, zone_name, zone_state)
+        raise HomeAssistantError(f"Process trigger service failed: {err}") from err
 
-        target._state = new_state
-        attrs.setdefault(ATTR_BREAD_CRUMBS, new_state)
-
-        await target.async_set_state()
-
-    force_update = new_state in [STATE_HOME, STATE_JUST_ARRIVED] and old_state in [
-        STATE_NOT_HOME,
-        STATE_EXTENDED_AWAY,
-        STATE_JUST_LEFT,
-    ]
-    if pli._attr_extra_state_attributes.get("startup"):
-        force_update = True
-
-    await pli.hass.services.async_call(
-        DOMAIN,
-        "reverse_geocode",
-        {
-            "entity_id": target.entity_id,
-            "friendly_name_template": pli.configuration.get(
-                CONF_FRIENDLY_NAME_TEMPLATE,
-                DEFAULT_FRIENDLY_NAME_TEMPLATE,
-            ),
-            "force_update": force_update,
-        },
-        blocking=False,
-    )
+    _LOGGER.debug("(%s) === Return ===", entity_id)
 
     return True
 

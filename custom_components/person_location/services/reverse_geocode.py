@@ -547,12 +547,13 @@ async def _handle_reverse_geocode(pli: PersonLocationIntegration, call: dict) ->
 
         if str(pli._attr_native_value).lower() != STATE_ON:
             pli._attr_extra_state_attributes["api_calls_skipped"] += 1
+            await pli.async_set_state()
+
             _LOGGER.debug(
                 "(%s) api_calls_skipped = %d",
                 entity_id,
                 pli._attr_extra_state_attributes["api_calls_skipped"],
             )
-            await pli.async_set_state()
             return True
 
         # Reserve a global API slot, but never hold this lock while sleeping or
@@ -589,6 +590,8 @@ async def _handle_reverse_geocode(pli: PersonLocationIntegration, call: dict) ->
             pli._attr_extra_state_attributes[counter_attribute] = (
                 pli._attr_extra_state_attributes.get(counter_attribute, 0) + 1
             )
+
+            await pli.async_set_state()
 
         if wait_time > 0:
             await asyncio.sleep(wait_time)
@@ -963,10 +966,9 @@ async def _handle_reverse_geocode(pli: PersonLocationIntegration, call: dict) ->
 
     except Exception as err:
         pli._attr_extra_state_attributes["api_exception_count"] += 1
+        await pli.async_set_state()
 
         raise HomeAssistantError(f"Reverse geocoding failed: {err}") from err
-
-    await pli.async_set_state()
 
     _LOGGER.debug("(%s) === Return ===", entity_id)
     return True

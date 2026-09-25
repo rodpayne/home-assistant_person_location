@@ -39,5 +39,5 @@ convention = "pep257"
 "tests/*" = ["D100", "D101", "D102", "D103"]
 
 [tool.ruff.lint.mccabe]
-# Flag errors (`C901`) whenever the complexity level exceeds 50.
-max-complexity = 50
+# Flag errors (`C901`) whenever the complexity level exceeds 15.
+max-complexity = 15
