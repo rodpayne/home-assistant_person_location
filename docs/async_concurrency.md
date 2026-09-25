@@ -85,7 +85,36 @@ Any background task or timer created by this integration must have an explicit o
 
 A normal options update reloads the config entry. Platform unload removes the active entity objects, but the integration must not manually remove those config-entry entities from Home Assistant's entity registry. Keeping registry entries preserves stable entity IDs and user configuration across reloads and avoids generating misleading historical `unavailable` transitions solely because the integration was reloaded.
 
+## Configuration initialization across reloads
 
+`async_setup()` and `async_setup_entry()` have different lifecycles. The
+integration's YAML setup runs during Home Assistant startup, while
+`async_setup_entry()` may run repeatedly as config entries are added, removed,
+reloaded, or reconfigured.
+
+The runtime controller is normally initialized with the schema defaults during
+`async_setup()`. However, `async_unload_entry()` removes the controller from
+`hass.data`. If the entry is subsequently set up again without restarting
+Home Assistant, `async_setup_entry()` may need to create a new controller.
+`async_setup()` will not run again to initialize its configuration.
+
+When `async_setup_entry()` creates a new controller, it therefore initializes
+the controller with the integration's schema defaults before applying the
+config entry's persisted configuration:
+
+```text
+schema defaults
+      │
+      ▼
+new PersonLocationIntegration
+      │
+      ├── entry.data
+      │
+      └── entry.options
+             │
+             ▼
+     runtime configuration
+     
 ## Home Assistant Core 2026.7/2026.8 compatibility
 
 The implementation targets Home Assistant Core 2026.7 and after. Runtime state owned by a config entry is exposed through `ConfigEntry.runtime_data`; the legacy `hass.data[DOMAIN]` mirror remains only where the current integration architecture still requires it during this incremental migration. Home Assistant's async entity APIs are used directly on the event loop, and HTTP clients should use the HA-managed `aiohttp` session rather than creating per-request sessions.
