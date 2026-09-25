@@ -423,6 +423,13 @@ async def async_setup_entry(
         _LOGGER.debug("[async_setup_entry] Creating new integration object")
         # Create integration object
         pli = PersonLocationIntegration(hass)
+        # async_setup only runs once per HA start, so a controller created here
+        # (entry removed and re-added, or a new entry reloaded, before the next
+        # restart) would otherwise miss the schema defaults, e.g. extended_away.
+        default_conf = CONFIG_SCHEMA({DOMAIN: {}})[DOMAIN]
+        default_conf.setdefault(CONF_DEVICES, {})
+        default_conf[CONF_FROM_YAML] = False
+        pli.configuration = default_conf
         hass.data[DOMAIN][DATA_INTEGRATION] = pli
         # Register services
         await _setup_services(pli, hass)

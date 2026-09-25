@@ -1015,6 +1015,18 @@ Location updates are handled asynchronously, with synchronization scoped to each
 
 For the implementation details, lifecycle expectations, and developer guidance, see [Async concurrency and locking](docs/async_concurrency.md).
 
+### Config-entry lifecycle and configuration
+
+Configuration defaults are initialized during integration startup and are also
+initialized when a new runtime controller is created during a config-entry
+reload. The persisted `config_entry.data` and `config_entry.options` values
+then override those defaults. This allows config-entry reloads, including
+delete-and-re-add operations, to work without requiring a Home Assistant
+restart.
+
+See [Async concurrency and locking](docs/async_concurrency.md) for the
+runtime lifecycle details.
+
 ### Configuration Data vs Options
 
 To clarify which settings belong in `config_entry.data` versus `config_entry.options`, and the implications for how the configuration and options flows should be structured, see [Configuration Data vs Options](docs/DataVsOptions.md).

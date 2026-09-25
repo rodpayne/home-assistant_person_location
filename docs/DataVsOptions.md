@@ -45,6 +45,23 @@ This document clarifies which settings belong in `config_entry.data` versus `con
 
 ---
 
+## Runtime configuration initialization
+
+Schema defaults provide the baseline configuration for the runtime controller.
+They are not a replacement for persisted config-entry data.
+
+When a runtime controller is created, the integration initializes required
+configuration defaults first. The active config entry's `data` and `options`
+are then merged over those defaults, with persisted values taking precedence.
+
+This distinction is important during config-entry reloads. `async_setup()` is
+a startup-level setup function and does not run again merely because a config
+entry is unloaded and subsequently set up. A newly created runtime controller
+must therefore be able to initialize its required defaults independently of
+the one-time startup setup.
+
+---
+
 ## Guiding Principle
 
 - If changing a setting **adds or removes entities**, it belongs in **`data`**.  

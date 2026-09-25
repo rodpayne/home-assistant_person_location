@@ -15,7 +15,6 @@ from functools import partial
 import json
 import logging
 import math
-import traceback
 
 from jinja2 import Template
 
@@ -34,6 +33,7 @@ from homeassistant.const import (
     STATE_ON,
 )
 from homeassistant.exceptions import (
+    HomeAssistantError,
     ServiceValidationError,
     TemplateError,
 )
@@ -525,76 +525,80 @@ async def _handle_reverse_geocode(pli: PersonLocationIntegration, call: dict) ->
         - create/update additional sensors if requested
         - friendly_name: something like "Rod (i.e. Rod's watch) is at Drew's"
     """
-    ctx = ReverseGeocodeContext()
+    try:
+        ctx = ReverseGeocodeContext()
 
-    entity_id = call.data.get(CONF_ENTITY_ID, "NONE")
-    template_arg = call.data.get(CONF_FRIENDLY_NAME_TEMPLATE, "NONE")
-    force_update = call.data.get("force_update", False)
+        entity_id = call.data.get(CONF_ENTITY_ID, "NONE")
+        template_arg = call.data.get(CONF_FRIENDLY_NAME_TEMPLATE, "NONE")
+        force_update = call.data.get("force_update", False)
 
-    if entity_id == "NONE":
-        raise ServiceValidationError(
-            f"{CONF_ENTITY_ID} is required in call of {DOMAIN}.reverse_geocode service."
-        )
-
-    _LOGGER.debug(
-        "(%s) === Start === %s = %s; force_update = %s",
-        entity_id,
-        CONF_FRIENDLY_NAME_TEMPLATE,
-        template_arg,
-        force_update,
-    )
-
-    if str(pli._attr_native_value).lower() != STATE_ON:
-        pli._attr_extra_state_attributes["api_calls_skipped"] += 1
-        _LOGGER.debug(
-            "(%s) api_calls_skipped = %d",
-            entity_id,
-            pli._attr_extra_state_attributes["api_calls_skipped"],
-        )
-        await pli.async_set_state()
-        return True
-
-    # Reserve a global API slot, but never hold this lock while sleeping or
-    # performing network I/O. Each reservation advances api_last_updated so
-    # concurrent requests remain throttled without serializing their work.
-    async with pli._integration_lock:
-        current_api_time = now_utc()
-        last_updated_raw = pli._attr_extra_state_attributes.get("api_last_updated")
-        if isinstance(last_updated_raw, str):
-            last_updated = dt_util.parse_datetime(last_updated_raw)
-        elif isinstance(last_updated_raw, datetime):
-            last_updated = last_updated_raw
-        else:
-            last_updated = None
-
-        if last_updated is None:
-            last_updated = current_api_time - THROTTLE_INTERVAL
-
-        next_api_time = max(current_api_time, last_updated + THROTTLE_INTERVAL)
-        wait_time = (next_api_time - current_api_time).total_seconds()
-        if wait_time > 0:
-            pli._attr_extra_state_attributes["api_calls_throttled"] += 1
-            _LOGGER.debug(
-                "(%s) API throttle wait = %05.3f; throttled = %d",
-                entity_id,
-                wait_time,
-                pli._attr_extra_state_attributes["api_calls_throttled"],
+        if entity_id == "NONE":
+            raise ServiceValidationError(
+                f"{CONF_ENTITY_ID} is required in call of {DOMAIN}.reverse_geocode service."
             )
 
-        pli._attr_extra_state_attributes["api_last_updated"] = to_iso(next_api_time)
-        pli._attr_extra_state_attributes["api_calls_requested"] += 1
-
-        counter_attribute = f"{entity_id} calls"
-        pli._attr_extra_state_attributes[counter_attribute] = (
-            pli._attr_extra_state_attributes.get(counter_attribute, 0) + 1
+        _LOGGER.debug(
+            "(%s) === Start === %s = %s; force_update = %s",
+            entity_id,
+            CONF_FRIENDLY_NAME_TEMPLATE,
+            template_arg,
+            force_update,
         )
 
-    if wait_time > 0:
-        await asyncio.sleep(wait_time)
+        if str(pli._attr_native_value).lower() != STATE_ON:
+            pli._attr_extra_state_attributes["api_calls_skipped"] += 1
+            await pli.async_set_state()
 
-    current_api_time = now_utc()
+            _LOGGER.debug(
+                "(%s) api_calls_skipped = %d",
+                entity_id,
+                pli._attr_extra_state_attributes["api_calls_skipped"],
+            )
+            return True
 
-    try:
+        # Reserve a global API slot, but never hold this lock while sleeping or
+        # performing network I/O. Each reservation advances api_last_updated so
+        # concurrent requests remain throttled without serializing their work.
+        async with pli._integration_lock:
+            current_api_time = now_utc()
+            last_updated_raw = pli._attr_extra_state_attributes.get("api_last_updated")
+            if isinstance(last_updated_raw, str):
+                last_updated = dt_util.parse_datetime(last_updated_raw)
+            elif isinstance(last_updated_raw, datetime):
+                last_updated = last_updated_raw
+            else:
+                last_updated = None
+
+            if last_updated is None:
+                last_updated = current_api_time - THROTTLE_INTERVAL
+
+            next_api_time = max(current_api_time, last_updated + THROTTLE_INTERVAL)
+            wait_time = (next_api_time - current_api_time).total_seconds()
+            if wait_time > 0:
+                pli._attr_extra_state_attributes["api_calls_throttled"] += 1
+                _LOGGER.debug(
+                    "(%s) API throttle wait = %05.3f; throttled = %d",
+                    entity_id,
+                    wait_time,
+                    pli._attr_extra_state_attributes["api_calls_throttled"],
+                )
+
+            pli._attr_extra_state_attributes["api_last_updated"] = to_iso(next_api_time)
+            pli._attr_extra_state_attributes["api_calls_requested"] += 1
+
+            counter_attribute = f"{entity_id} calls"
+            pli._attr_extra_state_attributes[counter_attribute] = (
+                pli._attr_extra_state_attributes.get(counter_attribute, 0) + 1
+            )
+
+            await pli.async_set_state()
+
+        if wait_time > 0:
+            await asyncio.sleep(wait_time)
+
+        current_api_time = now_utc()
+
+        #    try:
         # ---- handle the service call, updating the target(entity_id)
         async with pli.target_lock(entity_id):
             target = get_target_entity(pli, entity_id)
@@ -958,12 +962,13 @@ async def _handle_reverse_geocode(pli: PersonLocationIntegration, call: dict) ->
             await target.async_set_state()
             target.make_template_sensors()
 
-    except Exception as e:
-        _LOGGER.error("(%s) Exception %s: %s", entity_id, type(e).__name__, str(e))
-        _LOGGER.debug(traceback.format_exc())
-        pli._attr_extra_state_attributes["api_exception_count"] += 1
+            # test_exception = 1 / 0  # Uncomment to test exception handling
 
-    await pli.async_set_state()
+    except Exception as err:
+        pli._attr_extra_state_attributes["api_exception_count"] += 1
+        await pli.async_set_state()
+
+        raise HomeAssistantError(f"Reverse geocoding failed: {err}") from err
 
     _LOGGER.debug("(%s) === Return ===", entity_id)
     return True
