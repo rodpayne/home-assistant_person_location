@@ -47,7 +47,7 @@ The process for deciding which triggered device trackers to pay attention to is 
 
 * `Trigger` is the `target` itself:
   * Skip
-* `Trigger` has `gps_accuracy` equal to 0 or greater than 100:
+* `Trigger` has `gps_accuracy` of 100 or more (0 means "not reported" and is not skipped):
   * Skip
 * `Trigger` state is `NotSet`:
   * Skip
@@ -66,7 +66,7 @@ The process for deciding which triggered device trackers to pay attention to is 
     * `Target` is already following this `trigger`:
       * Accept
     * `Trigger` has the same state as the one being followed:
-      * `Trigger` accuracy is better than the one being followed:
+      * `Trigger` accuracy is better than the one being followed (a `gps_accuracy` of 0 never counts as better):
         * Accept
 * `Trigger` source is not `GPS`
   * `Trigger` changed state:

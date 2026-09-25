@@ -432,6 +432,57 @@ async def _handle_process_trigger(
                 if (
                     target._attr_extra_state_attributes.get(ATTR_SOURCE)
                     == trigger.entity_id
+                    or ATTR_REPORTED_STATE not in target._attr_extra_state_attributes
+                ):
+                    save_update = True
+                    _LOGGER.debug(
+                        "(%s) Decision: continue following this GPS trigger",
+                        trigger.entity_id,
+                    )
+                elif (
+                    ATTR_LATITUDE in trigger.attributes
+                    and ATTR_LONGITUDE in trigger.attributes
+                    and ATTR_LATITUDE not in target._attr_extra_state_attributes
+                    and ATTR_LONGITUDE not in target._attr_extra_state_attributes
+                ):
+                    save_update = True
+                    _LOGGER.debug(
+                        "(%s) Decision: switch to source that has coordinates",
+                        trigger.entity_id,
+                    )
+                elif trigger.state == target._attr_extra_state_attributes.get(
+                    ATTR_REPORTED_STATE
+                ):
+                    # Same status as the one we are following - compare accuracy
+                    if ATTR_GPS_ACCURACY in trigger.attributes:
+                        # 0 is "not reported" and must never win on accuracy.
+                        old_acc = (
+                            target._attr_extra_state_attributes.get(ATTR_GPS_ACCURACY)
+                            or 9999
+                        )
+                        new_acc = trigger.attributes[ATTR_GPS_ACCURACY] or 9999
+                        if new_acc < old_acc:
+                            save_update = True
+                            _LOGGER.debug(
+                                "(%s) Decision: gps_accuracy is better than %s",
+                                trigger.entity_id,
+                                target._attr_extra_state_attributes[ATTR_SOURCE],
+                            )
+                elif (
+                    ha_just_started
+                    and ATTR_LATITUDE in trigger.attributes
+                    and ATTR_LONGITUDE in trigger.attributes
+                ):
+                    save_update = True
+                    _LOGGER.debug(
+                        "(%s) Decision: at startup, accept any GPS trigger with coordinates",
+                        trigger.entity_id,
+                    )
+        else:
+            # Router/ping
+            if trigger_to != trigger_from:
+                if (trigger.state_home_or_not == STATE_HOME) != (
+                    trigger.derive_trigger_home_or_not(old_state) == STATE_HOME
                 ):
                     _LOGGER.debug(
                         "(%s) Removing from target's source",
