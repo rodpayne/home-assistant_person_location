@@ -28,6 +28,7 @@
 * [Removal Instructions](#removal-instructions)
 * [Development Notes](#development-notes)
   * [Async concurrency and update behavior](#async-concurrency-and-update-behavior)
+  * [Config-entry lifecycle and configuration](#config-entry-lifecycle-and-configuration)
   * [Configuration Data vs Options](configuration-data-vs-options)
   * [Contributing](#contributing)
 
@@ -330,7 +331,9 @@ This integration is available directly through the [Home Assistant Community Sto
 
 ### **Configuration Parameters**
 
-The configuration can be updated in either the `Settings > Devices & services` GUI or by adding parameters to `configutation.yaml`. To avoid confusion and prevent unexpected results, choose to use one or the other, not both.
+The configuration can be updated in either the `Settings > Devices & services` GUI or by adding parameters to `configutation.yaml`.
+To avoid confusion and prevent unexpected results, choose to use one or the other, not both. 
+New installations should use the UI, while the YAML section documents the legacy/import configuration.
 
 | GUI Parameter | YAML Parameter | Optional | Description | Default |
 | :------------ | :------------- | :------: | :---------- | :------ |
@@ -1009,6 +1012,8 @@ If Person Location was installed manually rather than through HACS:
 ## Development Notes
 
 > **Compatibility:** This development targets Home Assistant Core 2026.7 and later. It uses config-entry `runtime_data`, current async entity/state APIs, and Home Assistant-managed HTTP sessions.
+
+The intention it to do things Home Assistant's way. Future enhangement ideas may come from review of [Integration Quality Checklist](docs/integration_quality_checklist.md).
 
 ### Async concurrency and update behavior
 Location updates are handled asynchronously, with synchronization scoped to each Person Location target. Different people can therefore be processed independently, while updates for the same target remain serialized for state consistency. External API throttling is coordinated separately and does not hold a global lock during waiting or network I/O.
