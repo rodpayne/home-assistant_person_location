@@ -169,7 +169,16 @@ def _should_save_update(
     if trigger.state == attrs.get(ATTR_REPORTED_STATE):
         if ATTR_GPS_ACCURACY in trigger.attributes:
             old_accuracy = attrs.get(ATTR_GPS_ACCURACY, 9999)
-            if trigger.attributes[ATTR_GPS_ACCURACY] < old_accuracy:
+            new_accuracy = trigger.attributes[ATTR_GPS_ACCURACY]
+
+            # 0 means unknown/not reported (for example, Tesla Fleet).
+            # Treat it as the least useful value for comparison only.
+            if old_accuracy == 0:
+                old_accuracy = 9999
+            if new_accuracy == 0:
+                new_accuracy = 9999
+
+            if new_accuracy < old_accuracy:
                 _LOGGER.debug(
                     "(%s) Decision: gps_accuracy is better than %s",
                     trigger.entity_id,
@@ -404,7 +413,7 @@ async def _handle_process_trigger(
 
         if ATTR_GPS_ACCURACY in trigger.attributes:
             accuracy = trigger.attributes[ATTR_GPS_ACCURACY]
-            if accuracy == 0 or accuracy >= 100:
+            if accuracy >= 100:
                 _LOGGER.debug(
                     "(%s) Decision: skip due to bad GPS accuracy: %s",
                     trigger.entity_id,

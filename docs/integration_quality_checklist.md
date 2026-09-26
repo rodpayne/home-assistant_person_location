@@ -14,21 +14,20 @@
 - ✅ `docs-high-level-description` - The documentation includes a high-level description of the integration brand, product, or service
 - ✅ `docs-installation-instructions` - The documentation provides step-by-step installation instructions for the integration, including, if needed, prerequisites
 - ✅ `docs-removal-instructions` - The documentation provides removal instructions
-- [ ] `entity-event-setup` - Entity events are subscribed in the correct lifecycle methods
+- [ ] `entity-event-setup` - Entity events are subscribed in the correct lifecycle methods - *Device-tracker state-change listeners are currently registered at integration/config-entry scope rather than from an entity's async_added_to_hass() lifecycle and are manually removed during async_unload_entry(). Target-sensor delayed timers are correctly created after entity registration and canceled in async_will_remove_from_hass(). The rule remains incomplete until the external entity subscriptions are aligned with the required entity lifecycle.*
 - ✅ `entity-unique-id` - Entities have a unique ID
 - 🟩 `has-entity-name` - Entities use has_entity_name = True - *Enabled for the controller, template sensors, and map cameras. Target sensors require additional consideration because Home Assistant's entity-name/device-name behavior changes the resulting displayed name.*
 - 🟩 `runtime-data` - Use ConfigEntry.runtime_data to store runtime data - *Runtime controller is now stored in ConfigEntry.runtime_data. A legacy hass.data[DOMAIN] mirror remains for portions of the current architecture.*
 - ✅ `test-before-configure` - Test a connection in the config flow
 - [ ] `test-before-setup` - Check during integration initialization if we are able to set it up correctly
 - ✅ `unique-config-entry` - Don't allow the same device or service to be able to be set up twice
-- [ ] `docs-triggers` - The documentation describes the provided triggers that can be used
-- [ ] `docs-conditions` - The documentation describes the provided conditions that can be used
-
+- ⛔ `docs-triggers` - The documentation describes the provided triggers that can be used - *Not applicable: Person Location does not provide custom Home Assistant automation triggers.*
+- ⛔ `docs-conditions` - The documentation describes the provided conditions that can be used - *Not applicable: Person Location does not provide custom Home Assistant automation conditions.*
 ## Silver
 - ✅ `action-exceptions` - Service actions raise exceptions when encountering failures
 - ✅ `config-entry-unloading` - Support config entry unloading
 - ✅ `docs-configuration-parameters` - The documentation describes all integration configuration options
-- [ ] `docs-installation-parameters` - The documentation describes all integration installation parameters
+- ✅ `docs-installation-parameters` - The documentation describes all integration installation parameters - *README.md documents the parameters requested during the Person Location config flow and options flow, including API credentials, geocoding settings, sensor settings, device/person triggers, map providers, and options.*
 - [ ] `entity-unavailable` - Mark entity unavailable if appropriate
 - ✅ `integration-owner` - Has an integration owner
 - [ ] `log-when-unavailable` - If internet/device/service is unavailable, log once when unavailable and once when back connected
