@@ -404,25 +404,19 @@ async def async_options_update_listener(
 # ------------------------------------------------------------------
 
 
-async def async_setup_entry(
+async def _get_or_create_integration(
     hass: HomeAssistant, entry: PersonLocationConfigEntry
-) -> bool:
-    """Set up integration from a ConfigEntry."""
-    _LOGGER.debug("[async_setup_entry] Setting up entry: %s", entry.entry_id)
+) -> PersonLocationIntegration:
+    """Get or create the integration controller."""
+    domain_data = hass.data[DOMAIN]
 
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][DATA_CONFIG_ENTRY] = entry
-
-    # ---------------------------------------------------------
-    # 1. Get or create the integration controller (pli)
-    # ---------------------------------------------------------
-    if DATA_INTEGRATION in hass.data[DOMAIN]:
-        pli = hass.data[DOMAIN][DATA_INTEGRATION]
+    if DATA_INTEGRATION in domain_data:
+        pli = domain_data[DATA_INTEGRATION]
         _LOGGER.debug("[async_setup_entry] Using existing integration object")
     else:
         _LOGGER.debug("[async_setup_entry] Creating new integration object")
-        # Create integration object
         pli = PersonLocationIntegration(hass)
+
         # async_setup only runs once per HA start, so a controller created here
         # (entry removed and re-added, or a new entry reloaded, before the next
         # restart) would otherwise miss the schema defaults, e.g. extended_away.
@@ -430,8 +424,7 @@ async def async_setup_entry(
         default_conf.setdefault(CONF_DEVICES, {})
         default_conf[CONF_FROM_YAML] = False
         pli.configuration = default_conf
-        hass.data[DOMAIN][DATA_INTEGRATION] = pli
-        # Register services
+        domain_data[DATA_INTEGRATION] = pli
         await _setup_services(pli, hass)
 
     pli.hass = hass
@@ -439,10 +432,15 @@ async def async_setup_entry(
     # runtime state. Keep the legacy hass.data mirror for older internal helpers
     # that still consume it during this incremental migration.
     entry.runtime_data = pli
+    domain_data[entry.entry_id] = pli
 
-    # ---------------------------------------------------------
-    # 2. Register the controller entity ONCE
-    # ---------------------------------------------------------
+    return pli
+
+
+def _register_controller_entity(
+    hass: HomeAssistant, pli: PersonLocationIntegration
+) -> None:
+    """Register the controller entity if the sensor platform is ready."""
     ent_reg = er.async_get(hass)
     existing_entity_id = ent_reg.async_get_entity_id(
         "sensor",
@@ -450,42 +448,43 @@ async def async_setup_entry(
         f"{DOMAIN}_controller",
     )
 
-    if existing_entity_id is None:
-        _LOGGER.debug("[async_setup_entry] Registering controller entity")
-
-        async_add_entities = hass.data[DOMAIN].get("sensor_async_add_entities")
-        if async_add_entities:
-            _LOGGER.debug(
-                "[async_setup_entry] Registering controller entity via sensor platform"
-            )
-            async_add_entities([pli])
-            pli._controller_registered = True
-        else:
-            _LOGGER.debug(
-                "[async_setup_entry] sensor_async_add_entities not ready yet; deferring controller registration"
-            )
-    else:
+    if existing_entity_id is not None:
         _LOGGER.debug(
             "[async_setup_entry] Controller entity already exists (%s); skipping add",
             existing_entity_id,
         )
+        return
 
-    # Store integration object for this entry
-    hass.data[DOMAIN][entry.entry_id] = pli
+    _LOGGER.debug("[async_setup_entry] Registering controller entity")
+    async_add_entities = hass.data[DOMAIN].get("sensor_async_add_entities")
+    if async_add_entities:
+        _LOGGER.debug(
+            "[async_setup_entry] Registering controller entity via sensor platform"
+        )
+        async_add_entities([pli])
+        pli._controller_registered = True
+    else:
+        _LOGGER.debug(
+            "[async_setup_entry] sensor_async_add_entities not ready yet; "
+            "deferring controller registration"
+        )
 
-    # Initial state is written after platform setup below.
 
-    # ---------------------------------------------------------
-    # 3. Register options update listener (once)
-    # ---------------------------------------------------------
-    if DATA_UNDO_UPDATE_LISTENER not in hass.data[DOMAIN]:
-        hass.data[DOMAIN][DATA_UNDO_UPDATE_LISTENER] = entry.add_update_listener(
+def _register_options_update_listener(
+    hass: HomeAssistant, entry: PersonLocationConfigEntry
+) -> None:
+    """Register the options update listener once."""
+    domain_data = hass.data[DOMAIN]
+    if DATA_UNDO_UPDATE_LISTENER not in domain_data:
+        domain_data[DATA_UNDO_UPDATE_LISTENER] = entry.add_update_listener(
             async_options_update_listener
         )
 
-    # ---------------------------------------------------------
-    # Listeners: device tracker state change
-    # ---------------------------------------------------------
+
+def _register_device_tracker_listeners(
+    hass: HomeAssistant, pli: PersonLocationIntegration
+) -> None:
+    """Register listeners for configured person and device entities."""
 
     @callback
     def _handle_device_tracker_state_change(
@@ -521,7 +520,8 @@ async def async_setup_entry(
     def _listen_for_device_tracker_state_changes(entity_id: str) -> None:
         """Register state listener for a device tracker entity."""
         _LOGGER.debug(
-            "[_listen_for_device_tracker_state_changes] Registering for %s", entity_id
+            "[_listen_for_device_tracker_state_changes] Registering for %s",
+            entity_id,
         )
         if entity_id not in pli.entity_info:
             pli.entity_info[entity_id] = {}
@@ -539,117 +539,121 @@ async def async_setup_entry(
                     entity_id,
                 )
 
-    def _listen_for_configured_entities(
-        hass: HomeAssistant, pli_obj: PersonLocationIntegration
-    ) -> None:
-        """Register listeners for configured person/device entities."""
-        _LOGGER.debug("[_listen_for_configured_entities] === Start ===")
+    if pli.configuration.get(CONF_FOLLOW_PERSON_INTEGRATION):
+        for entity_id in hass.states.async_entity_ids("person"):
+            _listen_for_device_tracker_state_changes(entity_id)
 
-        if pli_obj.configuration.get(CONF_FOLLOW_PERSON_INTEGRATION):
-            person_entity_ids = hass.states.async_entity_ids("person")
-            for entity_id in person_entity_ids:
-                _listen_for_device_tracker_state_changes(entity_id)
+    for entity_id in pli.configuration.get(CONF_DEVICES, {}):
+        _listen_for_device_tracker_state_changes(entity_id)
 
-        for device in pli_obj.configuration.get(CONF_DEVICES, {}).keys():
-            _listen_for_device_tracker_state_changes(device)
 
-        _LOGGER.debug("[_listen_for_configured_entities] === Return ===")
+async def _merge_entry_configuration(
+    hass: HomeAssistant,
+    entry: PersonLocationConfigEntry,
+    pli: PersonLocationIntegration,
+) -> bool:
+    """Merge entry data/options and perform post-merge setup."""
+    _LOGGER.debug(
+        "[_async_setup_entry] === Start === Set up configuration for entry %s",
+        entry.entry_id,
+    )
 
-    # ------------------------------------------------------------------
-    # Inner _async_setup_entry (options merge + post-merge actions)
-    # ------------------------------------------------------------------
+    await _setup_services(pli, hass)
 
-    async def _async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-        """Process config_flow configuration and options."""
-        _LOGGER.debug(
-            "[_async_setup_entry] === Start === Set up configuration for entry %s",
-            entry.entry_id,
-        )
+    friendly_name_template_changed = (
+        not pli._attr_extra_state_attributes.get("startup", True)
+        and CONF_FRIENDLY_NAME_TEMPLATE in entry.options
+        and CONF_FRIENDLY_NAME_TEMPLATE in (pli.configuration or {})
+        and entry.options[CONF_FRIENDLY_NAME_TEMPLATE]
+        != pli.configuration[CONF_FRIENDLY_NAME_TEMPLATE]
+    )
 
-        # Register services (for update where async_setup does not get called)
-        await _setup_services(pli, hass)
+    pli.configuration = {
+        **(pli.configuration or {}),
+        **(entry.data or {}),
+        **(entry.options or {}),
+    }
+    hass.data[DOMAIN][DATA_CONFIGURATION] = pli.configuration
 
-        # Determine if friendly name template is being changed
-        friendly_name_template_changed = (
-            (not pli._attr_extra_state_attributes.get("startup", True))
-            and (CONF_FRIENDLY_NAME_TEMPLATE in entry.options)
-            and (CONF_FRIENDLY_NAME_TEMPLATE in (pli.configuration or {}))
-            and (
-                entry.options[CONF_FRIENDLY_NAME_TEMPLATE]
-                != pli.configuration[CONF_FRIENDLY_NAME_TEMPLATE]
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await _register_controller_after_platform_setup(hass, pli)
+    await _validate_api_keys(hass, pli)
+    await _update_friendly_names_if_needed(hass, pli, friendly_name_template_changed)
+
+    _LOGGER.debug("[_async_setup_entry] === Return ===")
+    return True
+
+
+async def _register_controller_after_platform_setup(
+    hass: HomeAssistant, pli: PersonLocationIntegration
+) -> None:
+    """Register the controller after the sensor platform has initialized."""
+    async_add_entities = hass.data[DOMAIN].get("sensor_async_add_entities")
+    if async_add_entities and not getattr(pli, "_controller_registered", False):
+        _LOGGER.debug("[async_setup_entry] Late controller registration")
+        async_add_entities([pli])
+        pli._controller_registered = True
+        await pli.async_set_state()
+
+
+async def _validate_api_keys(
+    hass: HomeAssistant, pli: PersonLocationIntegration
+) -> None:
+    """Validate all configured API keys."""
+    valid_google = await async_test_google_api_key(
+        hass, pli.configuration[CONF_GOOGLE_API_KEY]
+    )
+    valid_mapquest = await async_test_mapquest_api_key(
+        hass, pli.configuration[CONF_MAPQUEST_API_KEY]
+    )
+    valid_osm = await async_test_osm_api_key(hass, pli.configuration[CONF_OSM_API_KEY])
+    valid_mapbox = await async_test_mapbox_api_key(
+        hass, pli.configuration[CONF_MAPBOX_API_KEY]
+    )
+    valid_radar = await async_test_radar_api_key(
+        hass, pli.configuration[CONF_RADAR_API_KEY]
+    )
+
+    if all((valid_google, valid_mapquest, valid_osm, valid_mapbox, valid_radar)):
+        _LOGGER.debug("All configured API keys have passed validation")
+
+
+async def _update_friendly_names_if_needed(
+    hass: HomeAssistant,
+    pli: PersonLocationIntegration,
+    template_changed: bool,
+) -> None:
+    """Re-apply friendly names when the configured template changes."""
+    if not template_changed:
+        return
+
+    try:
+        entity_info = hass.data[DOMAIN].get(DATA_ENTITY_INFO, {})
+        for sensor, info in entity_info.items():
+            if info.get(INFO_GEOCODE_COUNT, 0) <= 0:
+                continue
+
+            _LOGGER.debug("[_async_setup_entry] updating sensor %s", sensor)
+            service_data = {
+                "entity_id": sensor,
+                "friendly_name_template": pli.configuration[
+                    CONF_FRIENDLY_NAME_TEMPLATE
+                ],
+                "force_update": False,
+            }
+            await hass.services.async_call(
+                DOMAIN, "reverse_geocode", service_data, False
             )
+    except Exception as err:
+        _LOGGER.warning(
+            "Exception updating friendly name after template change - %s", err
         )
 
-        # Merge data and options into runtime configuration
-        pli.configuration = {
-            **(pli.configuration or {}),
-            **(entry.data or {}),
-            **(entry.options or {}),
-        }
-        hass.data.setdefault(DOMAIN, {})
-        hass.data[DOMAIN][DATA_CONFIGURATION] = pli.configuration
 
-        # Forward to platforms
-        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
-        # Try again to register controller if sensor platform wasn't ready earlier
-        async_add_entities = hass.data[DOMAIN].get("sensor_async_add_entities")
-        if async_add_entities and not getattr(pli, "_controller_registered", False):
-            _LOGGER.debug("[async_setup_entry] Late controller registration")
-            async_add_entities([pli])
-            pli._controller_registered = True
-            await pli.async_set_state()
-
-        # Validate API keys
-        valid1 = await async_test_google_api_key(
-            hass, pli.configuration[CONF_GOOGLE_API_KEY]
-        )
-        valid2 = await async_test_mapquest_api_key(
-            hass, pli.configuration[CONF_MAPQUEST_API_KEY]
-        )
-        valid3 = await async_test_osm_api_key(hass, pli.configuration[CONF_OSM_API_KEY])
-        valid4 = await async_test_mapbox_api_key(
-            hass, pli.configuration[CONF_MAPBOX_API_KEY]
-        )
-        valid5 = await async_test_radar_api_key(
-            hass, pli.configuration[CONF_RADAR_API_KEY]
-        )
-
-        if all([valid1, valid2, valid3, valid4, valid5]):
-            _LOGGER.debug("All configured API keys have passed validation")
-
-        # Re-apply friendly names if template changed
-        if friendly_name_template_changed:
-            try:
-                entity_info = hass.data[DOMAIN].get(DATA_ENTITY_INFO, {})
-                for sensor, info in entity_info.items():
-                    if info.get(INFO_GEOCODE_COUNT, 0) > 0:
-                        _LOGGER.debug("[_async_setup_entry] updating sensor %s", sensor)
-                        service_data = {
-                            "entity_id": sensor,
-                            "friendly_name_template": pli.configuration[
-                                CONF_FRIENDLY_NAME_TEMPLATE
-                            ],
-                            "force_update": False,
-                        }
-                        await hass.services.async_call(
-                            DOMAIN, "reverse_geocode", service_data, False
-                        )
-            except Exception as e:
-                _LOGGER.warning(
-                    "Exception updating friendly name after template change - %s", e
-                )
-
-        _LOGGER.debug("[_async_setup_entry] === Return ===")
-        return True
-
-    # Expose entry setup handler for options updates
-    hass.data[DOMAIN][DATA_ASYNC_SETUP_ENTRY] = _async_setup_entry
-    await _async_setup_entry(hass, entry)
-
-    # ------------------------------------------------------------------
-    # Startup timer (defer wiring until HA finishes starting)
-    # ------------------------------------------------------------------
+def _schedule_startup_completion(
+    hass: HomeAssistant, pli: PersonLocationIntegration
+) -> None:
+    """Schedule deferred listener setup after Home Assistant startup."""
 
     @callback
     def _handle_startup_is_done(now: datetime) -> None:
@@ -657,16 +661,14 @@ async def async_setup_entry(
         _LOGGER.debug("[_handle_startup_is_done] === Start === %s", now)
         pli._startup_timer_unsub = None
 
-        # Still starting? Wait another minute
         if not hass.is_running:
             _LOGGER.debug("[_handle_startup_is_done] === Delay ===")
             _set_timer_startup_is_done(1)
             return
 
-        _listen_for_configured_entities(hass, pli)
+        _register_device_tracker_listeners(hass, pli)
 
         pli._attr_extra_state_attributes["startup"] = False
-        # It should now be safe to expand template sensors for restored target sensors.
         if pli._target_sensors_restored:
             _LOGGER.debug("[_handle_startup_is_done] Running delayed reverse_geocode.")
             while pli._target_sensors_restored:
@@ -703,7 +705,32 @@ async def async_setup_entry(
 
     _set_timer_startup_is_done(1)
 
-    # Async state set (avoid sync set_state during startup)
+
+async def _async_setup_entry(
+    hass: HomeAssistant, entry: PersonLocationConfigEntry
+) -> bool:
+    """Process config entry configuration and options."""
+    pli = entry.runtime_data
+    return await _merge_entry_configuration(hass, entry, pli)
+
+
+async def async_setup_entry(
+    hass: HomeAssistant, entry: PersonLocationConfigEntry
+) -> bool:
+    """Set up integration from a ConfigEntry."""
+    _LOGGER.debug("[async_setup_entry] Setting up entry: %s", entry.entry_id)
+
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN][DATA_CONFIG_ENTRY] = entry
+
+    pli = await _get_or_create_integration(hass, entry)
+    _register_controller_entity(hass, pli)
+    _register_options_update_listener(hass, entry)
+
+    hass.data[DOMAIN][DATA_ASYNC_SETUP_ENTRY] = _async_setup_entry
+    await _async_setup_entry(hass, entry)
+
+    _schedule_startup_completion(hass, pli)
     await pli.async_set_state()
 
     _LOGGER.debug("[async_setup_entry] === Return ===")
