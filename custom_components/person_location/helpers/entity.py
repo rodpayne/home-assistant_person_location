@@ -6,11 +6,13 @@ from __future__ import annotations
 # from collections.abc import Iterable
 import logging
 import re
+from typing import TYPE_CHECKING
 
-# from typing import TYPE_CHECKING
 from homeassistant.const import STATE_UNAVAILABLE
-from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
+
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
 
 from ..const import (
     CONF_CREATE_SENSORS,
